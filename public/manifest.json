@@ -1,0 +1,14 @@
+{
+  "name": "Aqsat — Installment Manager",
+  "short_name": "Aqsat",
+  "description": "Installment management for electronics & appliance shops",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f5ef",
+  "theme_color": "#0f6b4b",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
