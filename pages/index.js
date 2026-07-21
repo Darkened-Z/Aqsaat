@@ -25,6 +25,8 @@ export default class App extends React.Component {
     addCustomerStep: 1,
     planFilter: 'all',
     editingProduct: null,
+    addProductOpen: false,
+    newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
     settings: { graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, maxLateFee: 5000 },
   };
 
@@ -213,6 +215,15 @@ export default class App extends React.Component {
     this.go('customer', { id: c.id });
   };
   updateProduct = (id, patch) => this.setState({ products: this.state.products.map(p => p.id === id ? { ...p, ...patch } : p) });
+
+  openAddProduct  = () => this.setState({ addProductOpen: true, newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📱' } });
+  closeAddProduct = () => this.setState({ addProductOpen: false });
+  saveNewProduct  = () => {
+    const np = this.state.newProduct;
+    if (!np.name || !np.price) { alert('Please enter product name and price'); return; }
+    const p = { id: 'p_' + Date.now().toString(36), name: np.name, nameUr: np.nameUr || np.name, category: np.category, price: parseFloat(np.price) || 0, stock: parseInt(np.stock) || 0, emoji: np.emoji || '📦' };
+    this.setState({ products: [p, ...this.state.products], addProductOpen: false });
+  };
 
   // ─── helpers ───
   h = React.createElement;
@@ -501,7 +512,7 @@ export default class App extends React.Component {
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 } },
         h('div', { style: { fontSize: 13, color: '#7a7663' } }, this.state.products.length + ' products · click a price to edit'),
-        h('button', { style: { background: '#0f6b4b', color: 'white', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13 } }, '＋ Add Product'),
+        h('button', { onClick: this.openAddProduct, style: { background: '#0f6b4b', color: 'white', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13 } }, '＋ Add Product'),
       ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 } },
         this.state.products.map(p => {
@@ -837,6 +848,49 @@ export default class App extends React.Component {
     );
   }
 
+  renderAddProductModal() {
+    const h = this.h;
+    const np = this.state.newProduct;
+    const set = (k, v) => this.setState({ newProduct: { ...np, [k]: v } });
+    const inp = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
+    const field = (label, node) => h('div', {},
+      h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, label),
+      node,
+    );
+    const categories = ['Mobile', 'Motorcycle', 'Television', 'Refrigerator', 'Appliance', 'Air Conditioner', 'Laptop', 'Other'];
+    const emojis = ['📱','🏍️','📺','❄️','🧺','💻','📦','⚡','🔌','🎮','📷','🖨️'];
+    return h('div', { onClick: this.closeAddProduct, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)' } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 480, animation: 'slideIn .2s ease' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 } },
+          h('div', {},
+            h('div', { style: { fontSize: 18, fontWeight: 800 } }, '＋ Add Product'),
+            h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, 'New item for your catalog'),
+          ),
+          h('button', { onClick: this.closeAddProduct, style: { width: 34, height: 34, borderRadius: 9, background: '#f4f1e6', fontSize: 16 } }, '✕'),
+        ),
+        h('div', { style: { display: 'grid', gap: 14 } },
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+            field('Product Name *', h('input', { value: np.name, onChange: e => set('name', e.target.value), placeholder: 'e.g. Samsung A35', style: inp })),
+            field('Urdu Name', h('input', { className: 'ur', value: np.nameUr, onChange: e => set('nameUr', e.target.value), placeholder: 'سامسنگ', style: { ...inp, textAlign: 'right' } })),
+          ),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+            field('Category', h('select', { value: np.category, onChange: e => set('category', e.target.value), style: inp },
+              categories.map(c => h('option', { key: c, value: c }, c)))),
+            field('Price (Rs) *', h('input', { type: 'number', value: np.price, onChange: e => set('price', e.target.value), placeholder: '0', style: inp })),
+          ),
+          field('Opening Stock', h('input', { type: 'number', value: np.stock, onChange: e => set('stock', e.target.value), placeholder: '0', style: inp })),
+          field('Icon', h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+            emojis.map(em => h('button', { key: em, onClick: () => set('emoji', em), style: { width: 40, height: 40, borderRadius: 10, fontSize: 20, border: '2px solid ' + (np.emoji === em ? '#0f6b4b' : '#ece8dc'), background: np.emoji === em ? '#eaf5ee' : '#fdfcf8' } }, em))
+          )),
+        ),
+        h('div', { style: { display: 'flex', gap: 10, marginTop: 24 } },
+          h('button', { onClick: this.closeAddProduct, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600 } }, 'Cancel'),
+          h('button', { onClick: this.saveNewProduct, style: { flex: 2, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, '＋ Add to Catalog'),
+        ),
+      ),
+    );
+  }
+
   renderPaymentModal() {
     const h = this.h;
     const ctx = this.state.paymentContext;
@@ -1044,6 +1098,7 @@ export default class App extends React.Component {
         </nav>
 
         {/* Modals */}
+        {this.state.addProductOpen   && this.renderAddProductModal()}
         {this.state.addCustomerOpen  && this.renderAddCustomer()}
         {this.state.paymentModalOpen && this.renderPaymentModal()}
         {this.state.receiptOpen      && this.renderReceipt()}
