@@ -28,9 +28,38 @@ export default class App extends React.Component {
     addProductOpen: false,
     newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
     settings: { graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, maxLateFee: 5000 },
+    searchQuery: '',
+    darkMode: false,
+    pinLocked: false,
+    enteredPin: '',
+    savedPin: '',
+    paymentMethod: 'cash',
   };
 
-  componentDidMount() { this.seed(); }
+  componentDidMount() {
+    if (typeof window === 'undefined') return;
+    const dm = localStorage.getItem('aqsat_dark') === '1';
+    const pin = localStorage.getItem('aqsat_pin') || '';
+    const raw = localStorage.getItem('aqsat_data');
+    if (raw) {
+      try {
+        const d = JSON.parse(raw);
+        this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings, darkMode: dm, savedPin: pin, pinLocked: !!pin });
+        return;
+      } catch(e) {}
+    }
+    this.setState({ darkMode: dm, savedPin: pin, pinLocked: !!pin });
+    this.seed();
+  }
+
+  componentDidUpdate(_, prev) {
+    if (typeof window === 'undefined') return;
+    const { customers, products, plans, settings } = this.state;
+    if (!customers) return;
+    if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings) {
+      localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings }));
+    }
+  }
 
   seed() {
     const customers = [
@@ -119,7 +148,7 @@ export default class App extends React.Component {
   daysBetween(a, b) {
     return Math.round((new Date(b) - new Date(a)) / 86400000);
   }
-  today() { return new Date('2026-07-19'); }
+  today() { return new Date(); }
 
   planStats(pl) {
     const paid = pl.schedule.filter(s => s.paid);
@@ -157,16 +186,21 @@ export default class App extends React.Component {
   closePayment = () => this.setState({ paymentModalOpen: false, paymentContext: null });
   confirmPayment = () => {
     const ctx = this.state.paymentContext;
+    const today = new Date().toISOString().slice(0, 10);
+    const amountCollected = parseFloat(this.state.paymentAmount) || 0;
     const plans = this.state.plans.map(pl => {
       if (pl.id !== ctx.planId) return pl;
-      const schedule = pl.schedule.map(s => s.n === ctx.installmentN ? { ...s, paid: true, paidDate: '2026-07-19' } : s);
-      return { ...pl, schedule };
+      const schedule = pl.schedule.map(s => s.n === ctx.installmentN
+        ? { ...s, paid: true, paidDate: today, amountPaid: amountCollected || s.amount, lateFeeCharged: this.computeLateFee(s, pl) }
+        : s);
+      const allPaid = schedule.every(s => s.paid);
+      return { ...pl, schedule, status: allPaid ? 'completed' : pl.status };
     });
     const pl = plans.find(p => p.id === ctx.planId);
     const customer = this.state.customers.find(c => c.id === pl.customerId);
     const product = this.state.products.find(p => p.id === pl.productId);
     const s = pl.schedule.find(x => x.n === ctx.installmentN);
-    this.setState({ plans, paymentModalOpen: false, receiptOpen: true, receiptData: { receiptNo: 'RCP-' + Date.now().toString().slice(-6), customer, product, plan: pl, installment: s, date: '2026-07-19' } });
+    this.setState({ plans, paymentModalOpen: false, receiptOpen: true, receiptData: { receiptNo: 'RCP-' + Date.now().toString().slice(-6), customer, product, plan: pl, installment: s, date: today, amountCollected: amountCollected || s.amount } });
   }
   closeReceipt = () => this.setState({ receiptOpen: false, receiptData: null });
 
@@ -215,6 +249,46 @@ export default class App extends React.Component {
     this.go('customer', { id: c.id });
   };
   updateProduct = (id, patch) => this.setState({ products: this.state.products.map(p => p.id === id ? { ...p, ...patch } : p) });
+
+  waLink = (phone, name, amount, dueDate) => {
+    const num = '92' + phone.replace(/\D/g, '').replace(/^0/, '');
+    const msg = `Assalam-o-Alaikum ${name}! Aapki qist ${this.fmtPKR(amount)} ki due date ${this.fmtDate(dueDate)} hai. Meherbani farma kar waqt par ada kar dain. Shukriya — Sadar Electronics`;
+    return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+  };
+
+  exportCSV = () => {
+    const rows = [['Customer', 'Product', 'Total', 'Down', 'Monthly', 'Paid', 'Remaining', 'Status', 'Start Date']];
+    this.state.plans.forEach(pl => {
+      const c = this.state.customers.find(x => x.id === pl.customerId);
+      const p = this.state.products.find(x => x.id === pl.productId);
+      const st = this.planStats(pl);
+      rows.push([c.name, p.name, pl.total, pl.down, pl.monthly, st.paidAmount, st.remaining, pl.status, pl.startDate]);
+    });
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'aqsat-plans.csv'; a.click();
+  };
+
+  toggleDark = () => {
+    const dm = !this.state.darkMode;
+    this.setState({ darkMode: dm });
+    localStorage.setItem('aqsat_dark', dm ? '1' : '0');
+  };
+
+  setPin = (pin) => {
+    if (pin) localStorage.setItem('aqsat_pin', pin);
+    else localStorage.removeItem('aqsat_pin');
+    this.setState({ savedPin: pin });
+  };
+
+  submitPin = () => {
+    if (this.state.enteredPin === this.state.savedPin) {
+      this.setState({ pinLocked: false, enteredPin: '' });
+    } else {
+      this.setState({ enteredPin: '' });
+      alert('Wrong PIN');
+    }
+  };
 
   openAddProduct  = () => this.setState({ addProductOpen: true, newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📱' } });
   closeAddProduct = () => this.setState({ addProductOpen: false });
@@ -369,7 +443,10 @@ export default class App extends React.Component {
 
   renderCustomers() {
     const h = this.h;
-    const rows = this.state.customers.map(c => ({ c, st: this.customerStats(c.id) }));
+    const q = this.state.searchQuery.toLowerCase();
+    const rows = this.state.customers
+      .filter(c => !q || c.name.toLowerCase().includes(q) || c.nameUr.includes(q) || c.phone.includes(q) || (c.area || '').toLowerCase().includes(q))
+      .map(c => ({ c, st: this.customerStats(c.id) }));
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 } },
         h('div', {}, h('div', { style: { fontSize: 14, color: '#7a7663' } }, this.state.customers.length + ' customers')),
@@ -411,6 +488,7 @@ export default class App extends React.Component {
     const c = this.state.customers.find(x => x.id === id);
     if (!c) return h('div', {}, 'Customer not found.');
     const st = this.customerStats(id);
+    const nextInst = st.plans.flatMap(pl => pl.schedule.filter(s => !s.paid)).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))[0];
     return h('div', { className: 'screen' },
       h('button', { onClick: () => this.go('customers'), style: { fontSize: 13, color: '#7a7663', marginBottom: 16, fontWeight: 500 } }, '← Back to customers'),
       this.card([
@@ -427,7 +505,7 @@ export default class App extends React.Component {
             ),
           ),
           h('div', { style: { display: 'flex', gap: 8 } },
-            h('button', { style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '💬 WhatsApp'),
+            nextInst ? h('a', { href: this.waLink(c.phone, c.name, nextInst.amount, nextInst.dueDate), target: '_blank', rel: 'noopener', style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 WhatsApp') : null,
             h('button', { onClick: () => this.go('newplan'), style: { background: '#0f6b4b', color: 'white', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '＋ New Plan'),
           ),
         ),
@@ -634,6 +712,9 @@ export default class App extends React.Component {
     const catTotal = catEntries.reduce((a, [, v]) => a + v, 0);
     const catColors = ['#0f6b4b','#14a374','#3ba777','#a26a10','#d4a94a','#a4362b','#6b4a1a','#0a5138'];
     return h('div', { className: 'screen' },
+      h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginBottom: 12 } },
+        h('button', { onClick: this.exportCSV, style: { background: '#f4f1e6', color: '#3a4a3f', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 } }, '⬇ Export CSV'),
+      ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 24 } },
         [['Received (all time)', this.fmtPKR(totalReceived), '#0f6b4b'], ['Outstanding', this.fmtPKR(totalOut), '#1a2b1f'], ['Active plans', this.state.plans.filter(p => p.status === 'active').length, '#1a2b1f'], ['Customers', this.state.customers.length, '#1a2b1f']].map(([l, v, c], i) =>
           h('div', { key: i, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 16, padding: 20 } },
@@ -690,7 +771,7 @@ export default class App extends React.Component {
             h('div', { style: { fontSize: 12, color: '#a4362b', fontWeight: 500 } }, Math.abs(r.diff) + ' days late · ' + r.p.name + ' · ' + this.fmtPKR(r.s.amount)),
           ),
           h('div', { style: { display: 'flex', gap: 6 } },
-            h('button', { style: { background: '#25D366', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '💬 WhatsApp'),
+            h('a', { href: this.waLink(r.c.phone, r.c.name, r.s.amount, r.s.dueDate), target: '_blank', rel: 'noopener', style: { background: '#25D366', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 WhatsApp'),
             h('button', { style: { background: '#f4f1e6', color: '#3a4a3f', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '📞 Call'),
             h('button', { onClick: () => this.openPayment(r.pl.id, r.s.n), style: { background: '#0f6b4b', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, 'Collect'),
           ),
@@ -732,6 +813,16 @@ export default class App extends React.Component {
         row('WhatsApp reminders', 'واٹس ایپ', 'Enabled · 2 days before'),
         row('Overdue alerts', 'یاد دہانی', 'Daily'),
         row('Receipt printing', 'رسید', 'Thermal 58mm'),
+      ]),
+      h('div', { style: { height: 16 } }),
+      this.card([
+        h('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 8 } }, 'Appearance & Security'),
+        row('Dark mode', 'ڈارک موڈ', h('button', { onClick: this.toggleDark, style: { padding: '8px 16px', borderRadius: 8, background: this.state.darkMode ? '#1a2b1f' : '#f4f1e6', color: this.state.darkMode ? '#eaf5ee' : '#3a4a3f', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, this.state.darkMode ? '🌙 Dark On' : '☀️ Dark Off')),
+        row('PIN lock', 'پن لاک', h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+          this.state.savedPin
+            ? h('button', { onClick: () => this.setPin(''), style: { padding: '6px 12px', borderRadius: 8, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' } }, '🔓 Remove PIN')
+            : h('input', { type: 'number', maxLength: 4, placeholder: '4-digit PIN', onBlur: e => { if (e.target.value.length === 4) this.setPin(e.target.value); }, style: { width: 100, border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, fontFamily: 'monospace', outline: 'none' } }),
+        )),
       ]),
     );
   }
@@ -911,15 +1002,18 @@ export default class App extends React.Component {
           ),
         ),
         h('div', { style: { background: '#fdfcf8', border: '1px solid #ece8dc', borderRadius: 14, padding: 20, textAlign: 'center', marginBottom: 20 } },
-          h('div', { style: { fontSize: 11, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, 'Amount Due'),
-          h('div', { className: 'mono', style: { fontSize: 36, fontWeight: 800, marginTop: 6, letterSpacing: '-0.02em' } }, this.fmtPKR(totalDue)),
-          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 4 } }, 'Due ' + this.fmtDate(s.dueDate)),
+          h('div', { style: { fontSize: 11, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, 'Amount Collected'),
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 6 } },
+            h('span', { className: 'mono', style: { fontSize: 20, fontWeight: 700, color: '#7a7663' } }, 'Rs'),
+            h('input', { type: 'number', value: this.state.paymentAmount, onChange: e => this.setState({ paymentAmount: e.target.value }), className: 'mono', style: { fontSize: 36, fontWeight: 800, letterSpacing: '-0.02em', border: 'none', borderBottom: '2px solid #0f6b4b', background: 'transparent', outline: 'none', width: 160, textAlign: 'center', color: '#1a2b1f' } }),
+          ),
+          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 4 } }, 'Due ' + this.fmtDate(s.dueDate) + ' · Full: ' + this.fmtPKR(totalDue)),
           lateFee > 0 ? h('div', { style: { marginTop: 10, padding: '6px 10px', background: '#fdecea', color: '#a4362b', borderRadius: 8, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 } },
             h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(s.amount)), ' installment + ', h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(lateFee)), ' late fee') : null,
         ),
         h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Payment method'),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 20 } },
-          ['💵 Cash', '📱 EasyPaisa', '🏦 Bank'].map((m, i) => h('button', { key: i, style: { padding: 12, borderRadius: 10, border: '1px solid ' + (i === 0 ? '#0f6b4b' : '#ece8dc'), background: i === 0 ? '#eaf5ee' : '#fdfcf8', fontSize: 12, fontWeight: 600, color: i === 0 ? '#0f6b4b' : '#3a4a3f' } }, m)),
+          ['💵 Cash', '📱 EasyPaisa', '🏦 Bank'].map((m, i) => { const k = ['cash','easypaisa','bank'][i]; const active = this.state.paymentMethod === k; return h('button', { key: i, onClick: () => this.setState({ paymentMethod: k }), style: { padding: 12, borderRadius: 10, border: '1px solid ' + (active ? '#0f6b4b' : '#ece8dc'), background: active ? '#eaf5ee' : '#fdfcf8', fontSize: 12, fontWeight: 600, color: active ? '#0f6b4b' : '#3a4a3f' } }, m); }),
         ),
         h('div', { style: { display: 'flex', gap: 10 } },
           h('button', { onClick: this.closePayment, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600, color: '#3a4a3f' } }, 'Cancel'),
@@ -946,10 +1040,23 @@ export default class App extends React.Component {
               h('span', { style: { color: '#7a7663' } }, l), h('span', { style: { fontWeight: 600 } }, v))),
         ),
         h('div', { style: { display: 'flex', gap: 8, marginTop: 20 } },
-          h('button', { style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600 } }, '🖨️ Print'),
+          h('button', { onClick: () => window.print(), style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600 } }, '🖨️ Print'),
           h('button', { style: { flex: 1, padding: 12, borderRadius: 10, background: '#25D366', color: 'white', fontWeight: 600 } }, '💬 Share'),
           h('button', { onClick: this.closeReceipt, style: { flex: 1, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, 'Done'),
         ),
+      ),
+    );
+  }
+
+  renderPinLock() {
+    const h = this.h;
+    return h('div', { style: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef' } },
+      h('div', { style: { background: '#ffffff', borderRadius: 20, padding: 40, textAlign: 'center', width: '100%', maxWidth: 360, border: '1px solid #ece8dc', margin: '0 16px' } },
+        h('div', { style: { fontSize: 40, marginBottom: 16 } }, '🔐'),
+        h('div', { style: { fontSize: 20, fontWeight: 800, marginBottom: 4 } }, 'Aqsat'),
+        h('div', { style: { fontSize: 13, color: '#7a7663', marginBottom: 28 } }, 'Enter PIN to continue'),
+        h('input', { type: 'password', inputMode: 'numeric', maxLength: 4, placeholder: '••••', value: this.state.enteredPin, onChange: e => this.setState({ enteredPin: e.target.value }), onKeyDown: e => e.key === 'Enter' && this.submitPin(), autoFocus: true, style: { width: '100%', textAlign: 'center', fontSize: 32, letterSpacing: 16, border: '2px solid #ece8dc', borderRadius: 12, padding: '14px 10px', outline: 'none', background: '#fdfcf8', fontFamily: 'monospace', marginBottom: 16, boxSizing: 'border-box' } }),
+        h('button', { onClick: this.submitPin, style: { width: '100%', background: '#0f6b4b', color: 'white', padding: 14, borderRadius: 12, fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer' } }, 'Unlock →'),
       ),
     );
   }
@@ -965,6 +1072,7 @@ export default class App extends React.Component {
       );
     }
 
+    if (this.state.pinLocked) return this.renderPinLock();
     const { route, plans } = this.state;
     const titles = {
       dashboard: ['Dashboard', 'ڈیش بورڈ', 'Overview of your business'],
@@ -1006,7 +1114,7 @@ export default class App extends React.Component {
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', background: '#f7f5ef' }}>
+      <div className={this.state.darkMode ? 'app dark' : 'app'} style={{ minHeight: '100vh', display: 'flex', background: '#f7f5ef' }}>
         <Head>
           <title>Aqsat — Installment Manager</title>
           <meta name="description" content="Installment management for electronics & appliance shops" />
@@ -1060,7 +1168,7 @@ export default class App extends React.Component {
             <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
               <div style={{ width: 'min(420px,100%)', background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ color: '#a09a86' }}>🔍</span>
-                <input placeholder="Search customer, plan, product…" style={{ border: 'none', outline: 'none', flex: 1, fontSize: 14, background: 'transparent' }} />
+                <input placeholder="Search customer, plan, product…" value={this.state.searchQuery} onChange={e => this.setState({ searchQuery: e.target.value })} style={{ border: 'none', outline: 'none', flex: 1, fontSize: 14, background: 'transparent' }} />
                 <span style={{ fontSize: 11, color: '#a09a86', background: '#f4f1e6', padding: '2px 6px', borderRadius: 5 }}>⌘K</span>
               </div>
             </div>
