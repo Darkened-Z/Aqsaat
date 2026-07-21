@@ -1,0 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #1a2b1f; background: #f7f5ef; -webkit-font-smoothing: antialiased; }
+.ur { font-family: 'Noto Nastaliq Urdu', serif; line-height: 1.9; }
+.mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, select, textarea { font-family: inherit; }
+a { color: #0f6b4b; text-decoration: none; }
+a:hover { color: #0a5138; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #d9d5c7; border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+@keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.screen { animation: slideIn .25s ease; }
+@media (max-width: 860px) {
+  .desktop-only { display: none !important; }
+}
+@media (min-width: 861px) {
+  .mobile-only { display: none !important; }
+}
