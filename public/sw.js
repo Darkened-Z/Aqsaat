@@ -1,4 +1,4 @@
-const CACHE = 'aqsat-v1';
+const CACHE = 'aqsat-v2';
 const PRECACHE = ['/', '/manifest.json'];
 
 self.addEventListener('install', e => {
