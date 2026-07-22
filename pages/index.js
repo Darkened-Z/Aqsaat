@@ -62,71 +62,14 @@ export default class App extends React.Component {
   }
 
   seed() {
-    const customers = [
-      { id: 'c1', name: 'Adnan Sheikh',     nameUr: 'عدنان شیخ',    phone: '0300-1234567', cnic: '35202-1234567-1', area: 'Model Town, Lahore',      joined: '2025-11-12', avatar: 'AS', color: '#e7dcc4' },
-      { id: 'c2', name: 'Fatima Bibi',      nameUr: 'فاطمہ بی بی',  phone: '0321-7654321', cnic: '35202-9876543-2', area: 'Gulshan-e-Ravi, Lahore', joined: '2026-01-05', avatar: 'FB', color: '#f5d4c0' },
-      { id: 'c3', name: 'Muhammad Usman',   nameUr: 'محمد عثمان',   phone: '0333-4567890', cnic: '35202-1122334-3', area: 'Shadman, Lahore',         joined: '2025-08-22', avatar: 'MU', color: '#cfe4d3' },
-      { id: 'c4', name: 'Ayesha Khan',      nameUr: 'عائشہ خان',    phone: '0345-1112223', cnic: '35202-5556667-4', area: 'DHA Phase 3, Lahore',     joined: '2026-02-18', avatar: 'AK', color: '#e0d4f0' },
-      { id: 'c5', name: 'Bilal Ahmad',      nameUr: 'بلال احمد',    phone: '0301-9998887', cnic: '35202-3334445-5', area: 'Johar Town, Lahore',      joined: '2025-06-30', avatar: 'BA', color: '#f3dfb8' },
-      { id: 'c6', name: 'Sana Riaz',        nameUr: 'ثناء ریاض',    phone: '0322-1234000', cnic: '35202-7778889-6', area: 'Wapda Town, Lahore',      joined: '2026-03-11', avatar: 'SR', color: '#d4e6ec' },
-      { id: 'c7', name: 'Kamran Iqbal',     nameUr: 'کامران اقبال', phone: '0311-5556660', cnic: '35202-2223334-7', area: 'Township, Lahore',        joined: '2025-12-01', avatar: 'KI', color: '#e7c9c3' },
-      { id: 'c8', name: 'Nadia Aslam',      nameUr: 'نادیہ اسلم',  phone: '0308-4443332', cnic: '35202-6667778-8', area: 'Iqbal Town, Lahore',      joined: '2026-04-19', avatar: 'NA', color: '#d1dfe7' },
-    ];
-    const products = [
-      { id: 'p1', name: 'Honda CD 70',              nameUr: 'ہونڈا سی ڈی ۷۰',         category: 'Motorcycle',      price: 165000, stock: 4,  emoji: '🏍️' },
-      { id: 'p2', name: 'Haier LED 43"',            nameUr: 'ہائیر ایل ای ڈی ۴۳"',    category: 'Television',      price: 72000,  stock: 9,  emoji: '📺' },
-      { id: 'p3', name: 'Dawlance Refrigerator',    nameUr: 'ڈالنس فریج',              category: 'Refrigerator',    price: 118000, stock: 3,  emoji: '❄️' },
-      { id: 'p4', name: 'Samsung Galaxy A15',       nameUr: 'سامسنگ گلیکسی اے ۱۵',    category: 'Mobile',          price: 48000,  stock: 12, emoji: '📱' },
-      { id: 'p5', name: 'Super Asia Washing Machine',nameUr: 'سپر ایشیا واشنگ مشین',  category: 'Appliance',       price: 42000,  stock: 6,  emoji: '🧺' },
-      { id: 'p6', name: 'United 100cc',             nameUr: 'یونائیٹڈ ۱۰۰ سی سی',    category: 'Motorcycle',      price: 142000, stock: 2,  emoji: '🏍️' },
-      { id: 'p7', name: 'Orient AC 1 Ton',          nameUr: 'اورینٹ اے سی ۱ ٹن',      category: 'Air Conditioner', price: 135000, stock: 5,  emoji: '❄️' },
-      { id: 'p8', name: 'HP Laptop 15s',            nameUr: 'ایچ پی لیپ ٹاپ ۱۵',      category: 'Laptop',          price: 145000, stock: 3,  emoji: '💻' },
-    ];
-
-    const today = new Date('2026-07-19');
-    const mkPlan = (id, cId, pId, total, down, months, startOffsetDays, interest = 12) => {
-      const financed = total - down;
-      const withInterest = financed * (1 + interest / 100);
-      const monthly = Math.round(withInterest / months);
-      const start = new Date(today);
-      start.setDate(start.getDate() + startOffsetDays);
-      const schedule = [];
-      for (let i = 0; i < months; i++) {
-        const d = new Date(start);
-        d.setMonth(d.getMonth() + i);
-        schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount: monthly, paid: false, paidDate: null });
-      }
-      return { id, customerId: cId, productId: pId, total, down, months, interest, monthly, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, lateFee: { graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, maxLateFee: 5000 } };
-    };
-
-    const plans = [
-      mkPlan('pl1', 'c1', 'p1', 165000, 30000, 12, -180),
-      mkPlan('pl2', 'c2', 'p2', 72000, 10000, 6, -120),
-      mkPlan('pl3', 'c3', 'p3', 118000, 20000, 10, -300),
-      mkPlan('pl4', 'c4', 'p4', 48000, 0, 6, -60),
-      mkPlan('pl5', 'c5', 'p7', 135000, 25000, 12, -400),
-      mkPlan('pl6', 'c6', 'p5', 42000, 5000, 8, -90),
-      mkPlan('pl7', 'c7', 'p6', 142000, 20000, 12, -30),
-      mkPlan('pl8', 'c8', 'p8', 145000, 30000, 10, -150),
-      mkPlan('pl9', 'c1', 'p4', 48000, 8000, 6, -45),
-    ];
-    plans.forEach((pl) => {
-      pl.schedule.forEach((s, idx) => {
-        const due = new Date(s.dueDate);
-        if (due < today) {
-          const overdueSeed = (pl.id.charCodeAt(2) + idx) % 7;
-          if (overdueSeed !== 0) {
-            s.paid = true;
-            const paid = new Date(due);
-            paid.setDate(paid.getDate() + (overdueSeed % 4));
-            s.paidDate = paid.toISOString().slice(0, 10);
-          }
-        }
-      });
-      if (pl.schedule.every(s => s.paid)) pl.status = 'completed';
-    });
-    this.setState({ customers, products, plans });
+    this.setState({ customers: [], products: [], plans: [] });
   }
+
+  resetAllData = () => {
+    if (!confirm('This will permanently delete ALL customers, products, and plans. Are you sure?')) return;
+    localStorage.removeItem('aqsat_data');
+    this.setState({ customers: [], products: [], plans: [], route: 'dashboard' });
+  };
 
   computeLateFee(installment, plan) {
     if (installment.paid) return 0;
@@ -824,6 +767,17 @@ export default class App extends React.Component {
             : h('input', { type: 'number', maxLength: 4, placeholder: '4-digit PIN', onBlur: e => { if (e.target.value.length === 4) this.setPin(e.target.value); }, style: { width: 100, border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, fontFamily: 'monospace', outline: 'none' } }),
         )),
       ]),
+      h('div', { style: { height: 16 } }),
+      this.card([
+        h('div', { style: { fontSize: 16, fontWeight: 700, color: '#a4362b', marginBottom: 8 } }, 'Danger Zone'),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
+          h('div', {},
+            h('div', { style: { fontWeight: 600, fontSize: 14 } }, 'Reset all data'),
+            h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, 'Permanently deletes all customers, products, and plans.'),
+          ),
+          h('button', { onClick: this.resetAllData, style: { padding: '10px 16px', borderRadius: 10, background: '#fdecea', color: '#a4362b', fontWeight: 700, fontSize: 13, border: '1px solid #f5cac2', cursor: 'pointer', flexShrink: 0 } }, '🗑 Reset all data'),
+        ),
+      ], { border: '1px solid #f5cac2' }),
     );
   }
 
