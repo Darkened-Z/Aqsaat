@@ -38,6 +38,16 @@ export default class App extends React.Component {
 
   componentDidMount() {
     if (typeof window === 'undefined') return;
+    // Wipe old demo seed data (demo customers had single-digit IDs like c1…c8)
+    try {
+      const old = localStorage.getItem('aqsat_data');
+      if (old) {
+        const d = JSON.parse(old);
+        if (d.customers && d.customers.some(c => /^c\d$/.test(c.id))) {
+          localStorage.removeItem('aqsat_data');
+        }
+      }
+    } catch(e) {}
     const dm = localStorage.getItem('aqsat_dark') === '1';
     const pin = localStorage.getItem('aqsat_pin') || '';
     const raw = localStorage.getItem('aqsat_data');
