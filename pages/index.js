@@ -12,8 +12,9 @@ export default class App extends React.Component {
     customers: null,
     products: null,
     plans: null,
-    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, interest: 12, startDate: '2026-07-25', graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50 },
+    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 },
     paymentAmount: '',
+    menuOpen: false,
     addCustomerOpen: false,
     newCustomer: {
       name: '', nameUr: '', phone: '', altPhone: '', cnic: '', dob: '',
@@ -27,7 +28,7 @@ export default class App extends React.Component {
     editingProduct: null,
     addProductOpen: false,
     newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
-    settings: { graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, maxLateFee: 5000 },
+    settings: { graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, maxLateFee: 5000, businessName: 'Sadar Electronics', ownerName: 'Rehan Malik', city: 'Lahore' },
     searchQuery: '',
     darkMode: false,
     pinLocked: false,
@@ -164,20 +165,24 @@ export default class App extends React.Component {
     const product = this.state.products.find(p => p.id === np.productId);
     const total = parseFloat(np.totalPrice) || product.price;
     const down = parseFloat(np.downPayment) || 0;
-    const months = parseInt(np.months) || 6;
-    const interest = parseFloat(np.interest) || 0;
+    const months = parseInt(np.customMonths || np.months) || 6;
     const financed = Math.max(0, total - down);
-    const withInterest = financed * (1 + interest / 100);
-    const monthly = Math.round(withInterest / months);
-    const start = new Date(np.startDate || '2026-07-25');
+    const profit = np.interestType === 'amount'
+      ? parseFloat(np.interestAmount) || 0
+      : financed * (parseFloat(np.interest) || 0) / 100;
+    const profitPct = np.interestType === 'amount' && financed > 0 ? (profit / financed) * 100 : parseFloat(np.interest) || 0;
+    const monthly = Math.round((financed + profit) / months);
+    const start = new Date(np.startDate || new Date());
     const schedule = [];
+    const freqDays = parseInt(np.frequencyDays) || 30;
     for (let i = 0; i < months; i++) {
       const d = new Date(start);
-      d.setMonth(d.getMonth() + i);
+      if (np.frequency === 'days') d.setDate(d.getDate() + i * freqDays);
+      else d.setMonth(d.getMonth() + i);
       schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount: monthly, paid: false, paidDate: null });
     }
-    const plan = { id: 'pl_' + Date.now().toString(36), customerId: np.customerId, productId: np.productId, total, down, months, interest, monthly, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
-    this.setState({ plans: [plan, ...this.state.plans], newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, interest: 12, startDate: '2026-07-25', graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50 } });
+    const plan = { id: 'pl_' + Date.now().toString(36), customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
+    this.setState({ plans: [plan, ...this.state.plans], newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 } });
     this.go('customer', { id: np.customerId });
   };
 
@@ -197,7 +202,7 @@ export default class App extends React.Component {
     if (!nc.name || !nc.phone) { alert('Please enter name and phone'); return; }
     const initials = nc.name.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase() || 'NC';
     const colors = ['#e7dcc4','#f5d4c0','#cfe4d3','#e0d4f0','#f3dfb8','#d4e6ec','#e7c9c3','#d1dfe7'];
-    const c = { id: 'c' + (this.state.customers.length + 1) + '_' + Date.now().toString(36).slice(-4), name: nc.name, nameUr: nc.nameUr || nc.name, phone: nc.phone, altPhone: nc.altPhone, cnic: nc.cnic, dob: nc.dob, fatherName: nc.fatherName, occupation: nc.occupation, monthlyIncome: nc.monthlyIncome, address: nc.address, city: nc.city, area: nc.area || nc.city, guarantor: { name: nc.guarantorName, phone: nc.guarantorPhone, cnic: nc.guarantorCnic, relation: nc.guarantorRelation }, notes: nc.notes, documents: nc.documents, joined: '2026-07-19', avatar: initials, color: colors[this.state.customers.length % colors.length] };
+    const c = { id: 'c' + (this.state.customers.length + 1) + '_' + Date.now().toString(36).slice(-4), name: nc.name, nameUr: nc.nameUr || nc.name, phone: nc.phone, altPhone: nc.altPhone, cnic: nc.cnic, dob: nc.dob, fatherName: nc.fatherName, occupation: nc.occupation, monthlyIncome: nc.monthlyIncome, address: nc.address, city: nc.city, area: nc.area || nc.city, guarantor: { name: nc.guarantorName, phone: nc.guarantorPhone, cnic: nc.guarantorCnic, relation: nc.guarantorRelation }, notes: nc.notes, documents: nc.documents, joined: new Date().toISOString().slice(0, 10), avatar: initials, color: colors[this.state.customers.length % colors.length] };
     this.setState({ customers: [c, ...this.state.customers], addCustomerOpen: false, newCustomer: { name: '', nameUr: '', phone: '', altPhone: '', cnic: '', dob: '', fatherName: '', occupation: '', monthlyIncome: '', address: '', city: 'Lahore', area: '', guarantorName: '', guarantorPhone: '', guarantorCnic: '', guarantorRelation: '', notes: '', documents: [] }, addCustomerStep: 1 });
     this.go('customer', { id: c.id });
   };
@@ -205,7 +210,7 @@ export default class App extends React.Component {
 
   waLink = (phone, name, amount, dueDate) => {
     const num = '92' + phone.replace(/\D/g, '').replace(/^0/, '');
-    const msg = `Assalam-o-Alaikum ${name}! Aapki qist ${this.fmtPKR(amount)} ki due date ${this.fmtDate(dueDate)} hai. Meherbani farma kar waqt par ada kar dain. Shukriya — Sadar Electronics`;
+    const msg = `Assalam-o-Alaikum ${name}! Aapki qist ${this.fmtPKR(amount)} ki due date ${this.fmtDate(dueDate)} hai. Meherbani farma kar waqt par ada kar dain. Shukriya — ${this.state.settings.businessName || 'Aqsat'}`;
     return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
   };
 
@@ -604,13 +609,17 @@ export default class App extends React.Component {
     const total = parseFloat(np.totalPrice) || (product ? product.price : 0);
     const down = parseFloat(np.downPayment) || 0;
     const financed = Math.max(0, total - down);
-    const withInterest = financed * (1 + (parseFloat(np.interest) || 0) / 100);
-    const monthly = np.months > 0 ? Math.round(withInterest / np.months) : 0;
+    const profit = np.interestType === 'amount' ? parseFloat(np.interestAmount) || 0 : financed * (parseFloat(np.interest) || 0) / 100;
+    const months = parseInt(np.customMonths || np.months) || 6;
+    const monthly = months > 0 ? Math.round((financed + profit) / months) : 0;
     const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
     const field = (label, ur, node) => h('div', {},
       h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, label, ' ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, ur)),
       node,
     );
+    const isMobile = product && ['Mobile', 'Laptop'].includes(product.category);
+    const isBike = product && product.category === 'Motorcycle';
+    const freqLabel = np.frequency === 'days' ? (np.frequencyDays + '-day') : 'Monthly';
     return h('div', { className: 'screen', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 16 } },
       this.card([
         h('div', { style: { fontSize: 18, fontWeight: 700, marginBottom: 4 } }, 'Create Installment Plan'),
@@ -622,23 +631,45 @@ export default class App extends React.Component {
             field('Sale Price (Rs)', 'فروخت قیمت', h('input', { type: 'number', value: np.totalPrice, onChange: e => set('totalPrice', e.target.value), placeholder: 'e.g. 165000', style: inpStyle })),
             field('Down Payment (Rs)', 'ایڈوانس', h('input', { type: 'number', value: np.downPayment, onChange: e => set('downPayment', e.target.value), placeholder: '0', style: inpStyle })),
           ),
-          field('Interest / Markup %', 'منافع', h('input', { type: 'number', value: np.interest, onChange: e => set('interest', e.target.value), style: inpStyle })),
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
-            field('Number of Months', 'اقساط', h('div', { style: { display: 'flex', gap: 4, flexWrap: 'wrap' } }, [3,6,9,12,18,24].map(m => h('button', { key: m, onClick: () => set('months', m), style: { padding: '9px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: np.months === m ? '#0f6b4b' : '#fdfcf8', color: np.months === m ? 'white' : '#3a4a3f', border: '1px solid ' + (np.months === m ? '#0f6b4b' : '#ece8dc') } }, m + 'm')))),
-            field('Start Date', 'آغاز', h('input', { type: 'date', value: np.startDate, onChange: e => set('startDate', e.target.value), style: inpStyle })),
+          field('Profit / Munafa', 'منافع',
+            h('div', { style: { display: 'grid', gap: 8 } },
+              h('div', { style: { display: 'flex', gap: 6 } },
+                h('button', { onClick: () => set('interestType', 'percent'), style: { flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: np.interestType === 'percent' ? '#0f6b4b' : '#fdfcf8', color: np.interestType === 'percent' ? 'white' : '#3a4a3f', border: '1px solid ' + (np.interestType === 'percent' ? '#0f6b4b' : '#ece8dc') } }, '% Percentage'),
+                h('button', { onClick: () => set('interestType', 'amount'), style: { flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: np.interestType === 'amount' ? '#0f6b4b' : '#fdfcf8', color: np.interestType === 'amount' ? 'white' : '#3a4a3f', border: '1px solid ' + (np.interestType === 'amount' ? '#0f6b4b' : '#ece8dc') } }, 'Rs Amount'),
+              ),
+              np.interestType === 'percent'
+                ? h('input', { type: 'number', value: np.interest, onChange: e => set('interest', e.target.value), placeholder: '12', style: inpStyle })
+                : h('input', { type: 'number', value: np.interestAmount, onChange: e => set('interestAmount', e.target.value), placeholder: 'e.g. 5000', style: inpStyle }),
+            ),
           ),
+          field('Installments', 'اقساط کی تعداد',
+            h('div', { style: { display: 'grid', gap: 8 } },
+              h('div', { style: { display: 'flex', gap: 4, flexWrap: 'wrap' } },
+                [3,6,9,12,18,24].map(m => h('button', { key: m, onClick: () => { set('months', m); set('customMonths', ''); }, style: { padding: '9px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: !np.customMonths && np.months === m ? '#0f6b4b' : '#fdfcf8', color: !np.customMonths && np.months === m ? 'white' : '#3a4a3f', border: '1px solid ' + (!np.customMonths && np.months === m ? '#0f6b4b' : '#ece8dc') } }, m)),
+                h('input', { type: 'number', value: np.customMonths, onChange: e => set('customMonths', e.target.value), placeholder: 'Custom…', style: { ...inpStyle, width: 80, padding: '9px 10px' } }),
+              ),
+              h('div', { style: { display: 'flex', gap: 6 } },
+                h('button', { onClick: () => set('frequency', 'monthly'), style: { flex: 1, padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: np.frequency === 'monthly' ? '#1a2b1f' : '#fdfcf8', color: np.frequency === 'monthly' ? 'white' : '#3a4a3f', border: '1px solid ' + (np.frequency === 'monthly' ? '#1a2b1f' : '#ece8dc') } }, 'Monthly'),
+                h('button', { onClick: () => set('frequency', 'days'), style: { flex: 1, padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: np.frequency === 'days' ? '#1a2b1f' : '#fdfcf8', color: np.frequency === 'days' ? 'white' : '#3a4a3f', border: '1px solid ' + (np.frequency === 'days' ? '#1a2b1f' : '#ece8dc') } }, 'Every X days'),
+                np.frequency === 'days' ? h('input', { type: 'number', value: np.frequencyDays, onChange: e => set('frequencyDays', e.target.value), placeholder: '30', style: { ...inpStyle, width: 70, padding: '7px 8px' } }) : null,
+              ),
+            ),
+          ),
+          field('Start Date', 'آغاز', h('input', { type: 'date', value: np.startDate, onChange: e => set('startDate', e.target.value), style: inpStyle })),
+          isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('input', { value: np.imei, onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
+          isBike ? field('Chassis Number', 'چیسس نمبر', h('input', { value: np.chassisNo, onChange: e => set('chassisNo', e.target.value), placeholder: 'e.g. ABC1234567890', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
         ),
       ]),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
         h('div', { style: { background: 'linear-gradient(160deg,#0f6b4b,#14a374)', color: 'white', borderRadius: 16, padding: 20 } },
-          h('div', { style: { fontSize: 12, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, 'Monthly Installment'),
-          h('div', { className: 'ur', style: { fontSize: 13, opacity: 0.85 } }, 'ماہانہ قسط'),
+          h('div', { style: { fontSize: 12, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, freqLabel + ' Installment'),
+          h('div', { className: 'ur', style: { fontSize: 13, opacity: 0.85 } }, 'قسط'),
           h('div', { className: 'mono', style: { fontSize: 34, fontWeight: 800, marginTop: 12, letterSpacing: '-0.02em' } }, this.fmtPKR(monthly)),
-          h('div', { style: { fontSize: 12, opacity: 0.85, marginTop: 4 } }, np.months + ' months · ' + np.interest + '% markup'),
+          h('div', { style: { fontSize: 12, opacity: 0.85, marginTop: 4 } }, months + ' installments · ' + freqLabel.toLowerCase()),
         ),
         h('div', { style: { background: '#fdfcf8', border: '1px solid #ece8dc', borderRadius: 16, padding: 20 } },
-          [['Cash price', total], ['Down payment', down, '#0f6b4b'], ['Financed', financed], ['Total with markup', withInterest + down]].map(([lbl, val, col], i) =>
-            h('div', { key: i, style: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: i < 3 ? '1px solid #f2eee2' : 'none', fontSize: 13 } },
+          [['Cash price', total], ['Down payment', down, '#0f6b4b'], ['Financed', financed], ['Profit', profit, '#a26a10'], ['Total payable', financed + profit + down]].map(([lbl, val, col], i) =>
+            h('div', { key: i, style: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: i < 4 ? '1px solid #f2eee2' : 'none', fontSize: 13 } },
               h('span', { style: { color: '#5a6a5f' } }, lbl),
               h('span', { className: 'mono', style: { fontWeight: 700, color: col || '#1a2b1f' } }, this.fmtPKR(val)),
             )),
@@ -745,11 +776,10 @@ export default class App extends React.Component {
     return h('div', { className: 'screen', style: { maxWidth: 720 } },
       this.card([
         h('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 8 } }, 'Business'),
-        row('Business name', 'کاروبار کا نام', 'Sadar Electronics'),
-        row('Owner', 'مالک', 'Rehan Malik'),
+        row('Business name', 'کاروبار کا نام', h('input', { value: st.businessName || '', onChange: e => setS('businessName', e.target.value), placeholder: 'e.g. Sadar Electronics', style: inp })),
+        row('Owner name', 'مالک', h('input', { value: st.ownerName || '', onChange: e => setS('ownerName', e.target.value), placeholder: 'e.g. Rehan Malik', style: inp })),
+        row('City', 'شہر', h('input', { value: st.city || '', onChange: e => setS('city', e.target.value), placeholder: 'e.g. Lahore', style: inp })),
         row('Currency', 'کرنسی', 'Pakistani Rupee (Rs)'),
-        row('Default markup', 'منافع', '12%'),
-        row('Default plan length', 'دورانیہ', '6 months'),
       ]),
       h('div', { style: { height: 16 } }),
       this.card([
@@ -1074,7 +1104,7 @@ export default class App extends React.Component {
       { key: 'customers', label: 'Customers', icon: '👥', go: () => this.go('customers') },
       { key: 'newplan',   label: 'New',       icon: '＋', go: () => this.go('newplan') },
       { key: 'plans',     label: 'Plans',     icon: '📋', go: () => this.go('plans') },
-      { key: 'reports',   label: 'More',      icon: '☰',  go: () => this.go('reports') },
+      { key: 'menu',      label: 'Menu',      icon: '☰',  go: () => this.setState({ menuOpen: true }) },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
     return (
@@ -1101,22 +1131,22 @@ export default class App extends React.Component {
             </button>
           ))}
           <div style={{ marginTop: 'auto', padding: '12px 10px', borderTop: '1px solid #ece8dc', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e7dcc4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#6b4a1a' }}>RM</div>
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e7dcc4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#6b4a1a', flexShrink: 0 }}>{(this.state.settings.ownerName || 'O').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()}</div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>Rehan Malik</div>
-              <div style={{ fontSize: 11, color: '#7a7663' }}>Sadar Electronics</div>
+              <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{this.state.settings.ownerName || 'Owner'}</div>
+              <div style={{ fontSize: 11, color: '#7a7663', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{this.state.settings.businessName || 'Aqsat'}</div>
             </div>
           </div>
         </aside>
 
         {/* Mobile topbar */}
-        <div className="mobile-only" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 30, background: '#ffffff', borderBottom: '1px solid #ece8dc', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800 }}>A</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 15 }}>Aqsat</div>
-            <div style={{ fontSize: 10, color: '#7a7663' }}>{t[0]}</div>
+        <div className="mobile-only" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 30, background: '#ffffff', borderBottom: '1px solid #ece8dc', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, flexShrink: 0 }}>A</div>
+          <div style={{ flex: 1, background: '#f4f1e6', borderRadius: 10, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13 }}>🔍</span>
+            <input placeholder="Search…" value={this.state.searchQuery} onChange={e => this.setState({ searchQuery: e.target.value })} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 13, flex: 1, minWidth: 0 }} />
           </div>
-          <button onClick={() => this.go('newplan')} style={{ width: 36, height: 36, borderRadius: 10, background: '#f4f1e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>＋</button>
+          <button onClick={() => this.go('newplan')} style={{ width: 32, height: 32, borderRadius: 9, background: '#0f6b4b', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>＋</button>
         </div>
 
         {/* Main */}
@@ -1174,6 +1204,32 @@ export default class App extends React.Component {
         {this.state.addCustomerOpen  && this.renderAddCustomer()}
         {this.state.paymentModalOpen && this.renderPaymentModal()}
         {this.state.receiptOpen      && this.renderReceipt()}
+
+        {/* Mobile hamburger menu drawer */}
+        {this.state.menuOpen && (
+          <div onClick={() => this.setState({ menuOpen: false })} className="mobile-only" style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.5)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', borderRadius: '20px 20px 0 0', padding: '20px 16px 36px', width: '100%', animation: 'slideIn .2s ease' }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d9d5c7', margin: '0 auto 20px' }} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                {[
+                  { icon: '📊', label: 'Reports',   go: 'reports' },
+                  { icon: '🔔', label: 'Reminders', go: 'reminders', badge: overdueCount > 0 ? overdueCount : null },
+                  { icon: '📦', label: 'Products',  go: 'products' },
+                  { icon: '⚙️', label: 'Settings',  go: 'settings' },
+                ].map(item => (
+                  <button key={item.go} onClick={() => { this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
+                    <span style={{ fontSize: 20 }}>{item.icon}</span>
+                    {item.label}
+                    {item.badge && <span style={{ position: 'absolute', top: 8, right: 8, background: '#fce8b7', color: '#7a5100', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 10 }}>{item.badge}</span>}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => { this.openAddProduct(); this.setState({ menuOpen: false }); }} style={{ width: '100%', padding: '14px', borderRadius: 14, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                ＋ Add Product
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
