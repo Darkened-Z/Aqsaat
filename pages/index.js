@@ -219,6 +219,43 @@ export default class App extends React.Component {
     return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
   };
 
+  waPlanLink = (c, p, pl, next) => {
+    const biz = this.state.settings.businessName || 'Aqsat';
+    const num = '92' + (c.phone || '').replace(/\D/g, '').replace(/^0/, '');
+    const today = new Date();
+    const due = new Date(next.dueDate);
+    const daysLeft = Math.round((due - today) / 86400000);
+    const urgency = daysLeft < 0 ? `(${Math.abs(daysLeft)} دن تاخیر ہو چکی ہے)` : daysLeft === 0 ? '(آج آخری دن ہے)' : `(${daysLeft} دن باقی ہیں)`;
+    const msg = `السلام وعلیکم ${c.name}! 🙏\n\n${biz} کی طرف سے یاد دہانی:\n\n📦 ${p ? p.name : 'پروڈکٹ'}\n💳 قسط نمبر: ${next.n} / ${pl.months}\n💰 رقم: ${this.fmtPKR(next.amount)}\n📅 تاریخ: ${this.fmtDate(next.dueDate)} ${urgency}\n🔖 وچر: ${pl.voucherNo || '—'}\n\nبراہ کرم بروقت ادائیگی کریں۔\nشکریہ 🙏`;
+    return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+  };
+
+  exportBackup = () => {
+    const data = { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, exportedAt: new Date().toISOString(), version: 1 };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `aqsat-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  importBackup = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const d = JSON.parse(e.target.result);
+        if (!d.customers || !d.products || !d.plans) { alert('Invalid backup file'); return; }
+        if (!window.confirm(`Import backup?\n\nThis will replace:\n• ${d.customers.length} customers\n• ${d.products.length} products\n• ${d.plans.length} plans\n\nCurrent data will be overwritten.`)) return;
+        this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings });
+        alert('✓ Backup imported successfully!');
+      } catch(e) { alert('Could not read file — make sure it is a valid Aqsat backup.'); }
+    };
+    reader.readAsText(file);
+  };
+
   exportCSV = () => {
     const rows = [['Customer', 'Product', 'Total', 'Down', 'Monthly', 'Paid', 'Remaining', 'Status', 'Start Date']];
     this.state.plans.forEach(pl => {
@@ -587,9 +624,12 @@ export default class App extends React.Component {
         pl.status !== 'completed' && st.next
           ? h('div', { style: { fontSize: 13, color: '#5a6a5f' } }, 'Next: ' + this.fmtDate(st.next.dueDate) + ' · ', h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(st.next.amount)))
           : h('div', {}),
-        h('div', { style: { display: 'flex', gap: 8 } },
+        h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h('button', { onClick: () => this.openEditPlan(pl.id), style: { background: '#eaf5ee', color: '#0f6b4b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '✎'),
           h('button', { onClick: () => this.openDeletePlan(pl.id), style: { background: '#fdecea', color: '#a4362b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '🗑'),
+          pl.status !== 'completed' && st.next && c.phone
+            ? h('a', { href: this.waPlanLink(c, p, pl, st.next), target: '_blank', rel: 'noopener', style: { background: '#dcfce7', color: '#15803d', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' } }, '💬')
+            : null,
           pl.status !== 'completed' && st.next
             ? h('button', { onClick: () => this.openPayment(pl.id, st.next.n), style: { background: '#0f6b4b', color: 'white', padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, 'Record Payment →')
             : null,
@@ -890,6 +930,29 @@ export default class App extends React.Component {
             ? h('button', { onClick: () => this.setPin(''), style: { padding: '6px 12px', borderRadius: 8, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' } }, '🔓 Remove PIN')
             : h('input', { type: 'number', maxLength: 4, placeholder: '4-digit PIN', onBlur: e => { if (e.target.value.length === 4) this.setPin(e.target.value); }, style: { width: 100, border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, fontFamily: 'monospace', outline: 'none' } }),
         )),
+      ]),
+      h('div', { style: { height: 16 } }),
+      this.card([
+        h('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 8 } }, 'Data & Backup'),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderTop: '1px solid #f2eee2', gap: 12 } },
+          h('div', {},
+            h('div', { style: { fontWeight: 600, fontSize: 14 } }, 'Export backup'),
+            h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, 'ڈیٹا محفوظ کریں'),
+            h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, 'Download all data as a JSON file.'),
+          ),
+          h('button', { onClick: this.exportBackup, style: { padding: '10px 16px', borderRadius: 10, background: '#eaf5ee', color: '#0f6b4b', fontWeight: 700, fontSize: 13, flexShrink: 0 } }, '⬇ Export'),
+        ),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderTop: '1px solid #f2eee2', gap: 12 } },
+          h('div', {},
+            h('div', { style: { fontWeight: 600, fontSize: 14 } }, 'Import backup'),
+            h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, 'ڈیٹا بحال کریں'),
+            h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, 'Restore from a previously exported file.'),
+          ),
+          h('label', { style: { padding: '10px 16px', borderRadius: 10, background: '#f4f1e6', color: '#3a4a3f', fontWeight: 700, fontSize: 13, cursor: 'pointer', flexShrink: 0 } },
+            '⬆ Import',
+            h('input', { type: 'file', accept: '.json', style: { display: 'none' }, onChange: e => { this.importBackup(e.target.files[0]); e.target.value = ''; } }),
+          ),
+        ),
       ]),
       h('div', { style: { height: 16 } }),
       this.card([
