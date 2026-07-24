@@ -16,6 +16,7 @@ export default class App extends React.Component {
     paymentAmount: '',
     menuOpen: false,
     deletePlanModal: { open: false, planId: null, pinInput: '' },
+    editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: false, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' },
     addCustomerOpen: false,
     newCustomer: {
       name: '', nameUr: '', phone: '', altPhone: '', cnic: '', dob: '',
@@ -262,6 +263,32 @@ export default class App extends React.Component {
       return;
     }
     this.setState({ plans: this.state.plans.filter(p => p.id !== planId), deletePlanModal: { open: false, planId: null, pinInput: '' } });
+  };
+
+  openEditPlan = (planId) => {
+    const pl = this.state.plans.find(p => p.id === planId);
+    if (!pl) return;
+    const hasPIN = !!this.state.savedPin;
+    this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: !hasPIN, draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
+  };
+  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: false, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+  submitEditPlanPin = () => {
+    const { pinInput } = this.state.editPlanModal;
+    if (pinInput === this.state.savedPin) {
+      this.setState({ editPlanModal: { ...this.state.editPlanModal, pinConfirmed: true, pinInput: '' } });
+    } else {
+      this.setState({ editPlanModal: { ...this.state.editPlanModal, pinInput: '' } });
+      alert('غلط PIN — Wrong PIN');
+    }
+  };
+  confirmEditPlan = () => {
+    const em = this.state.editPlanModal;
+    const plans = this.state.plans.map(pl => {
+      if (pl.id !== em.planId) return pl;
+      const allPaid = em.draftSchedule.every(s => s.paid);
+      return { ...pl, schedule: em.draftSchedule, imei: em.draftImei, chassisNo: em.draftChassisNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
+    });
+    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: false, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
   };
 
   openAddProduct  = () => this.setState({ addProductOpen: true, newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📱' } });
@@ -555,6 +582,7 @@ export default class App extends React.Component {
           ? h('div', { style: { fontSize: 13, color: '#5a6a5f' } }, 'Next: ' + this.fmtDate(st.next.dueDate) + ' · ', h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(st.next.amount)))
           : h('div', {}),
         h('div', { style: { display: 'flex', gap: 8 } },
+          h('button', { onClick: () => this.openEditPlan(pl.id), style: { background: '#eaf5ee', color: '#0f6b4b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '✎'),
           h('button', { onClick: () => this.openDeletePlan(pl.id), style: { background: '#fdecea', color: '#a4362b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '🗑'),
           pl.status !== 'completed' && st.next
             ? h('button', { onClick: () => this.openPayment(pl.id, st.next.n), style: { background: '#0f6b4b', color: 'white', padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, 'Record Payment →')
@@ -1095,6 +1123,98 @@ export default class App extends React.Component {
     );
   }
 
+  renderEditModal() {
+    const h = this.h;
+    const em = this.state.editPlanModal;
+    const pl = this.state.plans.find(p => p.id === em.planId);
+    if (!pl) return null;
+    const c = this.state.customers.find(x => x.id === pl.customerId);
+    const p = this.state.products.find(x => x.id === pl.productId);
+    const setDraft = (k, v) => this.setState({ editPlanModal: { ...this.state.editPlanModal, [k]: v } });
+    const updateInst = (n, field, val) => {
+      setDraft('draftSchedule', em.draftSchedule.map(s => s.n === n ? { ...s, [field]: val } : s));
+    };
+    const inpStyle = { border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, background: '#fdfcf8', outline: 'none', boxSizing: 'border-box' };
+    const isMobile = p && ['Mobile', 'Laptop'].includes(p.category);
+    const isBike = p && p.category === 'Motorcycle';
+    const overlay = { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 50, padding: '12px 16px', backdropFilter: 'blur(4px)', overflowY: 'auto' };
+    if (!em.pinConfirmed) {
+      return h('div', { onClick: this.closeEditPlan, style: { ...overlay, alignItems: 'center' } },
+        h('div', { onClick: e => e.stopPropagation(), style: { background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 380, textAlign: 'center' } },
+          h('div', { style: { fontSize: 36, marginBottom: 12 } }, '✎'),
+          h('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 4 } }, 'Edit Plan'),
+          h('div', { className: 'ur', style: { fontSize: 14, color: '#7a7663', marginBottom: 24 } }, 'پلان ترمیم کریں'),
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 8, textAlign: 'left' } }, 'Enter PIN ', h('span', { className: 'ur', style: { color: '#7a7663' } }, '— تصدیقی PIN')),
+          h('input', { type: 'password', inputMode: 'numeric', maxLength: 4, placeholder: '••••', autoFocus: true, value: em.pinInput, onChange: e => setDraft('pinInput', e.target.value), onKeyDown: e => e.key === 'Enter' && this.submitEditPlanPin(), style: { width: '100%', textAlign: 'center', fontSize: 28, letterSpacing: 14, border: '2px solid #ece8dc', borderRadius: 10, padding: 10, outline: 'none', background: '#fdfcf8', fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 16 } }),
+          h('div', { style: { display: 'flex', gap: 10 } },
+            h('button', { onClick: this.closeEditPlan, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600, color: '#3a4a3f' } }, 'Cancel'),
+            h('button', { onClick: this.submitEditPlanPin, style: { flex: 1, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, 'Unlock →'),
+          ),
+        ),
+      );
+    }
+    return h('div', { onClick: this.closeEditPlan, style: overlay },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#fff', borderRadius: 20, width: '100%', maxWidth: 580, display: 'flex', flexDirection: 'column', maxHeight: '92vh', overflowY: 'auto', margin: 'auto' } },
+        h('div', { style: { padding: '20px 22px 16px', borderBottom: '1px solid #ece8dc', position: 'sticky', top: 0, background: '#fff', borderRadius: '20px 20px 0 0', zIndex: 1 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+            h('div', {},
+              h('div', { style: { fontSize: 17, fontWeight: 800 } }, '✎ Edit Plan'),
+              h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, 'پلان ترمیم'),
+            ),
+            h('button', { onClick: this.closeEditPlan, style: { width: 34, height: 34, borderRadius: 9, background: '#f4f1e6', fontSize: 15 } }, '✕'),
+          ),
+          h('div', { style: { marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' } },
+            h('div', { style: { width: 38, height: 38, borderRadius: 9, background: '#f4f1e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 } }, p ? p.emoji : '📦'),
+            h('div', {},
+              h('div', { style: { fontWeight: 700, fontSize: 14 } }, p ? p.name : '—'),
+              h('div', { style: { fontSize: 12, color: '#7a7663' } }, c ? c.name : '—'),
+              pl.voucherNo ? h('div', { className: 'mono', style: { fontSize: 11, color: '#7a7663', fontWeight: 600 } }, pl.voucherNo) : null,
+            ),
+          ),
+        ),
+        h('div', { style: { padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1 } },
+          (isMobile || isBike) ? h('div', { style: { display: 'grid', gridTemplateColumns: isMobile && isBike ? '1fr 1fr' : '1fr', gap: 10 } },
+            isMobile ? h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'IMEI Number'),
+              h('input', { value: em.draftImei, onChange: e => setDraft('draftImei', e.target.value), placeholder: '15-digit IMEI', style: { ...inpStyle, width: '100%', fontFamily: 'monospace' } }),
+            ) : null,
+            isBike ? h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Chassis No.'),
+              h('input', { value: em.draftChassisNo, onChange: e => setDraft('draftChassisNo', e.target.value), placeholder: 'Chassis number', style: { ...inpStyle, width: '100%', fontFamily: 'monospace' } }),
+            ) : null,
+          ) : null,
+          h('div', {},
+            h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Notes ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'نوٹس')),
+            h('textarea', { value: em.draftNotes, onChange: e => setDraft('draftNotes', e.target.value), placeholder: 'Any notes about this plan…', rows: 2, style: { ...inpStyle, width: '100%', resize: 'vertical' } }),
+          ),
+          h('div', {},
+            h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Installment Schedule ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'قسط کی تفصیل')),
+            h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+              em.draftSchedule.map(s => s.paid
+                ? h('div', { key: s.n, style: { display: 'flex', gap: 10, alignItems: 'center', padding: '8px 10px', background: '#eaf5ee', borderRadius: 8, opacity: 0.7 } },
+                    h('div', { style: { width: 22, height: 22, borderRadius: 5, background: '#0f6b4b', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 } }, '✓'),
+                    h('div', { style: { flex: 1, fontSize: 12, color: '#3a6a4f' } }, '#' + s.n + ' · ' + this.fmtDate(s.dueDate)),
+                    h('div', { className: 'mono', style: { fontSize: 12, fontWeight: 700, color: '#0f6b4b' } }, this.fmtPKR(s.amountPaid || s.amount)),
+                    h('div', { style: { fontSize: 10, background: '#0f6b4b', color: 'white', borderRadius: 4, padding: '1px 5px', fontWeight: 700 } }, 'PAID'),
+                  )
+                : h('div', { key: s.n, style: { display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', background: '#fdfcf8', border: '1px solid #ece8dc', borderRadius: 8 } },
+                    h('div', { style: { width: 22, height: 22, borderRadius: 5, background: '#f4f1e6', color: '#3a4a3f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 } }, s.n),
+                    h('input', { type: 'date', value: s.dueDate, onChange: e => updateInst(s.n, 'dueDate', e.target.value), style: { ...inpStyle, flex: 1, minWidth: 0, fontSize: 12, padding: '5px 8px' } }),
+                    h('span', { style: { fontSize: 11, color: '#7a7663', flexShrink: 0 } }, 'Rs'),
+                    h('input', { type: 'number', value: s.amount, onChange: e => updateInst(s.n, 'amount', parseFloat(e.target.value) || 0), style: { ...inpStyle, width: 90, textAlign: 'right', fontSize: 13, fontWeight: 700, padding: '5px 8px' } }),
+                  )
+              ),
+            ),
+          ),
+        ),
+        h('div', { style: { padding: '14px 22px', borderTop: '1px solid #ece8dc', display: 'flex', gap: 10, background: '#fdfcf8', borderRadius: '0 0 20px 20px', position: 'sticky', bottom: 0 } },
+          h('button', { onClick: this.closeEditPlan, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600, color: '#3a4a3f' } }, 'Cancel'),
+          h('button', { onClick: this.confirmEditPlan, style: { flex: 2, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 14 } }, '✓ Save Changes'),
+        ),
+      ),
+    );
+  }
+
   renderDeleteModal() {
     const h = this.h;
     const { planId, pinInput } = this.state.deletePlanModal;
@@ -1289,6 +1409,7 @@ export default class App extends React.Component {
         {this.state.paymentModalOpen      && this.renderPaymentModal()}
         {this.state.receiptOpen           && this.renderReceipt()}
         {this.state.deletePlanModal.open  && this.renderDeleteModal()}
+        {this.state.editPlanModal.open    && this.renderEditModal()}
 
         {/* Mobile hamburger menu drawer */}
         {this.state.menuOpen && (
