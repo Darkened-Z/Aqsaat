@@ -268,27 +268,33 @@ export default class App extends React.Component {
   openEditPlan = (planId) => {
     const pl = this.state.plans.find(p => p.id === planId);
     if (!pl) return;
-    const hasPIN = !!this.state.savedPin;
-    this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: !hasPIN, draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
+    this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
   };
-  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: false, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
-  submitEditPlanPin = () => {
-    const { pinInput } = this.state.editPlanModal;
-    if (pinInput === this.state.savedPin) {
-      this.setState({ editPlanModal: { ...this.state.editPlanModal, pinConfirmed: true, pinInput: '' } });
-    } else {
-      this.setState({ editPlanModal: { ...this.state.editPlanModal, pinInput: '' } });
-      alert('غلط PIN — Wrong PIN');
-    }
-  };
-  confirmEditPlan = () => {
+  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+  _doSaveEditPlan = () => {
     const em = this.state.editPlanModal;
     const plans = this.state.plans.map(pl => {
       if (pl.id !== em.planId) return pl;
       const allPaid = em.draftSchedule.every(s => s.paid);
       return { ...pl, schedule: em.draftSchedule, imei: em.draftImei, chassisNo: em.draftChassisNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
     });
-    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: false, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+  };
+  submitEditPlanPin = () => {
+    const { pinInput } = this.state.editPlanModal;
+    if (pinInput === this.state.savedPin) {
+      this._doSaveEditPlan();
+    } else {
+      this.setState({ editPlanModal: { ...this.state.editPlanModal, pinInput: '' } });
+      alert('غلط PIN — Wrong PIN');
+    }
+  };
+  confirmEditPlan = () => {
+    if (this.state.savedPin) {
+      this.setState({ editPlanModal: { ...this.state.editPlanModal, pinConfirmed: false, pinInput: '' } });
+    } else {
+      this._doSaveEditPlan();
+    }
   };
 
   openAddProduct  = () => this.setState({ addProductOpen: true, newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📱' } });
@@ -1141,14 +1147,14 @@ export default class App extends React.Component {
     if (!em.pinConfirmed) {
       return h('div', { onClick: this.closeEditPlan, style: { ...overlay, alignItems: 'center' } },
         h('div', { onClick: e => e.stopPropagation(), style: { background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 380, textAlign: 'center' } },
-          h('div', { style: { fontSize: 36, marginBottom: 12 } }, '✎'),
-          h('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 4 } }, 'Edit Plan'),
-          h('div', { className: 'ur', style: { fontSize: 14, color: '#7a7663', marginBottom: 24 } }, 'پلان ترمیم کریں'),
-          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 8, textAlign: 'left' } }, 'Enter PIN ', h('span', { className: 'ur', style: { color: '#7a7663' } }, '— تصدیقی PIN')),
+          h('div', { style: { fontSize: 36, marginBottom: 12 } }, '🔐'),
+          h('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 4 } }, 'Confirm Save'),
+          h('div', { className: 'ur', style: { fontSize: 14, color: '#7a7663', marginBottom: 24 } }, 'تبدیلیاں محفوظ کریں'),
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 8, textAlign: 'left' } }, 'Enter PIN to save changes ', h('span', { className: 'ur', style: { color: '#7a7663' } }, '— تصدیقی PIN')),
           h('input', { type: 'password', inputMode: 'numeric', maxLength: 4, placeholder: '••••', autoFocus: true, value: em.pinInput, onChange: e => setDraft('pinInput', e.target.value), onKeyDown: e => e.key === 'Enter' && this.submitEditPlanPin(), style: { width: '100%', textAlign: 'center', fontSize: 28, letterSpacing: 14, border: '2px solid #ece8dc', borderRadius: 10, padding: 10, outline: 'none', background: '#fdfcf8', fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 16 } }),
           h('div', { style: { display: 'flex', gap: 10 } },
             h('button', { onClick: this.closeEditPlan, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600, color: '#3a4a3f' } }, 'Cancel'),
-            h('button', { onClick: this.submitEditPlanPin, style: { flex: 1, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, 'Unlock →'),
+            h('button', { onClick: this.submitEditPlanPin, style: { flex: 1, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, '✓ Save'),
           ),
         ),
       );
