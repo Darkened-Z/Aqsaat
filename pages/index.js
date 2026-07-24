@@ -12,9 +12,10 @@ export default class App extends React.Component {
     customers: null,
     products: null,
     plans: null,
-    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 },
+    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, useCustomSchedule: false, customSchedule: [] },
     paymentAmount: '',
     menuOpen: false,
+    deletePlanModal: { open: false, planId: null, pinInput: '' },
     addCustomerOpen: false,
     newCustomer: {
       name: '', nameUr: '', phone: '', altPhone: '', cnic: '', dob: '',
@@ -179,10 +180,13 @@ export default class App extends React.Component {
       const d = new Date(start);
       if (np.frequency === 'days') d.setDate(d.getDate() + i * freqDays);
       else d.setMonth(d.getMonth() + i);
-      schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount: monthly, paid: false, paidDate: null });
+      const amt = (np.useCustomSchedule && np.customSchedule[i]) ? (parseFloat(np.customSchedule[i].amount) || monthly) : monthly;
+      schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount: amt, paid: false, paidDate: null });
     }
-    const plan = { id: 'pl_' + Date.now().toString(36), customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
-    this.setState({ plans: [plan, ...this.state.plans], newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 } });
+    const voucherSeq = (this.state.plans.length + 1).toString().padStart(3, '0');
+    const voucherNo = 'VCH-' + new Date().getFullYear() + '-' + voucherSeq;
+    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
+    this.setState({ plans: [plan, ...this.state.plans], newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, useCustomSchedule: false, customSchedule: [] } });
     this.go('customer', { id: np.customerId });
   };
 
@@ -246,6 +250,18 @@ export default class App extends React.Component {
       this.setState({ enteredPin: '' });
       alert('Wrong PIN');
     }
+  };
+
+  openDeletePlan  = (planId) => this.setState({ deletePlanModal: { open: true, planId, pinInput: '' } });
+  closeDeletePlan = () => this.setState({ deletePlanModal: { open: false, planId: null, pinInput: '' } });
+  confirmDeletePlan = () => {
+    const { planId, pinInput } = this.state.deletePlanModal;
+    if (this.state.savedPin && pinInput !== this.state.savedPin) {
+      alert('غلط PIN — Wrong PIN');
+      this.setState({ deletePlanModal: { ...this.state.deletePlanModal, pinInput: '' } });
+      return;
+    }
+    this.setState({ plans: this.state.plans.filter(p => p.id !== planId), deletePlanModal: { open: false, planId: null, pinInput: '' } });
   };
 
   openAddProduct  = () => this.setState({ addProductOpen: true, newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📱' } });
@@ -503,6 +519,7 @@ export default class App extends React.Component {
                 : h('span', { style: { fontSize: 10, fontWeight: 700, color: '#a26a10', background: '#fdf2d9', padding: '3px 8px', borderRadius: 20 } }, 'ACTIVE'),
           ),
           h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, c.name + ' · Started ' + this.fmtDate(pl.startDate) + ' · ' + pl.months + ' months @ ' + pl.interest + '% markup'),
+          pl.voucherNo ? h('div', { className: 'mono', style: { fontSize: 11, color: '#7a7663', marginTop: 3, fontWeight: 600 } }, pl.voucherNo) : null,
         ),
         h('div', { style: { textAlign: 'right' } },
           h('div', { style: { fontSize: 11, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, 'Remaining'),
@@ -533,12 +550,17 @@ export default class App extends React.Component {
           );
         }),
       ),
-      pl.status !== 'completed' && st.next
-        ? h('div', { style: { marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 } },
-          h('div', { style: { fontSize: 13, color: '#5a6a5f' } }, 'Next: ' + this.fmtDate(st.next.dueDate) + ' · ', h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(st.next.amount))),
-          h('button', { onClick: () => this.openPayment(pl.id, st.next.n), style: { background: '#0f6b4b', color: 'white', padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, 'Record Payment →'),
-        )
-        : null,
+      h('div', { style: { marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 } },
+        pl.status !== 'completed' && st.next
+          ? h('div', { style: { fontSize: 13, color: '#5a6a5f' } }, 'Next: ' + this.fmtDate(st.next.dueDate) + ' · ', h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(st.next.amount)))
+          : h('div', {}),
+        h('div', { style: { display: 'flex', gap: 8 } },
+          h('button', { onClick: () => this.openDeletePlan(pl.id), style: { background: '#fdecea', color: '#a4362b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '🗑'),
+          pl.status !== 'completed' && st.next
+            ? h('button', { onClick: () => this.openPayment(pl.id, st.next.n), style: { background: '#0f6b4b', color: 'white', padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, 'Record Payment →')
+            : null,
+        ),
+      ),
     );
   }
 
@@ -655,6 +677,34 @@ export default class App extends React.Component {
               ),
             ),
           ),
+          months > 0 ? field('Custom Amounts', 'مختلف اقساط',
+            h('div', { style: { display: 'grid', gap: 8 } },
+              h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+                h('button', { onClick: () => {
+                  const useCS = !np.useCustomSchedule;
+                  const cs = useCS ? Array.from({ length: months }, (_, i) => ({ n: i + 1, amount: monthly })) : [];
+                  this.setState({ newPlan: { ...np, useCustomSchedule: useCS, customSchedule: cs } });
+                }, style: { padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: np.useCustomSchedule ? '#0f6b4b' : '#fdfcf8', color: np.useCustomSchedule ? 'white' : '#3a4a3f', border: '1px solid ' + (np.useCustomSchedule ? '#0f6b4b' : '#ece8dc') } }, np.useCustomSchedule ? '✓ Custom Amounts On' : 'Same for all months'),
+                np.useCustomSchedule ? h('span', { style: { fontSize: 11, color: '#7a7663' } }, 'Edit each installment below') : null,
+              ),
+              np.useCustomSchedule ? h('div', { style: { display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto', paddingTop: 4 } },
+                Array.from({ length: months }, (_, i) => {
+                  const cs = np.customSchedule || [];
+                  const val = cs[i] != null ? cs[i].amount : monthly;
+                  return h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                    h('div', { style: { width: 24, height: 24, borderRadius: 6, background: '#eaf5ee', color: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 } }, i + 1),
+                    h('span', { style: { fontSize: 12, color: '#7a7663', flexShrink: 0 } }, 'Rs'),
+                    h('input', { type: 'number', value: val, onChange: e => {
+                      const base = np.customSchedule && np.customSchedule.length === months ? np.customSchedule : Array.from({ length: months }, (_, j) => ({ n: j + 1, amount: monthly }));
+                      const newCs = [...base];
+                      newCs[i] = { n: i + 1, amount: e.target.value };
+                      set('customSchedule', newCs);
+                    }, style: { ...inpStyle, flex: 1, textAlign: 'right' } }),
+                  );
+                })
+              ) : null,
+            )
+          ) : null,
           field('Start Date', 'آغاز', h('input', { type: 'date', value: np.startDate, onChange: e => set('startDate', e.target.value), style: inpStyle })),
           isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('input', { value: np.imei, onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isBike ? field('Chassis Number', 'چیسس نمبر', h('input', { value: np.chassisNo, onChange: e => set('chassisNo', e.target.value), placeholder: 'e.g. ABC1234567890', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
@@ -996,12 +1046,15 @@ export default class App extends React.Component {
           ),
         ),
         h('div', { style: { background: '#fdfcf8', border: '1px solid #ece8dc', borderRadius: 14, padding: 20, textAlign: 'center', marginBottom: 20 } },
-          h('div', { style: { fontSize: 11, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, 'Amount Collected'),
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 } },
+            h('span', { style: { fontSize: 11, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, 'Amount Received'),
+            h('span', { className: 'ur', style: { fontSize: 12, color: '#0f6b4b', fontWeight: 600 } }, '(وصول شدہ رقم)'),
+          ),
           h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 6 } },
             h('span', { className: 'mono', style: { fontSize: 20, fontWeight: 700, color: '#7a7663' } }, 'Rs'),
-            h('input', { type: 'number', value: this.state.paymentAmount, onChange: e => this.setState({ paymentAmount: e.target.value }), className: 'mono', style: { fontSize: 36, fontWeight: 800, letterSpacing: '-0.02em', border: 'none', borderBottom: '2px solid #0f6b4b', background: 'transparent', outline: 'none', width: 160, textAlign: 'center', color: '#1a2b1f' } }),
+            h('input', { type: 'number', autoFocus: true, value: this.state.paymentAmount, onChange: e => this.setState({ paymentAmount: e.target.value }), className: 'mono', style: { fontSize: 36, fontWeight: 800, letterSpacing: '-0.02em', border: 'none', borderBottom: '2px solid #0f6b4b', background: 'transparent', outline: 'none', width: 160, textAlign: 'center', color: '#1a2b1f' } }),
           ),
-          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 4 } }, 'Due ' + this.fmtDate(s.dueDate) + ' · Full: ' + this.fmtPKR(totalDue)),
+          h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 6 } }, '✎ رقم تبدیل کر سکتے ہیں · Due ' + this.fmtDate(s.dueDate) + ' · Full: ' + this.fmtPKR(totalDue)),
           lateFee > 0 ? h('div', { style: { marginTop: 10, padding: '6px 10px', background: '#fdecea', color: '#a4362b', borderRadius: 8, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 } },
             h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(s.amount)), ' installment + ', h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(lateFee)), ' late fee') : null,
         ),
@@ -1029,7 +1082,7 @@ export default class App extends React.Component {
         h('div', { className: 'mono', style: { fontSize: 32, fontWeight: 800, color: '#0f6b4b', margin: '20px 0 4px' } }, this.fmtPKR(r.installment.amount)),
         h('div', { style: { fontSize: 12, color: '#7a7663' } }, 'Receipt #' + r.receiptNo),
         h('div', { style: { textAlign: 'left', background: '#fdfcf8', border: '1px dashed #d9d5c7', borderRadius: 12, padding: 16, marginTop: 20, fontSize: 13 } },
-          [['Customer', r.customer.name], ['Product', r.product.name], ['Installment', r.installment.n + ' / ' + r.plan.months], ['Date', this.fmtDate(r.date)]].map(([l, v], i) =>
+          [['Customer', r.customer.name], ['Product', r.product.name], ['Installment', r.installment.n + ' / ' + r.plan.months], ['Voucher', r.plan.voucherNo || '—'], ['Date', this.fmtDate(r.date)]].map(([l, v], i) =>
             h('div', { key: i, style: { display: 'flex', justifyContent: 'space-between', padding: '4px 0' } },
               h('span', { style: { color: '#7a7663' } }, l), h('span', { style: { fontWeight: 600 } }, v))),
         ),
@@ -1037,6 +1090,37 @@ export default class App extends React.Component {
           h('button', { onClick: () => window.print(), style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600 } }, '🖨️ Print'),
           h('button', { style: { flex: 1, padding: 12, borderRadius: 10, background: '#25D366', color: 'white', fontWeight: 600 } }, '💬 Share'),
           h('button', { onClick: this.closeReceipt, style: { flex: 1, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, 'Done'),
+        ),
+      ),
+    );
+  }
+
+  renderDeleteModal() {
+    const h = this.h;
+    const { planId, pinInput } = this.state.deletePlanModal;
+    const pl = this.state.plans.find(p => p.id === planId);
+    if (!pl) return null;
+    const c = this.state.customers.find(x => x.id === pl.customerId);
+    const p = this.state.products.find(x => x.id === pl.productId);
+    const needPin = !!this.state.savedPin;
+    return h('div', { onClick: this.closeDeletePlan, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)' } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 400, animation: 'slideIn .2s ease' } },
+        h('div', { style: { fontSize: 36, textAlign: 'center', marginBottom: 12 } }, '🗑'),
+        h('div', { style: { fontSize: 18, fontWeight: 800, textAlign: 'center', marginBottom: 2 } }, 'Delete Plan?'),
+        h('div', { className: 'ur', style: { fontSize: 14, color: '#7a7663', textAlign: 'center', marginBottom: 20 } }, 'پلان ڈیلیٹ کریں؟'),
+        h('div', { style: { background: '#fdfcf8', border: '1px solid #ece8dc', borderRadius: 12, padding: '14px 16px', marginBottom: 16 } },
+          h('div', { style: { fontWeight: 700, fontSize: 15 } }, c ? c.name : '—'),
+          h('div', { style: { color: '#7a7663', fontSize: 13, marginTop: 4 } }, p ? p.emoji + ' ' + p.name : '—'),
+          pl.voucherNo ? h('div', { className: 'mono', style: { color: '#7a7663', fontSize: 12, marginTop: 4, fontWeight: 600 } }, pl.voucherNo) : null,
+        ),
+        h('div', { style: { background: '#fdecea', border: '1px solid #f5cac2', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#a4362b', marginBottom: 20 } }, '⚠️ تمام ادائیگیوں کا ریکارڈ بھی ڈیلیٹ ہو جائے گا۔ یہ واپس نہیں ہو سکتا۔'),
+        needPin ? h('div', { style: { marginBottom: 20 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 8 } }, 'Enter PIN to confirm ', h('span', { className: 'ur', style: { color: '#7a7663' } }, '— تصدیقی PIN')),
+          h('input', { type: 'password', inputMode: 'numeric', maxLength: 4, placeholder: '••••', autoFocus: true, value: pinInput, onChange: e => this.setState({ deletePlanModal: { ...this.state.deletePlanModal, pinInput: e.target.value } }), onKeyDown: e => e.key === 'Enter' && this.confirmDeletePlan(), style: { width: '100%', textAlign: 'center', fontSize: 28, letterSpacing: 14, border: '2px solid #ece8dc', borderRadius: 10, padding: '10px', outline: 'none', background: '#fdfcf8', fontFamily: 'monospace', boxSizing: 'border-box' } }),
+        ) : null,
+        h('div', { style: { display: 'flex', gap: 10 } },
+          h('button', { onClick: this.closeDeletePlan, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600, color: '#3a4a3f' } }, 'Cancel'),
+          h('button', { onClick: this.confirmDeletePlan, style: { flex: 1, padding: 12, borderRadius: 10, background: '#a4362b', color: 'white', fontWeight: 700 } }, '🗑 Delete'),
         ),
       ),
     );
@@ -1200,10 +1284,11 @@ export default class App extends React.Component {
         </nav>
 
         {/* Modals */}
-        {this.state.addProductOpen   && this.renderAddProductModal()}
-        {this.state.addCustomerOpen  && this.renderAddCustomer()}
-        {this.state.paymentModalOpen && this.renderPaymentModal()}
-        {this.state.receiptOpen      && this.renderReceipt()}
+        {this.state.addProductOpen        && this.renderAddProductModal()}
+        {this.state.addCustomerOpen       && this.renderAddCustomer()}
+        {this.state.paymentModalOpen      && this.renderPaymentModal()}
+        {this.state.receiptOpen           && this.renderReceipt()}
+        {this.state.deletePlanModal.open  && this.renderDeleteModal()}
 
         {/* Mobile hamburger menu drawer */}
         {this.state.menuOpen && (
