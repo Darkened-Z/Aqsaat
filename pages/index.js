@@ -13,7 +13,7 @@ export default class App extends React.Component {
     customers: null,
     products: null,
     plans: null,
-    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, useCustomSchedule: false, customSchedule: [] },
+    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 },
     paymentAmount: '',
     menuOpen: false,
     deletePlanModal: { open: false, planId: null, pinInput: '' },
@@ -231,27 +231,45 @@ export default class App extends React.Component {
     const product = this.state.products.find(p => p.id === np.productId);
     const total = parseFloat(np.totalPrice) || product.price;
     const down = parseFloat(np.downPayment) || 0;
-    const months = parseInt(np.customMonths || np.months) || 6;
     const financed = Math.max(0, total - down);
     const profit = np.interestType === 'amount'
       ? parseFloat(np.interestAmount) || 0
       : financed * (parseFloat(np.interest) || 0) / 100;
     const profitPct = np.interestType === 'amount' && financed > 0 ? (profit / financed) * 100 : parseFloat(np.interest) || 0;
-    const monthly = Math.round((financed + profit) / months);
+    const total2Pay = Math.max(0, financed + profit);
+    const installAmt = parseFloat(np.installmentAmount) || 0;
+    const fixedMonths = parseInt(np.customMonths || np.months) || 6;
     const start = new Date(np.startDate || new Date());
     const schedule = [];
     const freqDays = parseInt(np.frequencyDays) || 30;
-    for (let i = 0; i < months; i++) {
-      const d = new Date(start);
-      if (np.frequency === 'days') d.setDate(d.getDate() + i * freqDays);
-      else d.setMonth(d.getMonth() + i);
-      const amt = (np.useCustomSchedule && np.customSchedule[i]) ? (parseFloat(np.customSchedule[i].amount) || monthly) : monthly;
-      schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount: amt, paid: false, paidDate: null });
+    if (installAmt > 0) {
+      if (total2Pay === 0) { alert('Total payable is 0 — check sale price and down payment'); return; }
+      let remaining = total2Pay;
+      let i = 0;
+      while (remaining > 0.5 && i < 999) {
+        const d = new Date(start);
+        if (np.frequency === 'days') d.setDate(d.getDate() + i * freqDays);
+        else d.setMonth(d.getMonth() + i);
+        const amt = Math.min(Math.round(remaining), installAmt);
+        schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount: amt, paid: false, paidDate: null });
+        remaining -= amt;
+        i++;
+      }
+    } else {
+      const equalAmt = fixedMonths > 0 ? Math.round(total2Pay / fixedMonths) : 0;
+      for (let i = 0; i < fixedMonths; i++) {
+        const d = new Date(start);
+        if (np.frequency === 'days') d.setDate(d.getDate() + i * freqDays);
+        else d.setMonth(d.getMonth() + i);
+        schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount: equalAmt, paid: false, paidDate: null });
+      }
     }
+    const months = schedule.length;
+    const monthly = installAmt > 0 ? installAmt : (months > 0 ? Math.round(total2Pay / months) : 0);
     const voucherSeq = (this.state.plans.length + 1).toString().padStart(3, '0');
     const voucherNo = 'VCH-' + new Date().getFullYear() + '-' + voucherSeq;
-    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
-    this.setState({ plans: [plan, ...this.state.plans], newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, useCustomSchedule: false, customSchedule: [] } });
+    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
+    this.setState({ plans: [plan, ...this.state.plans], newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 } });
     this.go('customer', { id: np.customerId });
   };
 
@@ -770,8 +788,18 @@ export default class App extends React.Component {
     const down = parseFloat(np.downPayment) || 0;
     const financed = Math.max(0, total - down);
     const profit = np.interestType === 'amount' ? parseFloat(np.interestAmount) || 0 : financed * (parseFloat(np.interest) || 0) / 100;
-    const months = parseInt(np.customMonths || np.months) || 6;
-    const monthly = months > 0 ? Math.round((financed + profit) / months) : 0;
+    const installAmt = parseFloat(np.installmentAmount) || 0;
+    const total2Pay = Math.max(0, financed + profit);
+    let fullInst = 0, remainder = 0, months, monthly;
+    if (installAmt > 0 && total2Pay > 0) {
+      fullInst = Math.floor(total2Pay / installAmt);
+      remainder = Math.round(total2Pay % installAmt);
+      months = remainder > 0 ? fullInst + 1 : fullInst;
+      monthly = installAmt;
+    } else {
+      months = parseInt(np.customMonths || np.months) || 6;
+      monthly = months > 0 ? Math.round(total2Pay / months) : 0;
+    }
     const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
     const field = (label, ur, node) => h('div', {},
       h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, label, ' ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, ur)),
@@ -815,34 +843,16 @@ export default class App extends React.Component {
               ),
             ),
           ),
-          months > 0 ? field('Custom Amounts', 'مختلف اقساط',
+          field('Per-Installment Amount', 'قسط کی رقم',
             h('div', { style: { display: 'grid', gap: 8 } },
-              h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
-                h('button', { onClick: () => {
-                  const useCS = !np.useCustomSchedule;
-                  const cs = useCS ? Array.from({ length: months }, (_, i) => ({ n: i + 1, amount: monthly })) : [];
-                  this.setState({ newPlan: { ...np, useCustomSchedule: useCS, customSchedule: cs } });
-                }, style: { padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: np.useCustomSchedule ? '#0f6b4b' : '#fdfcf8', color: np.useCustomSchedule ? 'white' : '#3a4a3f', border: '1px solid ' + (np.useCustomSchedule ? '#0f6b4b' : '#ece8dc') } }, np.useCustomSchedule ? '✓ Custom Amounts On' : 'Same for all months'),
-                np.useCustomSchedule ? h('span', { style: { fontSize: 11, color: '#7a7663' } }, 'Edit each installment below') : null,
-              ),
-              np.useCustomSchedule ? h('div', { style: { display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto', paddingTop: 4 } },
-                Array.from({ length: months }, (_, i) => {
-                  const cs = np.customSchedule || [];
-                  const val = cs[i] != null ? cs[i].amount : monthly;
-                  return h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 8 } },
-                    h('div', { style: { width: 24, height: 24, borderRadius: 6, background: '#eaf5ee', color: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 } }, i + 1),
-                    h('span', { style: { fontSize: 12, color: '#7a7663', flexShrink: 0 } }, 'Rs'),
-                    h('input', { type: 'number', value: val, onChange: e => {
-                      const base = np.customSchedule && np.customSchedule.length === months ? np.customSchedule : Array.from({ length: months }, (_, j) => ({ n: j + 1, amount: monthly }));
-                      const newCs = [...base];
-                      newCs[i] = { n: i + 1, amount: e.target.value };
-                      set('customSchedule', newCs);
-                    }, style: { ...inpStyle, flex: 1, textAlign: 'right' } }),
-                  );
-                })
-              ) : null,
-            )
-          ) : null,
+              h('input', { type: 'number', value: np.installmentAmount, onChange: e => set('installmentAmount', e.target.value), placeholder: 'e.g. 8000  (auto-calculates installments)', style: inpStyle }),
+              installAmt > 0 && total2Pay > 0 ? h('div', { style: { background: '#eaf5ee', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#0f6b4b', fontWeight: 600 } },
+                remainder > 0
+                  ? fullInst + ' × ' + this.fmtPKR(installAmt) + ' + 1 × ' + this.fmtPKR(remainder) + ' = ' + months + ' اقساط'
+                  : fullInst + ' × ' + this.fmtPKR(installAmt) + ' = ' + months + ' اقساط'
+              ) : h('div', { style: { fontSize: 11, color: '#7a7663' } }, 'Leave empty to use the installment count above'),
+            ),
+          ),
           field('Start Date', 'آغاز', h('input', { type: 'date', value: np.startDate, onChange: e => set('startDate', e.target.value), style: inpStyle })),
           isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('input', { value: np.imei, onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isBike ? field('Chassis Number', 'چیسس نمبر', h('input', { value: np.chassisNo, onChange: e => set('chassisNo', e.target.value), placeholder: 'e.g. ABC1234567890', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
