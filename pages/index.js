@@ -83,26 +83,27 @@ export default class App extends React.Component {
     try {
       const { data, error } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
       if (error && error.code !== 'PGRST116') throw error; // PGRST116 = row not found
-      if (data?.data) {
+      // Load local data for comparison
+      let localData = null;
+      try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch(e) {}
+
+      const cloudHasData = data?.data && ((data.data.plans?.length || 0) + (data.data.customers?.length || 0)) > 0;
+      const localHasData = localData && ((localData.plans?.length || 0) + (localData.customers?.length || 0)) > 0;
+
+      if (cloudHasData && !localHasData) {
+        // Cloud has data, local is empty — load cloud
         const d = data.data;
-        this.setState({
-          customers: d.customers || [],
-          products:  d.products  || [],
-          plans:     d.plans     || [],
-          settings:  d.settings  || this.state.settings,
-          syncStatus: 'synced',
-        });
+        this.setState({ customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, syncStatus: 'synced' });
+      } else if (localHasData && !cloudHasData) {
+        // Local has data, cloud is empty — push local up
+        this.setState({ customers: localData.customers, products: localData.products, plans: localData.plans, settings: localData.settings || this.state.settings, syncStatus: 'synced' }, this.pushToSupabase);
+      } else if (cloudHasData && localHasData) {
+        // Both have data — prefer cloud (it's the shared source of truth)
+        const d = data.data;
+        this.setState({ customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, syncStatus: 'synced' });
       } else {
-        // No cloud data yet — load from localStorage or seed, then push up
-        const raw = localStorage.getItem('aqsat_data');
-        if (raw) {
-          try {
-            const d = JSON.parse(raw);
-            this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings }, this.pushToSupabase);
-          } catch(e) { this.seed(); }
-        } else {
-          this.seed();
-        }
+        // Neither has data — start fresh
+        this.seed();
         this.setState({ syncStatus: 'synced' });
       }
     } catch(err) {
