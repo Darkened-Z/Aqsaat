@@ -1,5 +1,6 @@
 import React from 'react';
 import Head from 'next/head';
+import { supabase } from '../lib/supabase';
 
 export default class App extends React.Component {
   state = {
@@ -37,32 +38,46 @@ export default class App extends React.Component {
     enteredPin: '',
     savedPin: '',
     paymentMethod: 'cash',
+    shopId: '',
+    syncStatus: 'loading', // 'loading' | 'synced' | 'syncing' | 'offline' | 'error'
+    syncError: '',
+    connectCodeInput: '',
   };
 
   componentDidMount() {
     if (typeof window === 'undefined') return;
-    // Wipe old demo seed data (demo customers had single-digit IDs like c1…c8)
+    // Wipe old demo seed data
     try {
       const old = localStorage.getItem('aqsat_data');
       if (old) {
         const d = JSON.parse(old);
-        if (d.customers && d.customers.some(c => /^c\d$/.test(c.id))) {
-          localStorage.removeItem('aqsat_data');
-        }
+        if (d.customers && d.customers.some(c => /^c\d$/.test(c.id))) localStorage.removeItem('aqsat_data');
       }
     } catch(e) {}
-    const dm = localStorage.getItem('aqsat_dark') === '1';
+
+    const dm  = localStorage.getItem('aqsat_dark') === '1';
     const pin = localStorage.getItem('aqsat_pin') || '';
-    const raw = localStorage.getItem('aqsat_data');
-    if (raw) {
-      try {
-        const d = JSON.parse(raw);
-        this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings, darkMode: dm, savedPin: pin, pinLocked: !!pin });
-        return;
-      } catch(e) {}
+
+    // Generate or load shop ID
+    let shopId = localStorage.getItem('aqsat_shop_id');
+    // Check URL for ?shop= (device linking)
+    const urlShop = new URLSearchParams(window.location.search).get('shop');
+    if (urlShop && urlShop !== shopId) {
+      if (window.confirm(`Connect this device to shop "${urlShop}"?\n\nThis will load that shop's data on this device.`)) {
+        shopId = urlShop;
+        localStorage.setItem('aqsat_shop_id', shopId);
+        localStorage.removeItem('aqsat_data');
+      }
+      window.history.replaceState({}, '', '/');
     }
-    this.setState({ darkMode: dm, savedPin: pin, pinLocked: !!pin });
-    this.seed();
+    if (!shopId) {
+      shopId = Math.random().toString(36).slice(2, 8).toUpperCase();
+      localStorage.setItem('aqsat_shop_id', shopId);
+    }
+
+    this.setState({ shopId, darkMode: dm, savedPin: pin, pinLocked: !!pin }, () => {
+      this.initSupabaseSync();
+    });
   }
 
   componentDidUpdate(_, prev) {
@@ -70,9 +85,84 @@ export default class App extends React.Component {
     const { customers, products, plans, settings } = this.state;
     if (!customers) return;
     if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings) {
+      // Keep localStorage as offline fallback
       localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings }));
+      // Debounce Supabase write
+      clearTimeout(this._syncTimer);
+      this._syncTimer = setTimeout(this.pushToSupabase, 1200);
     }
   }
+
+  componentWillUnmount() {
+    if (this._syncChannel) supabase.removeChannel(this._syncChannel);
+    clearTimeout(this._syncTimer);
+  }
+
+  initSupabaseSync = async () => {
+    const { shopId } = this.state;
+    if (!shopId) return;
+    this.setState({ syncStatus: 'loading' });
+    try {
+      const { data, error } = await supabase.from('shops').select('data').eq('id', shopId).single();
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = row not found
+      if (data?.data) {
+        const d = data.data;
+        this.setState({
+          customers: d.customers || [],
+          products:  d.products  || [],
+          plans:     d.plans     || [],
+          settings:  d.settings  || this.state.settings,
+          syncStatus: 'synced',
+        });
+      } else {
+        // No cloud data yet — load from localStorage or seed, then push up
+        const raw = localStorage.getItem('aqsat_data');
+        if (raw) {
+          try {
+            const d = JSON.parse(raw);
+            this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings }, this.pushToSupabase);
+          } catch(e) { this.seed(); }
+        } else {
+          this.seed();
+        }
+        this.setState({ syncStatus: 'synced' });
+      }
+    } catch(err) {
+      // Fall back to localStorage while showing error
+      const raw = localStorage.getItem('aqsat_data');
+      if (raw) { try { const d = JSON.parse(raw); this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings }); } catch(e) {} }
+      else this.seed();
+      this.setState({ syncStatus: 'error', syncError: err.message || 'Sync failed' });
+      return;
+    }
+    // Real-time subscription
+    this._syncChannel = supabase
+      .channel('shop-' + shopId)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shops', filter: `id=eq.${shopId}` }, (payload) => {
+        const d = payload.new?.data;
+        if (!d) return;
+        this.setState({ customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, syncStatus: 'synced' });
+      })
+      .subscribe();
+  };
+
+  pushToSupabase = async () => {
+    const { customers, products, plans, settings, shopId } = this.state;
+    if (!shopId || !customers) return;
+    this.setState({ syncStatus: 'syncing' });
+    const { error } = await supabase.from('shops').upsert({ id: shopId, data: { customers, products, plans, settings }, updated_at: new Date().toISOString() });
+    this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
+  };
+
+  connectToShop = async () => {
+    const code = (this.state.connectCodeInput || '').trim().toUpperCase();
+    if (!code || code.length < 4) return;
+    if (!window.confirm(`Connect to shop "${code}"?\n\nYour current local data will be replaced with the cloud data for this shop.`)) return;
+    localStorage.setItem('aqsat_shop_id', code);
+    localStorage.removeItem('aqsat_data');
+    if (this._syncChannel) supabase.removeChannel(this._syncChannel);
+    this.setState({ shopId: code, connectCodeInput: '', customers: null, products: null, plans: null }, () => this.initSupabaseSync());
+  };
 
   seed() {
     this.setState({ customers: [], products: [], plans: [] });
@@ -930,6 +1020,36 @@ export default class App extends React.Component {
             ? h('button', { onClick: () => this.setPin(''), style: { padding: '6px 12px', borderRadius: 8, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' } }, '🔓 Remove PIN')
             : h('input', { type: 'number', maxLength: 4, placeholder: '4-digit PIN', onBlur: e => { if (e.target.value.length === 4) this.setPin(e.target.value); }, style: { width: 100, border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, fontFamily: 'monospace', outline: 'none' } }),
         )),
+      ]),
+      h('div', { style: { height: 16 } }),
+      this.card([
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 } },
+          h('div', { style: { fontSize: 16, fontWeight: 700 } }, '☁ Cloud Sync'),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+            h('div', { style: { width: 8, height: 8, borderRadius: '50%', background: this.state.syncStatus === 'synced' ? '#0f6b4b' : this.state.syncStatus === 'syncing' || this.state.syncStatus === 'loading' ? '#a26a10' : '#a4362b' } }),
+            h('span', { style: { fontSize: 12, fontWeight: 600, color: '#7a7663' } }, this.state.syncStatus === 'synced' ? 'Synced' : this.state.syncStatus === 'syncing' ? 'Syncing…' : this.state.syncStatus === 'loading' ? 'Loading…' : 'Offline'),
+          ),
+        ),
+        row('Your shop code', 'شاپ کوڈ',
+          h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+            h('div', { className: 'mono', style: { fontSize: 18, fontWeight: 800, letterSpacing: 3, color: '#0f6b4b', background: '#eaf5ee', padding: '6px 14px', borderRadius: 8 } }, this.state.shopId || '…'),
+            h('button', { onClick: () => { navigator.clipboard?.writeText(this.state.shopId); }, style: { padding: '6px 10px', borderRadius: 8, background: '#f4f1e6', fontSize: 12, fontWeight: 600 } }, 'Copy'),
+          )
+        ),
+        h('div', { style: { padding: '14px 0', borderTop: '1px solid #f2eee2' } },
+          h('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 4 } }, 'Connect another device'),
+          h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663', marginBottom: 10 } }, 'دوسرے ڈیوائس کو جوڑیں'),
+          h('div', { style: { fontSize: 12, color: '#5a6a5f', marginBottom: 10 } }, 'On the other device, open Settings and enter your shop code below — or share this link:'),
+          h('div', { style: { fontFamily: 'monospace', fontSize: 11, background: '#f4f1e6', padding: '6px 10px', borderRadius: 6, marginBottom: 10, wordBreak: 'break-all', color: '#3a4a3f' } }, typeof window !== 'undefined' ? window.location.origin + '?shop=' + (this.state.shopId || '') : ''),
+          h('div', { style: { display: 'flex', gap: 8 } },
+            h('input', { value: this.state.connectCodeInput, onChange: e => this.setState({ connectCodeInput: e.target.value }), onKeyDown: e => e.key === 'Enter' && this.connectToShop(), placeholder: 'Enter shop code', style: { flex: 1, border: '1px solid #ece8dc', borderRadius: 8, padding: '8px 12px', fontSize: 14, fontFamily: 'monospace', letterSpacing: 2, textTransform: 'uppercase', outline: 'none', background: '#fdfcf8' } }),
+            h('button', { onClick: this.connectToShop, style: { padding: '8px 14px', borderRadius: 8, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, 'Connect'),
+          ),
+        ),
+        this.state.syncStatus === 'error' ? h('div', { style: { background: '#fdecea', border: '1px solid #f5cac2', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#a4362b', marginTop: 8 } },
+          h('div', { style: { fontWeight: 700, marginBottom: 4 } }, '⚠ Sync error — run this SQL in your Supabase dashboard:'),
+          h('pre', { style: { fontFamily: 'monospace', fontSize: 11, margin: 0, whiteSpace: 'pre-wrap', userSelect: 'all' } }, `create table if not exists shops (\n  id text primary key,\n  data jsonb not null,\n  updated_at timestamptz default now()\n);\nalter table shops enable row level security;\ncreate policy "public access" on shops for all using (true);`),
+        ) : null,
       ]),
       h('div', { style: { height: 16 } }),
       this.card([
