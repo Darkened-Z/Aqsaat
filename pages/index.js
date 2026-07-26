@@ -28,6 +28,7 @@ export default class App extends React.Component {
     },
     addCustomerStep: 1,
     planFilter: 'all',
+    lateFeePanel: null,
     editingProduct: null,
     addProductOpen: false,
     newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
@@ -384,6 +385,12 @@ export default class App extends React.Component {
     this.setState({ plans: this.state.plans.filter(p => p.id !== planId), deletePlanModal: { open: false, planId: null, pinInput: '' } });
   };
 
+  updatePlanLateFee = (planId, key, value) => {
+    this.setState({ plans: this.state.plans.map(pl =>
+      pl.id !== planId ? pl : { ...pl, lateFee: { ...(pl.lateFee || {}), [key]: value } }
+    )});
+  };
+
   openEditPlan = (planId) => {
     const pl = this.state.plans.find(p => p.id === planId);
     if (!pl) return;
@@ -709,6 +716,7 @@ export default class App extends React.Component {
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h('button', { onClick: () => this.openEditPlan(pl.id), style: { background: '#eaf5ee', color: '#0f6b4b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '✎'),
           h('button', { onClick: () => this.openDeletePlan(pl.id), style: { background: '#fdecea', color: '#a4362b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '🗑'),
+          h('button', { onClick: () => this.setState({ lateFeePanel: this.state.lateFeePanel === pl.id ? null : pl.id }), title: 'Late fee settings', style: { background: this.state.lateFeePanel === pl.id ? '#fef3c7' : '#f4f1e6', color: '#a26a10', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '⚙'),
           pl.status !== 'completed' && st.next && c.phone
             ? h('a', { href: this.waPlanLink(c, p, pl, st.next), target: '_blank', rel: 'noopener', style: { background: '#dcfce7', color: '#15803d', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' } }, '💬')
             : null,
@@ -717,6 +725,26 @@ export default class App extends React.Component {
             : null,
         ),
       ),
+      this.state.lateFeePanel === pl.id ? (() => {
+        const lf = pl.lateFee || this.state.settings;
+        const inp = { type: 'number', style: { width: '100%', border: '1px solid #f0e0b0', borderRadius: 8, padding: '7px 10px', fontSize: 13, background: '#fffdf5', outline: 'none', boxSizing: 'border-box' } };
+        const fld = (label, ur, key, val) => h('div', {},
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a5a10', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 } }, label, ' ', h('span', { className: 'ur', style: { fontWeight: 400, textTransform: 'none' } }, ur)),
+          h('input', { ...inp, value: val, onChange: e => this.updatePlanLateFee(pl.id, key, parseFloat(e.target.value) || 0) }),
+        );
+        return h('div', { style: { marginTop: 14, padding: '14px 16px', background: '#fffdf0', border: '1px solid #f0e0b0', borderRadius: 12 } },
+          h('div', { style: { fontSize: 12, fontWeight: 700, color: '#7a5a10', marginBottom: 10, display: 'flex', justifyContent: 'space-between' } },
+            h('span', {}, 'Late Fee Settings ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#a26a10' } }, 'جرمانہ')),
+            h('span', { style: { fontSize: 11, color: '#a26a10', fontWeight: 400 } }, 'Edits save instantly'),
+          ),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10 } },
+            fld('Grace Days', 'مہلت', 'graceDays', lf.graceDays || 0),
+            fld('Flat Fee (Rs)', 'مقررہ', 'lateFeeFlat', lf.lateFeeFlat || 0),
+            fld('Per-Day Fee (Rs)', 'یومیہ', 'lateFeePerDay', lf.lateFeePerDay || 0),
+            fld('Max Fee (Rs)', 'زیادہ سے زیادہ', 'maxLateFee', lf.maxLateFee || 0),
+          ),
+        );
+      })() : null,
     );
   }
 
