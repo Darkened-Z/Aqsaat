@@ -64,10 +64,9 @@ export default class App extends React.Component {
     if (typeof window === 'undefined') return;
     const { customers, products, plans, settings } = this.state;
     if (!customers) return;
+    // Skip push if this state change came FROM a cloud sync (prevents write loops)
+    if (this._fromCloud) { this._fromCloud = false; return; }
     if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings) {
-      // Keep localStorage as offline fallback
-      localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings }));
-      // Debounce Supabase write
       clearTimeout(this._syncTimer);
       this._syncTimer = setTimeout(this.pushToSupabase, 1200);
     }
@@ -78,49 +77,53 @@ export default class App extends React.Component {
     clearTimeout(this._syncTimer);
   }
 
+  _applyCloudData = (d) => {
+    this._fromCloud = true;
+    const payload = { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, syncStatus: 'synced' };
+    // Mirror to localStorage as offline fallback
+    localStorage.setItem('aqsat_data', JSON.stringify(d));
+    this.setState(payload);
+  };
+
   initSupabaseSync = async () => {
     this.setState({ syncStatus: 'loading' });
     try {
       const { data, error } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = row not found
-      // Load local data for comparison
-      let localData = null;
-      try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch(e) {}
+      if (error && error.code !== 'PGRST116') throw error;
 
-      const cloudHasData = data?.data && ((data.data.plans?.length || 0) + (data.data.customers?.length || 0)) > 0;
-      const localHasData = localData && ((localData.plans?.length || 0) + (localData.customers?.length || 0)) > 0;
+      const cloudCount = (data?.data?.plans?.length || 0) + (data?.data?.customers?.length || 0);
 
-      if (cloudHasData && !localHasData) {
-        // Cloud has data, local is empty — load cloud
-        const d = data.data;
-        this.setState({ customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, syncStatus: 'synced' });
-      } else if (localHasData && !cloudHasData) {
-        // Local has data, cloud is empty — push local up
-        this.setState({ customers: localData.customers, products: localData.products, plans: localData.plans, settings: localData.settings || this.state.settings, syncStatus: 'synced' }, this.pushToSupabase);
-      } else if (cloudHasData && localHasData) {
-        // Both have data — prefer cloud (it's the shared source of truth)
-        const d = data.data;
-        this.setState({ customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, syncStatus: 'synced' });
+      if (cloudCount > 0) {
+        // Cloud has real data — always use it, no questions asked
+        this._applyCloudData(data.data);
       } else {
-        // Neither has data — start fresh
-        this.seed();
-        this.setState({ syncStatus: 'synced' });
+        // Cloud is empty — check localStorage once to recover any existing data
+        let localData = null;
+        try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch(e) {}
+        const localCount = (localData?.plans?.length || 0) + (localData?.customers?.length || 0);
+        if (localCount > 0) {
+          // Push local data up to cloud and use it
+          this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, syncStatus: 'synced' }, this.pushToSupabase);
+        } else {
+          this.seed();
+          this.setState({ syncStatus: 'synced' });
+        }
       }
     } catch(err) {
-      // Fall back to localStorage while showing error
-      const raw = localStorage.getItem('aqsat_data');
-      if (raw) { try { const d = JSON.parse(raw); this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings }); } catch(e) {} }
+      // Network error — load localStorage silently, retry sync on next interaction
+      let localData = null;
+      try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch(e) {}
+      if (localData?.customers) this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings });
       else this.seed();
-      this.setState({ syncStatus: 'error', syncError: err.message || 'Sync failed' });
+      this.setState({ syncStatus: 'offline', syncError: err.message || '' });
       return;
     }
-    // Real-time subscription
+    // Real-time: any change on any device arrives here instantly
     this._syncChannel = supabase
       .channel('shop-' + SHOP_ID)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shops', filter: `id=eq.${SHOP_ID}` }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shops', filter: `id=eq.${SHOP_ID}` }, (payload) => {
         const d = payload.new?.data;
-        if (!d) return;
-        this.setState({ customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, syncStatus: 'synced' });
+        if (d) this._applyCloudData(d);
       })
       .subscribe();
   };
@@ -129,6 +132,8 @@ export default class App extends React.Component {
     const { customers, products, plans, settings } = this.state;
     if (!customers) return;
     this.setState({ syncStatus: 'syncing' });
+    // Mirror to localStorage before push (offline safety net)
+    localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings }));
     const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: { customers, products, plans, settings }, updated_at: new Date().toISOString() });
     this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
   };
