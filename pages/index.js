@@ -22,7 +22,7 @@ export default class App extends React.Component {
     newCustomer: {
       name: '', nameUr: '', phone: '', altPhone: '', cnic: '', dob: '',
       fatherName: '', occupation: '', monthlyIncome: '',
-      address: '', city: 'Lahore', area: '',
+      address: '', city: '', area: '',
       guarantorName: '', guarantorPhone: '', guarantorCnic: '', guarantorRelation: '',
       notes: '', documents: [],
     },
@@ -80,8 +80,11 @@ export default class App extends React.Component {
 
   _applyCloudData = (d) => {
     this._fromCloud = true;
-    const payload = { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, syncStatus: 'synced' };
-    // Mirror to localStorage as offline fallback
+    const settings = d.settings || this.state.settings;
+    const cloudPin = settings.pin || '';
+    if (cloudPin) { localStorage.setItem('aqsat_pin', cloudPin); }
+    const payload = { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings, syncStatus: 'synced' };
+    if (cloudPin) payload.savedPin = cloudPin;
     localStorage.setItem('aqsat_data', JSON.stringify(d));
     this.setState(payload);
   };
@@ -291,7 +294,7 @@ export default class App extends React.Component {
     const initials = nc.name.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase() || 'NC';
     const colors = ['#e7dcc4','#f5d4c0','#cfe4d3','#e0d4f0','#f3dfb8','#d4e6ec','#e7c9c3','#d1dfe7'];
     const c = { id: 'c' + (this.state.customers.length + 1) + '_' + Date.now().toString(36).slice(-4), name: nc.name, nameUr: nc.nameUr || nc.name, phone: nc.phone, altPhone: nc.altPhone, cnic: nc.cnic, dob: nc.dob, fatherName: nc.fatherName, occupation: nc.occupation, monthlyIncome: nc.monthlyIncome, address: nc.address, city: nc.city, area: nc.area || nc.city, guarantor: { name: nc.guarantorName, phone: nc.guarantorPhone, cnic: nc.guarantorCnic, relation: nc.guarantorRelation }, notes: nc.notes, documents: nc.documents, joined: new Date().toISOString().slice(0, 10), avatar: initials, color: colors[this.state.customers.length % colors.length] };
-    this.setState({ customers: [c, ...this.state.customers], addCustomerOpen: false, newCustomer: { name: '', nameUr: '', phone: '', altPhone: '', cnic: '', dob: '', fatherName: '', occupation: '', monthlyIncome: '', address: '', city: 'Lahore', area: '', guarantorName: '', guarantorPhone: '', guarantorCnic: '', guarantorRelation: '', notes: '', documents: [] }, addCustomerStep: 1 });
+    this.setState({ customers: [c, ...this.state.customers], addCustomerOpen: false, newCustomer: { name: '', nameUr: '', phone: '', altPhone: '', cnic: '', dob: '', fatherName: '', occupation: '', monthlyIncome: '', address: '', city: '', area: '', guarantorName: '', guarantorPhone: '', guarantorCnic: '', guarantorRelation: '', notes: '', documents: [] }, addCustomerStep: 1 });
     this.go('customer', { id: c.id });
   };
   updateProduct = (id, patch) => this.setState({ products: this.state.products.map(p => p.id === id ? { ...p, ...patch } : p) });
@@ -326,6 +329,10 @@ export default class App extends React.Component {
 
   importBackup = (file) => {
     if (!file) return;
+    if (this.state.savedPin) {
+      const entered = window.prompt('Enter PIN to import backup\nبیک اپ درآمد کرنے کے لیے PIN درج کریں');
+      if (entered !== this.state.savedPin) { alert('Wrong PIN / غلط PIN'); return; }
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -361,7 +368,7 @@ export default class App extends React.Component {
   setPin = (pin) => {
     if (pin) localStorage.setItem('aqsat_pin', pin);
     else localStorage.removeItem('aqsat_pin');
-    this.setState({ savedPin: pin });
+    this.setState({ savedPin: pin, settings: { ...this.state.settings, pin } });
   };
 
   submitPin = () => {
@@ -1132,7 +1139,7 @@ export default class App extends React.Component {
         field('Full Address', 'مکمل پتہ', h('textarea', { value: nc.address, onChange: e => set('address', e.target.value), rows: 3, placeholder: 'House 12, Street 5…', style: { ...inp, resize: 'vertical' } }), true),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
           field('Area / Locality', 'علاقہ', h('input', { value: nc.area, onChange: e => set('area', e.target.value), placeholder: 'Model Town', style: inp })),
-          field('City', 'شہر', h('select', { value: nc.city, onChange: e => set('city', e.target.value), style: inp }, ['Lahore','Karachi','Islamabad','Rawalpindi','Faisalabad','Multan','Peshawar','Sialkot','Gujranwala','Other'].map(c => h('option', { key: c, value: c }, c)))),
+          field('City', 'شہر', h('select', { value: nc.city, onChange: e => set('city', e.target.value), style: inp }, h('option', { value: '' }, 'Select city…'), ['Lahore','Karachi','Islamabad','Rawalpindi','Faisalabad','Multan','Peshawar','Quetta','Sialkot','Gujranwala','Gujrat','Bahawalpur','Sargodha','Rahim Yar Khan','Other'].map(c => h('option', { key: c, value: c }, c)))),
         ),
         field('Notes', 'اضافی معلومات', h('textarea', { value: nc.notes, onChange: e => set('notes', e.target.value), rows: 3, placeholder: 'Preferred collection day, landmarks…', style: { ...inp, resize: 'vertical' } })),
       );
