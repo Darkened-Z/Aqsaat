@@ -62,6 +62,10 @@ export default class App extends React.Component {
     this.setState({ darkMode: dm, savedPin: pin, pinLocked: !!pin }, () => {
       this.initSupabaseSync();
     });
+    this._onVisibility = () => {
+      if (document.visibilityState === 'visible') this._refetchCloud();
+    };
+    document.addEventListener('visibilitychange', this._onVisibility);
   }
 
   componentDidUpdate(_, prev) {
@@ -79,6 +83,7 @@ export default class App extends React.Component {
   componentWillUnmount() {
     if (this._syncChannel) supabase.removeChannel(this._syncChannel);
     clearTimeout(this._syncTimer);
+    if (this._onVisibility) document.removeEventListener('visibilitychange', this._onVisibility);
   }
 
   _applyCloudData = (d) => {
@@ -135,14 +140,59 @@ export default class App extends React.Component {
       .subscribe();
   };
 
+  _refetchCloud = async () => {
+    if (this._refetching) return;
+    this._refetching = true;
+    try {
+      const { data } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
+      if (data?.data) {
+        const merged = this._mergeData(this.state, data.data);
+        this._fromCloud = true;
+        localStorage.setItem('aqsat_data', JSON.stringify(merged));
+        const cloudPin = (merged.settings || {}).pin || '';
+        if (cloudPin) localStorage.setItem('aqsat_pin', cloudPin);
+        this.setState({ ...merged, syncStatus: 'synced', ...(cloudPin ? { savedPin: cloudPin } : {}) });
+      }
+    } catch(e) {}
+    this._refetching = false;
+  };
+
+  _mergeData = (local, cloud) => {
+    const mergeArr = (localArr, cloudArr) => {
+      const map = new Map();
+      (cloudArr || []).forEach(item => map.set(item.id, item));
+      (localArr || []).forEach(item => map.set(item.id, item));
+      return Array.from(map.values());
+    };
+    return {
+      customers: mergeArr(local.customers, cloud.customers),
+      products: mergeArr(local.products, cloud.products),
+      plans: mergeArr(local.plans, cloud.plans),
+      settings: { ...(cloud.settings || {}), ...(local.settings || {}) },
+    };
+  };
+
   pushToSupabase = async () => {
     const { customers, products, plans, settings } = this.state;
     if (!customers) return;
     this.setState({ syncStatus: 'syncing' });
-    // Mirror to localStorage before push (offline safety net)
-    localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings }));
-    const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: { customers, products, plans, settings }, updated_at: new Date().toISOString() });
-    this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
+    try {
+      const { data: cloud } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
+      const localData = { customers, products, plans, settings };
+      const merged = cloud?.data ? this._mergeData(localData, cloud.data) : localData;
+      localStorage.setItem('aqsat_data', JSON.stringify(merged));
+      const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: merged, updated_at: new Date().toISOString() });
+      if (!error && merged !== localData) {
+        this._fromCloud = true;
+        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, syncStatus: 'synced' });
+      } else {
+        this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
+      }
+    } catch(e) {
+      localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings }));
+      const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: { customers, products, plans, settings }, updated_at: new Date().toISOString() });
+      this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
+    }
   };
 
   seed() {
