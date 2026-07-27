@@ -196,7 +196,19 @@ export default class App extends React.Component {
     return { plans: cPlans, total, paid, remaining: total - paid, overdue };
   }
 
+  requirePin = (action) => {
+    if (!this.state.savedPin) { action(); return; }
+    const entered = window.prompt('Enter PIN / PIN درج کریں');
+    if (entered === this.state.savedPin) action();
+    else if (entered !== null) alert('Wrong PIN / غلط PIN');
+  };
+
   go = (route, params = {}) => {
+    const guarded = ['settings', 'newplan'];
+    if (guarded.includes(route) && this.state.savedPin) {
+      this.requirePin(() => { this.setState({ route, routeParams: params }); if (typeof window !== 'undefined') window.scrollTo(0, 0); });
+      return;
+    }
     this.setState({ route, routeParams: params });
     if (typeof window !== 'undefined') window.scrollTo(0, 0);
   }
@@ -380,15 +392,10 @@ export default class App extends React.Component {
     }
   };
 
-  openDeletePlan  = (planId) => this.setState({ deletePlanModal: { open: true, planId, pinInput: '' } });
+  openDeletePlan  = (planId) => this.requirePin(() => this.setState({ deletePlanModal: { open: true, planId, pinInput: '' } }));
   closeDeletePlan = () => this.setState({ deletePlanModal: { open: false, planId: null, pinInput: '' } });
   confirmDeletePlan = () => {
-    const { planId, pinInput } = this.state.deletePlanModal;
-    if (this.state.savedPin && pinInput !== this.state.savedPin) {
-      alert('غلط PIN — Wrong PIN');
-      this.setState({ deletePlanModal: { ...this.state.deletePlanModal, pinInput: '' } });
-      return;
-    }
+    const { planId } = this.state.deletePlanModal;
     this.setState({ plans: this.state.plans.filter(p => p.id !== planId), deletePlanModal: { open: false, planId: null, pinInput: '' } });
   };
 
@@ -398,10 +405,16 @@ export default class App extends React.Component {
     )});
   };
 
+  toggleLateFeePanel = (planId) => {
+    if (this.state.lateFeePanel === planId) { this.setState({ lateFeePanel: null }); return; }
+    this.requirePin(() => this.setState({ lateFeePanel: planId }));
+  };
+
   openEditPlan = (planId) => {
     const pl = this.state.plans.find(p => p.id === planId);
     if (!pl) return;
-    this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
+    const doOpen = () => this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
+    this.requirePin(doOpen);
   };
   closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
   _doSaveEditPlan = () => {
@@ -726,7 +739,7 @@ export default class App extends React.Component {
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h('button', { onClick: () => this.openEditPlan(pl.id), style: { background: '#eaf5ee', color: '#0f6b4b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '✎'),
           h('button', { onClick: () => this.openDeletePlan(pl.id), style: { background: '#fdecea', color: '#a4362b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '🗑'),
-          h('button', { onClick: () => this.setState({ lateFeePanel: this.state.lateFeePanel === pl.id ? null : pl.id }), title: 'Late fee settings', style: { background: this.state.lateFeePanel === pl.id ? '#fef3c7' : '#f4f1e6', color: '#a26a10', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '⚙'),
+          h('button', { onClick: () => this.toggleLateFeePanel(pl.id), title: 'Late fee settings', style: { background: this.state.lateFeePanel === pl.id ? '#fef3c7' : '#f4f1e6', color: '#a26a10', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '⚙'),
           pl.status !== 'completed' && st.next && c.phone
             ? h('a', { href: this.waPlanLink(c, p, pl, st.next), target: '_blank', rel: 'noopener', style: { background: '#dcfce7', color: '#15803d', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' } }, '💬')
             : null,
@@ -783,7 +796,7 @@ export default class App extends React.Component {
                   onBlur: e => { this.updateProduct(p.id, { price: parseFloat(e.target.value) || 0 }); this.setState({ editingProduct: null }); },
                   className: 'mono', style: { flex: 1, minWidth: 0, border: '1px solid #0f6b4b', borderRadius: 8, padding: '6px 8px', fontSize: 16, fontWeight: 700, background: '#fdfcf8', outline: 'none' } }),
               )
-              : h('button', { onClick: () => this.setState({ editingProduct: p.id }), style: { marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', margin: '10px 0 0 -8px', borderRadius: 8, cursor: 'pointer' } },
+              : h('button', { onClick: () => this.requirePin(() => this.setState({ editingProduct: p.id })), style: { marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', margin: '10px 0 0 -8px', borderRadius: 8, cursor: 'pointer' } },
                 h('span', { className: 'mono', style: { fontSize: 18, fontWeight: 700, color: '#0f6b4b' } }, this.fmtPKR(p.price)),
                 h('span', { style: { fontSize: 11, color: '#7a7663' } }, '✎'),
               ),
@@ -1437,12 +1450,11 @@ export default class App extends React.Component {
 
   renderDeleteModal() {
     const h = this.h;
-    const { planId, pinInput } = this.state.deletePlanModal;
+    const { planId } = this.state.deletePlanModal;
     const pl = this.state.plans.find(p => p.id === planId);
     if (!pl) return null;
     const c = this.state.customers.find(x => x.id === pl.customerId);
     const p = this.state.products.find(x => x.id === pl.productId);
-    const needPin = !!this.state.savedPin;
     return h('div', { onClick: this.closeDeletePlan, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)' } },
       h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 400, animation: 'slideIn .2s ease' } },
         h('div', { style: { fontSize: 36, textAlign: 'center', marginBottom: 12 } }, '🗑'),
@@ -1454,10 +1466,6 @@ export default class App extends React.Component {
           pl.voucherNo ? h('div', { className: 'mono', style: { color: '#7a7663', fontSize: 12, marginTop: 4, fontWeight: 600 } }, pl.voucherNo) : null,
         ),
         h('div', { style: { background: '#fdecea', border: '1px solid #f5cac2', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#a4362b', marginBottom: 20 } }, '⚠️ تمام ادائیگیوں کا ریکارڈ بھی ڈیلیٹ ہو جائے گا۔ یہ واپس نہیں ہو سکتا۔'),
-        needPin ? h('div', { style: { marginBottom: 20 } },
-          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 8 } }, 'Enter PIN to confirm ', h('span', { className: 'ur', style: { color: '#7a7663' } }, '— تصدیقی PIN')),
-          h('input', { type: 'password', inputMode: 'numeric', maxLength: 4, placeholder: '••••', autoFocus: true, value: pinInput, onChange: e => this.setState({ deletePlanModal: { ...this.state.deletePlanModal, pinInput: e.target.value } }), onKeyDown: e => e.key === 'Enter' && this.confirmDeletePlan(), style: { width: '100%', textAlign: 'center', fontSize: 28, letterSpacing: 14, border: '2px solid #ece8dc', borderRadius: 10, padding: '10px', outline: 'none', background: '#fdfcf8', fontFamily: 'monospace', boxSizing: 'border-box' } }),
-        ) : null,
         h('div', { style: { display: 'flex', gap: 10 } },
           h('button', { onClick: this.closeDeletePlan, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600, color: '#3a4a3f' } }, 'Cancel'),
           h('button', { onClick: this.confirmDeletePlan, style: { flex: 1, padding: 12, borderRadius: 10, background: '#a4362b', color: 'white', fontWeight: 700 } }, '🗑 Delete'),
