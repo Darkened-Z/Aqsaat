@@ -18,6 +18,7 @@ export default class App extends React.Component {
     menuOpen: false,
     deletePlanModal: { open: false, planId: null, pinInput: '' },
     editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: false, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' },
+    editCustomerModal: { open: false },
     pinModal: { open: false, callback: null, error: '' },
     pinModalInput: '',
     addCustomerOpen: false,
@@ -31,7 +32,7 @@ export default class App extends React.Component {
     addCustomerStep: 1,
     planFilter: 'all',
     lateFeePanel: null,
-    editingProduct: null,
+    editProductModal: { open: false, id: null, name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
     addProductOpen: false,
     newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
     settings: { graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, maxLateFee: 5000, businessName: 'Sadar Electronics', ownerName: 'Rehan Malik', city: 'Lahore' },
@@ -332,6 +333,28 @@ export default class App extends React.Component {
     this.go('customer', { id: c.id });
   };
   updateProduct = (id, patch) => this.setState({ products: this.state.products.map(p => p.id === id ? { ...p, ...patch } : p) });
+  updateCustomer = (id, patch) => this.setState({ customers: this.state.customers.map(c => c.id === id ? { ...c, ...patch } : c) });
+  openEditCustomer = (id) => {
+    const c = this.state.customers.find(x => x.id === id);
+    if (!c) return;
+    const g = c.guarantor || {};
+    this.requirePin(() => this.setState({ editCustomerModal: { open: true, id, step: 1, name: c.name, nameUr: c.nameUr || '', fatherName: c.fatherName || '', dob: c.dob || '', cnic: c.cnic || '', phone: c.phone || '', altPhone: c.altPhone || '', occupation: c.occupation || '', monthlyIncome: c.monthlyIncome || '', address: c.address || '', area: c.area || '', city: c.city || '', notes: c.notes || '', guarantorName: g.name || '', guarantorPhone: g.phone || '', guarantorCnic: g.cnic || '', guarantorRelation: g.relation || '' } }));
+  };
+  closeEditCustomer = () => this.setState({ editCustomerModal: { open: false } });
+  saveEditCustomer = () => {
+    const ec = this.state.editCustomerModal;
+    if (!ec.name || !ec.phone) { alert('Please enter name and phone'); return; }
+    this.updateCustomer(ec.id, { name: ec.name, nameUr: ec.nameUr || ec.name, fatherName: ec.fatherName, dob: ec.dob, cnic: ec.cnic, phone: ec.phone, altPhone: ec.altPhone, occupation: ec.occupation, monthlyIncome: ec.monthlyIncome, address: ec.address, area: ec.area || ec.city, city: ec.city, notes: ec.notes, guarantor: { name: ec.guarantorName, phone: ec.guarantorPhone, cnic: ec.guarantorCnic, relation: ec.guarantorRelation } });
+    this.closeEditCustomer();
+  };
+  deleteCustomer = (id) => {
+    const used = this.state.plans.some(pl => pl.customerId === id);
+    if (used) { alert('This customer has existing plans and cannot be deleted.\nاس گاہک کے موجودہ پلانز ہیں اور اسے ڈیلیٹ نہیں کیا جا سکتا۔'); return; }
+    if (!confirm('Delete this customer?\nکیا آپ یہ گاہک ڈیلیٹ کرنا چاہتے ہیں؟')) return;
+    this.setState({ customers: this.state.customers.filter(c => c.id !== id) });
+    this.closeEditCustomer();
+    this.go('customers');
+  };
 
   waLink = (phone, name, amount, dueDate) => {
     const num = '92' + phone.replace(/\D/g, '').replace(/^0/, '');
@@ -484,6 +507,25 @@ export default class App extends React.Component {
     if (!np.name || !np.price) { alert('Please enter product name and price'); return; }
     const p = { id: 'p_' + Date.now().toString(36), name: np.name, nameUr: np.nameUr || np.name, category: np.category, price: parseFloat(np.price) || 0, stock: parseInt(np.stock) || 0, emoji: np.emoji || '📦' };
     this.setState({ products: [p, ...this.state.products], addProductOpen: false });
+  };
+  openEditProduct = (id) => {
+    const p = this.state.products.find(x => x.id === id);
+    if (!p) return;
+    this.requirePin(() => this.setState({ editProductModal: { open: true, id, name: p.name, nameUr: p.nameUr || '', category: p.category, price: String(p.price), stock: String(p.stock || 0), emoji: p.emoji || '📦' } }));
+  };
+  closeEditProduct = () => this.setState({ editProductModal: { open: false, id: null, name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' } });
+  saveEditProduct = () => {
+    const ep = this.state.editProductModal;
+    if (!ep.name || !ep.price) { alert('Please enter product name and price'); return; }
+    this.updateProduct(ep.id, { name: ep.name, nameUr: ep.nameUr || ep.name, category: ep.category, price: parseFloat(ep.price) || 0, stock: parseInt(ep.stock) || 0, emoji: ep.emoji || '📦' });
+    this.closeEditProduct();
+  };
+  deleteProduct = (id) => {
+    const used = this.state.plans.some(pl => pl.productId === id);
+    if (used) { alert('This product is used in existing plans and cannot be deleted.\nیہ پروڈکٹ موجودہ پلانز میں استعمال ہو رہی ہے۔'); return; }
+    if (!confirm('Delete this product?\nکیا آپ یہ پروڈکٹ ڈیلیٹ کرنا چاہتے ہیں؟')) return;
+    this.setState({ products: this.state.products.filter(p => p.id !== id) });
+    this.closeEditProduct();
   };
 
   // ─── helpers ───
@@ -692,6 +734,7 @@ export default class App extends React.Component {
             ),
           ),
           h('div', { style: { display: 'flex', gap: 8 } },
+            h('button', { onClick: () => this.openEditCustomer(c.id), style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '✎ Edit'),
             nextInst ? h('a', { href: this.waLink(c.phone, c.name, nextInst.amount, nextInst.dueDate), target: '_blank', rel: 'noopener', style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 WhatsApp') : null,
             h('button', { onClick: () => this.go('newplan'), style: { background: '#0f6b4b', color: 'white', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '＋ New Plan'),
           ),
@@ -804,36 +847,25 @@ export default class App extends React.Component {
 
   renderProducts() {
     const h = this.h;
-    const editing = this.state.editingProduct;
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 } },
-        h('div', { style: { fontSize: 13, color: '#7a7663' } }, this.state.products.length + ' products · click a price to edit'),
+        h('div', { style: { fontSize: 13, color: '#7a7663' } }, this.state.products.length + ' products'),
         h('button', { onClick: this.openAddProduct, style: { background: '#0f6b4b', color: 'white', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13 } }, '＋ Add Product'),
       ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 } },
         this.state.products.map(p => {
           const sold = this.state.plans.filter(pl => pl.productId === p.id).length;
-          const isEditing = editing === p.id;
           return h('div', { key: p.id, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 16 } },
-            h('div', { style: { fontSize: 34, marginBottom: 8 } }, p.emoji),
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } },
+              h('div', { style: { fontSize: 34, marginBottom: 8 } }, p.emoji),
+              h('button', { onClick: () => this.openEditProduct(p.id), style: { width: 32, height: 32, borderRadius: 8, background: '#f4f1e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 } }, '✎'),
+            ),
             h('div', { style: { fontSize: 10, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 } }, p.category),
             h('div', { style: { fontSize: 15, fontWeight: 700, marginTop: 2 } }, p.name),
             h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, p.nameUr),
-            isEditing
-              ? h('div', { style: { marginTop: 10, display: 'flex', gap: 6, alignItems: 'center' } },
-                h('span', { className: 'mono', style: { fontSize: 14, fontWeight: 600, color: '#0f6b4b' } }, 'Rs'),
-                h('input', { type: 'number', autoFocus: true, defaultValue: p.price,
-                  onKeyDown: e => { if (e.key === 'Enter') { this.updateProduct(p.id, { price: parseFloat(e.target.value) || 0 }); this.setState({ editingProduct: null }); } },
-                  onBlur: e => { this.updateProduct(p.id, { price: parseFloat(e.target.value) || 0 }); this.setState({ editingProduct: null }); },
-                  className: 'mono', style: { flex: 1, minWidth: 0, border: '1px solid #0f6b4b', borderRadius: 8, padding: '6px 8px', fontSize: 16, fontWeight: 700, background: '#fdfcf8', outline: 'none' } }),
-              )
-              : h('button', { onClick: () => this.requirePin(() => this.setState({ editingProduct: p.id })), style: { marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', margin: '10px 0 0 -8px', borderRadius: 8, cursor: 'pointer' } },
-                h('span', { className: 'mono', style: { fontSize: 18, fontWeight: 700, color: '#0f6b4b' } }, this.fmtPKR(p.price)),
-                h('span', { style: { fontSize: 11, color: '#7a7663' } }, '✎'),
-              ),
+            h('div', { className: 'mono', style: { fontSize: 18, fontWeight: 700, color: '#0f6b4b', marginTop: 10 } }, this.fmtPKR(p.price)),
             h('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px solid #f2eee2', fontSize: 11 } },
-              h('span', { style: { color: '#7a7663' } }, 'Stock: ',
-                h('input', { type: 'number', value: p.stock, onChange: e => this.updateProduct(p.id, { stock: parseInt(e.target.value) || 0 }), className: 'mono', style: { width: 40, border: '1px solid transparent', borderRadius: 4, padding: '1px 4px', fontSize: 12, fontWeight: 700, background: 'transparent', color: p.stock < 5 ? '#a4362b' : '#1a2b1f', outline: 'none' } })),
+              h('span', { style: { color: '#7a7663' } }, 'Stock: ', h('span', { className: 'mono', style: { fontWeight: 700, color: p.stock < 5 ? '#a4362b' : '#1a2b1f' } }, p.stock)),
               h('span', { style: { color: '#7a7663' } }, sold + ' sold'),
             ),
           );
@@ -1247,6 +1279,96 @@ export default class App extends React.Component {
     );
   }
 
+  renderEditCustomerModal() {
+    const h = this.h;
+    const ec = this.state.editCustomerModal;
+    if (!ec.open) return null;
+    const step = ec.step || 1;
+    const set = (k, v) => this.setState({ editCustomerModal: { ...this.state.editCustomerModal, [k]: v } });
+    const inp = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
+    const field = (label, ur, node, req) => h('div', {},
+      h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6, display: 'flex', gap: 6 } },
+        h('span', {}, label, req ? h('span', { style: { color: '#a4362b' } }, ' *') : null),
+        h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, ur),
+      ),
+      node,
+    );
+    const stepper = h('div', { style: { display: 'flex', gap: 8, marginBottom: 24, alignItems: 'center' } },
+      ['Personal', 'Address', 'Guarantor'].map((label, i) => {
+        const n = i + 1; const active = step === n;
+        return h(React.Fragment, { key: n },
+          h('button', { onClick: () => set('step', n), style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 20, background: active ? '#eaf5ee' : 'transparent', color: active ? '#0f6b4b' : '#7a7663', fontWeight: 600, fontSize: 12 } },
+            h('div', { style: { width: 22, height: 22, borderRadius: '50%', background: active ? '#0f6b4b' : '#e7e2d2', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 } }, n),
+            label,
+          ),
+          i < 2 ? h('div', { style: { flex: 1, height: 1, background: '#ece8dc', maxWidth: 40 } }) : null,
+        );
+      }),
+    );
+    let content = null;
+    if (step === 1) {
+      content = h('div', { style: { display: 'grid', gap: 16 } },
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
+          field('Full Name', 'پورا نام', h('input', { value: ec.name, onChange: e => set('name', e.target.value), style: inp }), true),
+          field('Name (Urdu)', 'اردو نام', h('input', { className: 'ur', value: ec.nameUr, onChange: e => set('nameUr', e.target.value), style: { ...inp, textAlign: 'right' } })),
+        ),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
+          field("Father's Name", 'والد کا نام', h('input', { value: ec.fatherName, onChange: e => set('fatherName', e.target.value), style: inp })),
+          field('Date of Birth', 'تاریخ پیدائش', h('input', { type: 'date', value: ec.dob, onChange: e => set('dob', e.target.value), style: inp })),
+        ),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
+          field('CNIC', 'شناختی کارڈ', h('input', { value: ec.cnic, onChange: e => set('cnic', e.target.value), className: 'mono', style: inp }), true),
+          field('Mobile', 'موبائل نمبر', h('input', { value: ec.phone, onChange: e => set('phone', e.target.value), style: inp }), true),
+        ),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
+          field('Alternate Phone', 'متبادل نمبر', h('input', { value: ec.altPhone, onChange: e => set('altPhone', e.target.value), style: inp })),
+          field('Occupation', 'پیشہ', h('input', { value: ec.occupation, onChange: e => set('occupation', e.target.value), style: inp })),
+        ),
+        field('Monthly Income (Rs)', 'ماہانہ آمدنی', h('input', { type: 'number', value: ec.monthlyIncome, onChange: e => set('monthlyIncome', e.target.value), className: 'mono', style: inp })),
+      );
+    } else if (step === 2) {
+      content = h('div', { style: { display: 'grid', gap: 16 } },
+        field('Full Address', 'مکمل پتہ', h('textarea', { value: ec.address, onChange: e => set('address', e.target.value), rows: 3, style: { ...inp, resize: 'vertical' } }), true),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
+          field('Area / Locality', 'علاقہ', h('input', { value: ec.area, onChange: e => set('area', e.target.value), style: inp })),
+          field('City', 'شہر', h('select', { value: ec.city, onChange: e => set('city', e.target.value), style: inp }, h('option', { value: '' }, 'Select city…'), ['Lahore','Karachi','Islamabad','Rawalpindi','Faisalabad','Multan','Peshawar','Quetta','Sialkot','Gujranwala','Gujrat','Bahawalpur','Sargodha','Rahim Yar Khan','Other'].map(ci => h('option', { key: ci, value: ci }, ci)))),
+        ),
+        field('Notes', 'اضافی معلومات', h('textarea', { value: ec.notes, onChange: e => set('notes', e.target.value), rows: 3, style: { ...inp, resize: 'vertical' } })),
+      );
+    } else {
+      content = h('div', { style: { display: 'grid', gap: 16 } },
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
+          field('Guarantor Name', 'ضامن کا نام', h('input', { value: ec.guarantorName, onChange: e => set('guarantorName', e.target.value), style: inp })),
+          field('Relation', 'رشتہ', h('select', { value: ec.guarantorRelation, onChange: e => set('guarantorRelation', e.target.value), style: inp }, ['','Father','Brother','Uncle','Cousin','Friend','Colleague','Other'].map(r => h('option', { key: r, value: r }, r || 'Select…')))),
+        ),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
+          field('Guarantor Phone', 'ضامن کا فون', h('input', { value: ec.guarantorPhone, onChange: e => set('guarantorPhone', e.target.value), style: inp })),
+          field('Guarantor CNIC', 'ضامن کا شناختی کارڈ', h('input', { value: ec.guarantorCnic, onChange: e => set('guarantorCnic', e.target.value), className: 'mono', style: inp })),
+        ),
+      );
+    }
+    return h('div', { onClick: this.closeEditCustomer, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)', overflow: 'auto' } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, width: '100%', maxWidth: 720, maxHeight: '92vh', display: 'flex', flexDirection: 'column', animation: 'slideIn .2s ease' } },
+        h('div', { style: { padding: '24px 28px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 } },
+          h('div', {}, h('div', { style: { fontSize: 20, fontWeight: 800 } }, '✎ Edit Customer'), h('div', { className: 'ur', style: { fontSize: 14, color: '#7a7663' } }, 'گاہک میں ترمیم')),
+          h('button', { onClick: this.closeEditCustomer, style: { width: 36, height: 36, borderRadius: 10, background: '#f4f1e6', fontSize: 18 } }, '✕'),
+        ),
+        h('div', { style: { padding: '20px 28px 0' } }, stepper),
+        h('div', { style: { padding: '4px 28px 20px', overflowY: 'auto', flex: 1 } }, content),
+        h('div', { style: { padding: '16px 28px', borderTop: '1px solid #ece8dc', display: 'flex', justifyContent: 'space-between', gap: 10, background: '#fdfcf8', borderRadius: '0 0 20px 20px' } },
+          h('div', { style: { display: 'flex', gap: 8 } },
+            h('button', { onClick: () => this.deleteCustomer(ec.id), style: { padding: '10px 14px', borderRadius: 10, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 13 } }, '🗑 Delete'),
+            h('button', { onClick: () => step > 1 ? set('step', step - 1) : this.closeEditCustomer(), style: { padding: '10px 16px', borderRadius: 10, background: '#f4f1e6', fontWeight: 600, fontSize: 13, color: '#3a4a3f' } }, step > 1 ? '← Back' : 'Cancel'),
+          ),
+          h('div', { style: { fontSize: 12, color: '#7a7663', alignSelf: 'center' } }, 'Step ' + step + ' of 3'),
+          step < 3
+            ? h('button', { onClick: () => set('step', step + 1), style: { padding: '10px 20px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, 'Continue →')
+            : h('button', { onClick: this.saveEditCustomer, style: { padding: '10px 20px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, '✓ Save Changes'),
+        ),
+      ),
+    );
+  }
+
   renderAddProductModal() {
     const h = this.h;
     const np = this.state.newProduct;
@@ -1286,6 +1408,53 @@ export default class App extends React.Component {
           h('button', { onClick: this.closeAddProduct, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600 } }, 'Cancel'),
           h('button', { onClick: this.saveNewProduct, style: { flex: 2, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, '＋ Add to Catalog'),
         ),
+      ),
+    );
+  }
+
+  renderEditProductModal() {
+    const h = this.h;
+    const ep = this.state.editProductModal;
+    if (!ep.open) return null;
+    const set = (k, v) => this.setState({ editProductModal: { ...ep, [k]: v } });
+    const inp = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
+    const field = (label, labelUr, node) => h('div', {},
+      h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, label, labelUr ? h('span', { className: 'ur', style: { color: '#7a7663', marginLeft: 6 } }, labelUr) : null),
+      node,
+    );
+    const categories = ['Mobile', 'Motorcycle', 'Television', 'Refrigerator', 'Appliance', 'Air Conditioner', 'Laptop', 'Other'];
+    const emojis = ['📱','🏍️','📺','❄️','🧺','💻','📦','⚡','🔌','🎮','📷','🖨️'];
+    const sold = this.state.plans.filter(pl => pl.productId === ep.id).length;
+    return h('div', { onClick: this.closeEditProduct, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)' } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 480, animation: 'slideIn .2s ease', maxHeight: '90vh', overflowY: 'auto' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 } },
+          h('div', {},
+            h('div', { style: { fontSize: 18, fontWeight: 800 } }, '✎ Edit Product'),
+            h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, 'پروڈکٹ میں ترمیم'),
+          ),
+          h('button', { onClick: this.closeEditProduct, style: { width: 34, height: 34, borderRadius: 9, background: '#f4f1e6', fontSize: 16 } }, '✕'),
+        ),
+        h('div', { style: { display: 'grid', gap: 14 } },
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+            field('Product Name *', 'نام', h('input', { value: ep.name, onChange: e => set('name', e.target.value), placeholder: 'e.g. Samsung A35', style: inp })),
+            field('Urdu Name', 'اردو نام', h('input', { className: 'ur', value: ep.nameUr, onChange: e => set('nameUr', e.target.value), placeholder: 'سامسنگ', style: { ...inp, textAlign: 'right' } })),
+          ),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+            field('Category', 'قسم', h('select', { value: ep.category, onChange: e => set('category', e.target.value), style: inp },
+              categories.map(c => h('option', { key: c, value: c }, c)))),
+            field('Price (Rs) *', 'قیمت', h('input', { type: 'number', value: ep.price, onChange: e => set('price', e.target.value), placeholder: '0', className: 'mono', style: inp })),
+          ),
+          field('Stock', 'اسٹاک', h('input', { type: 'number', value: ep.stock, onChange: e => set('stock', e.target.value), placeholder: '0', className: 'mono', style: inp })),
+          field('Icon', 'آئیکن', h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+            emojis.map(em => h('button', { key: em, onClick: () => set('emoji', em), style: { width: 40, height: 40, borderRadius: 10, fontSize: 20, border: '2px solid ' + (ep.emoji === em ? '#0f6b4b' : '#ece8dc'), background: ep.emoji === em ? '#eaf5ee' : '#fdfcf8' } }, em))
+          )),
+        ),
+        h('div', { style: { display: 'flex', gap: 10, marginTop: 24 } },
+          h('button', { onClick: () => this.deleteProduct(ep.id), style: { padding: '12px 16px', borderRadius: 10, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 13 } }, '🗑 Delete'),
+          h('button', { onClick: this.closeEditProduct, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600 } }, 'Cancel'),
+          h('button', { onClick: this.saveEditProduct, style: { flex: 2, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, '✓ Save Changes'),
+        ),
+        sold > 0 ? h('div', { style: { marginTop: 12, fontSize: 11, color: '#7a7663', textAlign: 'center' } }, 'Used in ' + sold + ' plan(s) — name/price changes won\'t affect existing plans') : null,
       ),
     );
   }
@@ -1702,7 +1871,9 @@ export default class App extends React.Component {
 
         {/* Modals */}
         {this.state.addProductOpen        && this.renderAddProductModal()}
+        {this.state.editProductModal.open && this.renderEditProductModal()}
         {this.state.addCustomerOpen       && this.renderAddCustomer()}
+        {this.state.editCustomerModal.open && this.renderEditCustomerModal()}
         {this.state.paymentModalOpen      && this.renderPaymentModal()}
         {this.state.receiptOpen           && this.renderReceipt()}
         {this.state.deletePlanModal.open  && this.renderDeleteModal()}
