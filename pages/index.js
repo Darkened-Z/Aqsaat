@@ -18,6 +18,8 @@ export default class App extends React.Component {
     menuOpen: false,
     deletePlanModal: { open: false, planId: null, pinInput: '' },
     editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: false, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' },
+    pinModal: { open: false, callback: null, error: '' },
+    pinModalInput: '',
     addCustomerOpen: false,
     newCustomer: {
       name: '', nameUr: '', phone: '', altPhone: '', cnic: '', dob: '',
@@ -198,9 +200,29 @@ export default class App extends React.Component {
 
   requirePin = (action) => {
     if (!this.state.savedPin) { action(); return; }
-    const entered = window.prompt('Enter PIN / PIN درج کریں');
-    if (entered === this.state.savedPin) action();
-    else if (entered !== null) alert('Wrong PIN / غلط PIN');
+    this.setState({ pinModal: { open: true, callback: action, error: '' }, pinModalInput: '' });
+  };
+  submitPinModal = () => {
+    if (this.state.pinModalInput === this.state.savedPin) {
+      const cb = this.state.pinModal.callback;
+      this.setState({ pinModal: { open: false, callback: null, error: '' }, pinModalInput: '' }, () => { if (cb) cb(); });
+    } else {
+      this.setState({ pinModal: { ...this.state.pinModal, error: 'Wrong PIN / غلط PIN' }, pinModalInput: '' });
+    }
+  };
+  closePinModal = () => this.setState({ pinModal: { open: false, callback: null, error: '' }, pinModalInput: '' });
+  pinModalKey = (k) => {
+    if (k === 'del') {
+      this.setState(s => ({ pinModalInput: s.pinModalInput.slice(0, -1) }));
+    } else if (this.state.pinModalInput.length < 6) {
+      this.setState(s => {
+        const next = s.pinModalInput + k;
+        if (next.length === s.savedPin.length) {
+          setTimeout(() => this.submitPinModal(), 150);
+        }
+        return { pinModalInput: next, pinModal: { ...s.pinModal, error: '' } };
+      });
+    }
   };
 
   go = (route, params = {}) => {
@@ -341,21 +363,20 @@ export default class App extends React.Component {
 
   importBackup = (file) => {
     if (!file) return;
-    if (this.state.savedPin) {
-      const entered = window.prompt('Enter PIN to import backup\nبیک اپ درآمد کرنے کے لیے PIN درج کریں');
-      if (entered !== this.state.savedPin) { alert('Wrong PIN / غلط PIN'); return; }
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const d = JSON.parse(e.target.result);
-        if (!d.customers || !d.products || !d.plans) { alert('Invalid backup file'); return; }
-        if (!window.confirm(`Import backup?\n\nThis will replace:\n• ${d.customers.length} customers\n• ${d.products.length} products\n• ${d.plans.length} plans\n\nCurrent data will be overwritten.`)) return;
-        this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings });
-        alert('✓ Backup imported successfully!');
-      } catch(e) { alert('Could not read file — make sure it is a valid Aqsat backup.'); }
+    const doImport = () => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const d = JSON.parse(e.target.result);
+          if (!d.customers || !d.products || !d.plans) { alert('Invalid backup file'); return; }
+          if (!window.confirm(`Import backup?\n\nThis will replace:\n• ${d.customers.length} customers\n• ${d.products.length} products\n• ${d.plans.length} plans\n\nCurrent data will be overwritten.`)) return;
+          this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings });
+          alert('✓ Backup imported successfully!');
+        } catch(e) { alert('Could not read file — make sure it is a valid Aqsat backup.'); }
+      };
+      reader.readAsText(file);
     };
-    reader.readAsText(file);
+    this.requirePin(doImport);
   };
 
   exportCSV = () => {
@@ -385,10 +406,20 @@ export default class App extends React.Component {
 
   submitPin = () => {
     if (this.state.enteredPin === this.state.savedPin) {
-      this.setState({ pinLocked: false, enteredPin: '' });
+      this.setState({ pinLocked: false, enteredPin: '', pinLockError: false });
     } else {
-      this.setState({ enteredPin: '' });
-      alert('Wrong PIN');
+      this.setState({ enteredPin: '', pinLockError: true });
+    }
+  };
+  pinLockKey = (k) => {
+    if (k === 'del') {
+      this.setState(s => ({ enteredPin: s.enteredPin.slice(0, -1), pinLockError: false }));
+    } else if (this.state.enteredPin.length < 6) {
+      this.setState(s => {
+        const next = s.enteredPin + k;
+        if (next.length === s.savedPin.length) setTimeout(() => this.submitPin(), 150);
+        return { enteredPin: next, pinLockError: false };
+      });
     }
   };
 
@@ -1474,15 +1505,53 @@ export default class App extends React.Component {
     );
   }
 
+  renderPinModal() {
+    const h = this.h;
+    const pm = this.state.pinModal;
+    if (!pm.open) return null;
+    const pin = this.state.pinModalInput;
+    const len = this.state.savedPin.length || 4;
+    const dots = [];
+    for (let i = 0; i < len; i++) dots.push(h('div', { key: i, style: { width: 18, height: 18, borderRadius: '50%', background: i < pin.length ? '#0f6b4b' : 'transparent', border: i < pin.length ? '2px solid #0f6b4b' : '2px solid #c5c0b0', transition: 'all .15s ease', transform: i === pin.length - 1 && pin.length > 0 ? 'scale(1.2)' : 'scale(1)' } }));
+    const keys = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','del']];
+    const btnBase = { width: 64, height: 52, borderRadius: 14, border: '1px solid #ece8dc', background: '#fdfcf8', fontSize: 22, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a2b1f', transition: 'background .1s' };
+    return h('div', { onClick: this.closePinModal, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20, backdropFilter: 'blur(6px)' } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 24, padding: '32px 28px 24px', width: '100%', maxWidth: 320, animation: 'slideIn .2s ease', textAlign: 'center' } },
+        h('div', { style: { fontSize: 36, marginBottom: 8 } }, '🔐'),
+        h('div', { style: { fontSize: 17, fontWeight: 800, marginBottom: 2, color: '#1a2b1f' } }, 'Enter PIN'),
+        h('div', { className: 'ur', style: { fontSize: 13, color: '#7a7663', marginBottom: 20 } }, 'PIN درج کریں'),
+        h('div', { style: { display: 'flex', justifyContent: 'center', gap: 14, marginBottom: 8 } }, ...dots),
+        pm.error ? h('div', { style: { color: '#d93b3b', fontSize: 13, fontWeight: 600, marginTop: 8, marginBottom: 4 } }, pm.error) : h('div', { style: { height: 25 } }),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', marginTop: 12 } },
+          ...keys.map((row, ri) => h('div', { key: ri, style: { display: 'flex', gap: 12 } },
+            ...row.map(k => k === '' ? h('div', { key: 'blank', style: { width: 64, height: 52 } }) : h('button', { key: k, onClick: () => this.pinModalKey(k), style: { ...btnBase, ...(k === 'del' ? { fontSize: 16, color: '#7a7663' } : {}) } }, k === 'del' ? '⌫' : k))
+          ))
+        ),
+        h('button', { onClick: this.closePinModal, style: { marginTop: 18, background: 'none', border: 'none', color: '#7a7663', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: '8px 20px' } }, 'Cancel / منسوخ'),
+      ),
+    );
+  }
+
   renderPinLock() {
     const h = this.h;
+    const pin = this.state.enteredPin;
+    const len = (this.state.savedPin || '').length || 4;
+    const dots = [];
+    for (let i = 0; i < len; i++) dots.push(h('div', { key: i, style: { width: 18, height: 18, borderRadius: '50%', background: i < pin.length ? '#0f6b4b' : 'transparent', border: i < pin.length ? '2px solid #0f6b4b' : '2px solid #c5c0b0', transition: 'all .15s ease', transform: i === pin.length - 1 && pin.length > 0 ? 'scale(1.2)' : 'scale(1)' } }));
+    const keys = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','del']];
+    const btnBase = { width: 72, height: 56, borderRadius: 16, border: '1px solid #ece8dc', background: '#fdfcf8', fontSize: 24, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a2b1f', transition: 'background .1s' };
     return h('div', { style: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef' } },
-      h('div', { style: { background: '#ffffff', borderRadius: 20, padding: 40, textAlign: 'center', width: '100%', maxWidth: 360, border: '1px solid #ece8dc', margin: '0 16px' } },
-        h('div', { style: { fontSize: 40, marginBottom: 16 } }, '🔐'),
-        h('div', { style: { fontSize: 20, fontWeight: 800, marginBottom: 4 } }, 'Aqsat'),
-        h('div', { style: { fontSize: 13, color: '#7a7663', marginBottom: 28 } }, 'Enter PIN to continue'),
-        h('input', { type: 'password', inputMode: 'numeric', maxLength: 4, placeholder: '••••', value: this.state.enteredPin, onChange: e => this.setState({ enteredPin: e.target.value }), onKeyDown: e => e.key === 'Enter' && this.submitPin(), autoFocus: true, style: { width: '100%', textAlign: 'center', fontSize: 32, letterSpacing: 16, border: '2px solid #ece8dc', borderRadius: 12, padding: '14px 10px', outline: 'none', background: '#fdfcf8', fontFamily: 'monospace', marginBottom: 16, boxSizing: 'border-box' } }),
-        h('button', { onClick: this.submitPin, style: { width: '100%', background: '#0f6b4b', color: 'white', padding: 14, borderRadius: 12, fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer' } }, 'Unlock →'),
+      h('div', { style: { textAlign: 'center', width: '100%', maxWidth: 340, padding: '0 16px' } },
+        h('div', { style: { width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 26, margin: '0 auto 16px' } }, 'A'),
+        h('div', { style: { fontSize: 22, fontWeight: 800, marginBottom: 2, color: '#1a2b1f' } }, 'Aqsat'),
+        h('div', { style: { fontSize: 13, color: '#7a7663', marginBottom: 28 } }, 'Enter PIN to unlock / PIN درج کریں'),
+        h('div', { style: { display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 10 } }, ...dots),
+        this.state.pinLockError ? h('div', { style: { color: '#d93b3b', fontSize: 13, fontWeight: 600, marginTop: 8, marginBottom: 4, animation: 'shake .3s ease' } }, 'Wrong PIN / غلط PIN') : h('div', { style: { height: 25 } }),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 16 } },
+          ...keys.map((row, ri) => h('div', { key: ri, style: { display: 'flex', gap: 14 } },
+            ...row.map(k => k === '' ? h('div', { key: 'blank', style: { width: 72, height: 56 } }) : h('button', { key: k, onClick: () => this.pinLockKey(k), style: { ...btnBase, ...(k === 'del' ? { fontSize: 18, color: '#7a7663' } : {}) } }, k === 'del' ? '⌫' : k))
+          ))
+        ),
       ),
     );
   }
@@ -1638,6 +1707,7 @@ export default class App extends React.Component {
         {this.state.receiptOpen           && this.renderReceipt()}
         {this.state.deletePlanModal.open  && this.renderDeleteModal()}
         {this.state.editPlanModal.open    && this.renderEditModal()}
+        {this.state.pinModal.open         && this.renderPinModal()}
 
         {/* Mobile hamburger menu drawer */}
         {this.state.menuOpen && (
