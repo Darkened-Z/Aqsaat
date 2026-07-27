@@ -401,17 +401,20 @@ export default class App extends React.Component {
   openEditPlan = (planId) => {
     const pl = this.state.plans.find(p => p.id === planId);
     if (!pl) return;
-    this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
+    this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
   };
-  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
   _doSaveEditPlan = () => {
     const em = this.state.editPlanModal;
     const plans = this.state.plans.map(pl => {
       if (pl.id !== em.planId) return pl;
       const allPaid = em.draftSchedule.every(s => s.paid);
-      return { ...pl, schedule: em.draftSchedule, imei: em.draftImei, chassisNo: em.draftChassisNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
+      const total = parseFloat(em.draftTotal) || pl.total;
+      const down = parseFloat(em.draftDown) || 0;
+      const interest = parseFloat(em.draftInterest) || 0;
+      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, startDate: em.draftStartDate || pl.startDate, months: em.draftSchedule.length, schedule: em.draftSchedule, imei: em.draftImei, chassisNo: em.draftChassisNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
     });
-    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
   };
   submitEditPlanPin = () => {
     const { pinInput } = this.state.editPlanModal;
@@ -1362,7 +1365,35 @@ export default class App extends React.Component {
           ),
         ),
         h('div', { style: { padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1 } },
-          (isMobile || isBike) ? h('div', { style: { display: 'grid', gridTemplateColumns: isMobile && isBike ? '1fr 1fr' : '1fr', gap: 10 } },
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+            h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Customer ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'گاہک')),
+              h('select', { value: em.draftCustomerId, onChange: e => setDraft('draftCustomerId', e.target.value), style: { ...inpStyle, width: '100%' } }, this.state.customers.map(cx => h('option', { key: cx.id, value: cx.id }, cx.name + ' · ' + cx.phone))),
+            ),
+            h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Product ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'مصنوعات')),
+              h('select', { value: em.draftProductId, onChange: e => setDraft('draftProductId', e.target.value), style: { ...inpStyle, width: '100%' } }, this.state.products.map(px => h('option', { key: px.id, value: px.id }, px.name + ' — ' + this.fmtPKR(px.price)))),
+            ),
+          ),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } },
+            h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Total Price ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'قیمت')),
+              h('input', { type: 'number', value: em.draftTotal, onChange: e => setDraft('draftTotal', e.target.value), style: { ...inpStyle, width: '100%' } }),
+            ),
+            h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Down Payment ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'ایڈوانس')),
+              h('input', { type: 'number', value: em.draftDown, onChange: e => setDraft('draftDown', e.target.value), style: { ...inpStyle, width: '100%' } }),
+            ),
+            h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Markup % ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'منافع')),
+              h('input', { type: 'number', value: em.draftInterest, onChange: e => setDraft('draftInterest', e.target.value), style: { ...inpStyle, width: '100%' } }),
+            ),
+          ),
+          h('div', { style: { display: 'grid', gridTemplateColumns: isMobile || isBike ? '1fr 1fr' : '1fr', gap: 10 } },
+            h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Start Date ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'آغاز')),
+              h('input', { type: 'date', value: em.draftStartDate, onChange: e => setDraft('draftStartDate', e.target.value), style: { ...inpStyle, width: '100%' } }),
+            ),
             isMobile ? h('div', {},
               h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'IMEI Number'),
               h('input', { value: em.draftImei, onChange: e => setDraft('draftImei', e.target.value), placeholder: '15-digit IMEI', style: { ...inpStyle, width: '100%', fontFamily: 'monospace' } }),
@@ -1371,7 +1402,7 @@ export default class App extends React.Component {
               h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Chassis No.'),
               h('input', { value: em.draftChassisNo, onChange: e => setDraft('draftChassisNo', e.target.value), placeholder: 'Chassis number', style: { ...inpStyle, width: '100%', fontFamily: 'monospace' } }),
             ) : null,
-          ) : null,
+          ),
           h('div', {},
             h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Notes ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'نوٹس')),
             h('textarea', { value: em.draftNotes, onChange: e => setDraft('draftNotes', e.target.value), placeholder: 'Any notes about this plan…', rows: 2, style: { ...inpStyle, width: '100%', resize: 'vertical' } }),
