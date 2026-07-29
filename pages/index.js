@@ -200,9 +200,18 @@ export default class App extends React.Component {
   }
 
   resetAllData = () => {
-    if (!confirm('This will permanently delete ALL customers, products, and plans. Are you sure?')) return;
-    localStorage.removeItem('aqsat_data');
-    this.setState({ customers: [], products: [], plans: [], route: 'dashboard' });
+    const rp = this.state.settings.resetPin || '';
+    if (!rp) { alert('Set a 6-digit Reset PIN in Settings first.\nپہلے سیٹنگز میں 6 ہندسوں کا ری سیٹ PIN مقرر کریں۔'); return; }
+    this.requireResetPin(() => {
+      if (!confirm('⚠️ FINAL WARNING\nThis will permanently delete ALL customers, products, and plans.\n\nیہ تمام گاہکوں، پروڈکٹس اور پلانز کو مستقل طور پر ڈیلیٹ کر دے گا۔')) return;
+      localStorage.removeItem('aqsat_data');
+      this.setState({ customers: [], products: [], plans: [], route: 'dashboard' });
+    });
+  };
+  requireResetPin = (action) => {
+    const rp = this.state.settings.resetPin || '';
+    if (!rp) { action(); return; }
+    this.setState({ pinModal: { open: true, callback: action, error: '', isResetPin: true }, pinModalInput: '' });
   };
 
   computeLateFee(installment, plan) {
@@ -254,11 +263,13 @@ export default class App extends React.Component {
     this.setState({ pinModal: { open: true, callback: action, error: '' }, pinModalInput: '' });
   };
   submitPinModal = () => {
-    if (this.state.pinModalInput === this.state.savedPin) {
-      const cb = this.state.pinModal.callback;
+    const pm = this.state.pinModal;
+    const expected = pm.isResetPin ? (this.state.settings.resetPin || '') : this.state.savedPin;
+    if (this.state.pinModalInput === expected) {
+      const cb = pm.callback;
       this.setState({ pinModal: { open: false, callback: null, error: '' }, pinModalInput: '' }, () => { if (cb) cb(); });
     } else {
-      this.setState({ pinModal: { ...this.state.pinModal, error: 'Wrong PIN / غلط PIN' }, pinModalInput: '' });
+      this.setState({ pinModal: { ...pm, error: 'Wrong PIN / غلط PIN' }, pinModalInput: '' });
     }
   };
   closePinModal = () => this.setState({ pinModal: { open: false, callback: null, error: '' }, pinModalInput: '' });
@@ -267,11 +278,13 @@ export default class App extends React.Component {
       this.setState(s => ({ pinModalInput: s.pinModalInput.slice(0, -1) }));
     } else if (this.state.pinModalInput.length < 6) {
       this.setState(s => {
+        const pm = s.pinModal;
+        const expectedLen = pm.isResetPin ? (s.settings.resetPin || '').length : s.savedPin.length;
         const next = s.pinModalInput + k;
-        if (next.length === s.savedPin.length) {
+        if (next.length === expectedLen) {
           setTimeout(() => this.submitPinModal(), 150);
         }
-        return { pinModalInput: next, pinModal: { ...s.pinModal, error: '' } };
+        return { pinModalInput: next, pinModal: { ...pm, error: '' } };
       });
     }
   };
@@ -1178,6 +1191,14 @@ export default class App extends React.Component {
             ? h('button', { onClick: () => this.setPin(''), style: { padding: '6px 12px', borderRadius: 8, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' } }, '🔓 Remove PIN')
             : h('input', { type: 'number', maxLength: 4, placeholder: '4-digit PIN', onBlur: e => { if (e.target.value.length === 4) this.setPin(e.target.value); }, style: { width: 100, border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, fontFamily: 'monospace', outline: 'none' } }),
         )),
+        row('Reset PIN (6-digit)', 'ری سیٹ PIN', h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+          st.resetPin
+            ? h(React.Fragment, {},
+              h('span', { className: 'mono', style: { fontSize: 13, color: '#0f6b4b', fontWeight: 700 } }, '••••••'),
+              h('button', { onClick: () => setS('resetPin', ''), style: { padding: '6px 12px', borderRadius: 8, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' } }, '✕ Remove'),
+            )
+            : h('input', { type: 'number', maxLength: 6, placeholder: '6-digit PIN', onBlur: e => { if (e.target.value.length === 6) setS('resetPin', e.target.value); else if (e.target.value.length > 0) alert('Reset PIN must be exactly 6 digits\nری سیٹ PIN بالکل 6 ہندسے ہونا چاہیے'); }, style: { width: 120, border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, fontFamily: 'monospace', outline: 'none' } }),
+        )),
       ]),
       h('div', { style: { height: 16 } }),
       h('div', { style: { height: 16 } }),
@@ -1729,16 +1750,18 @@ export default class App extends React.Component {
     const pm = this.state.pinModal;
     if (!pm.open) return null;
     const pin = this.state.pinModalInput;
-    const len = this.state.savedPin.length || 4;
+    const isReset = pm.isResetPin;
+    const len = isReset ? (this.state.settings.resetPin || '').length || 6 : this.state.savedPin.length || 4;
+    const dotColor = isReset ? '#a4362b' : '#0f6b4b';
     const dots = [];
-    for (let i = 0; i < len; i++) dots.push(h('div', { key: i, style: { width: 18, height: 18, borderRadius: '50%', background: i < pin.length ? '#0f6b4b' : 'transparent', border: i < pin.length ? '2px solid #0f6b4b' : '2px solid #c5c0b0', transition: 'all .15s ease', transform: i === pin.length - 1 && pin.length > 0 ? 'scale(1.2)' : 'scale(1)' } }));
+    for (let i = 0; i < len; i++) dots.push(h('div', { key: i, style: { width: 18, height: 18, borderRadius: '50%', background: i < pin.length ? dotColor : 'transparent', border: '2px solid ' + (i < pin.length ? dotColor : '#c5c0b0'), transition: 'all .15s ease', transform: i === pin.length - 1 && pin.length > 0 ? 'scale(1.2)' : 'scale(1)' } }));
     const keys = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','del']];
     const btnBase = { width: 64, height: 52, borderRadius: 14, border: '1px solid #ece8dc', background: '#fdfcf8', fontSize: 22, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a2b1f', transition: 'background .1s' };
     return h('div', { onClick: this.closePinModal, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20, backdropFilter: 'blur(6px)' } },
       h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 24, padding: '32px 28px 24px', width: '100%', maxWidth: 320, animation: 'slideIn .2s ease', textAlign: 'center' } },
-        h('div', { style: { fontSize: 36, marginBottom: 8 } }, '🔐'),
-        h('div', { style: { fontSize: 17, fontWeight: 800, marginBottom: 2, color: '#1a2b1f' } }, 'Enter PIN'),
-        h('div', { className: 'ur', style: { fontSize: 13, color: '#7a7663', marginBottom: 20 } }, 'PIN درج کریں'),
+        h('div', { style: { fontSize: 36, marginBottom: 8 } }, isReset ? '🛡️' : '🔐'),
+        h('div', { style: { fontSize: 17, fontWeight: 800, marginBottom: 2, color: isReset ? '#a4362b' : '#1a2b1f' } }, isReset ? 'Enter Reset PIN' : 'Enter PIN'),
+        h('div', { className: 'ur', style: { fontSize: 13, color: '#7a7663', marginBottom: 20 } }, isReset ? '6 ہندسوں کا ری سیٹ PIN درج کریں' : 'PIN درج کریں'),
         h('div', { style: { display: 'flex', justifyContent: 'center', gap: 14, marginBottom: 8 } }, ...dots),
         pm.error ? h('div', { style: { color: '#d93b3b', fontSize: 13, fontWeight: 600, marginTop: 8, marginBottom: 4 } }, pm.error) : h('div', { style: { height: 25 } }),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', marginTop: 12 } },
