@@ -1059,47 +1059,116 @@ export default class App extends React.Component {
 
   renderReports() {
     const h = this.h;
-    const months = ['Feb','Mar','Apr','May','Jun','Jul'];
-    const monthAgg = { Feb: 0, Mar: 0, Apr: 0, May: 0, Jun: 0, Jul: 0 };
-    this.state.plans.forEach(pl => pl.schedule.forEach(s => { if (s.paid && s.paidDate) { const m = new Date(s.paidDate).toLocaleDateString('en', { month: 'short' }); if (monthAgg[m] != null) monthAgg[m] += s.amount; } }));
-    const max = Math.max(...Object.values(monthAgg), 1);
+    const now = new Date();
+    const curMonth = now.getMonth();
+    const curYear = now.getFullYear();
+
     const totalReceived = this.state.plans.reduce((a, p) => a + this.planStats(p).paidAmount, 0);
     const totalOut = this.state.plans.reduce((a, p) => a + this.planStats(p).remaining, 0);
+
+    const calcProfit = (pl) => {
+      const financed = Math.max(0, pl.total - pl.down);
+      return financed * (pl.interest || 0) / 100;
+    };
+    const totalProfit = this.state.plans.reduce((a, pl) => a + calcProfit(pl), 0);
+    const earnedProfit = this.state.plans.reduce((a, pl) => {
+      const st = this.planStats(pl);
+      return a + calcProfit(pl) * st.progress;
+    }, 0);
+
+    const monthlyData = {};
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(curYear, curMonth - i, 1);
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      const label = d.toLocaleDateString('en', { month: 'short', year: '2-digit' });
+      monthlyData[key] = { label, collected: 0, profit: 0, plans: 0, down: 0 };
+    }
+    this.state.plans.forEach(pl => {
+      const startKey = pl.startDate ? pl.startDate.slice(0, 7) : '';
+      if (monthlyData[startKey]) {
+        monthlyData[startKey].plans++;
+        monthlyData[startKey].down += pl.down || 0;
+        monthlyData[startKey].profit += calcProfit(pl);
+      }
+      pl.schedule.forEach(s => {
+        if (s.paid && s.paidDate) {
+          const mKey = s.paidDate.slice(0, 7);
+          if (monthlyData[mKey]) monthlyData[mKey].collected += s.amount;
+        }
+      });
+    });
+    const monthKeys = Object.keys(monthlyData);
+    const maxCollected = Math.max(...monthKeys.map(k => monthlyData[k].collected), 1);
+
+    const curKey = curYear + '-' + String(curMonth + 1).padStart(2, '0');
+    const thisMonth = monthlyData[curKey] || { collected: 0, profit: 0, plans: 0, down: 0 };
+
     const byCat = {};
     this.state.plans.forEach(pl => { const p = this.state.products.find(x => x.id === pl.productId); byCat[p.category] = (byCat[p.category] || 0) + this.planStats(pl).total; });
     const catEntries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
-    const catTotal = catEntries.reduce((a, [, v]) => a + v, 0);
+    const catTotal = catEntries.reduce((a, [, v]) => a + v, 0) || 1;
     const catColors = ['#0f6b4b','#14a374','#3ba777','#a26a10','#d4a94a','#a4362b','#6b4a1a','#0a5138'];
+
+    const tblHead = { fontSize: 11, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, padding: '10px 8px', textAlign: 'right', borderBottom: '2px solid #ece8dc' };
+    const tblCell = { fontSize: 13, fontWeight: 600, padding: '10px 8px', textAlign: 'right', borderBottom: '1px solid #f2eee2' };
+
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginBottom: 12 } },
         h('button', { onClick: this.exportCSV, style: { background: '#f4f1e6', color: '#3a4a3f', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 } }, '⬇ Export CSV'),
       ),
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 24 } },
-        [['Received (all time)', this.fmtPKR(totalReceived), '#0f6b4b'], ['Outstanding', this.fmtPKR(totalOut), '#1a2b1f'], ['Active plans', this.state.plans.filter(p => p.status === 'active').length, '#1a2b1f'], ['Customers', this.state.customers.length, '#1a2b1f']].map(([l, v, c], i) =>
-          h('div', { key: i, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 16, padding: 20 } },
-            h('div', { style: { fontSize: 11, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, l),
-            h('div', { className: 'mono', style: { fontSize: 28, fontWeight: 700, color: c, marginTop: 8, letterSpacing: '-0.02em' } }, v),
+
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 14, marginBottom: 24 } },
+        [['Received (all time)', this.fmtPKR(totalReceived), '#0f6b4b', 'کل وصولی'],
+         ['Outstanding', this.fmtPKR(totalOut), '#1a2b1f', 'باقی رقم'],
+         ['Total Profit', this.fmtPKR(totalProfit), '#a26a10', 'کل منافع'],
+         ['Earned Profit', this.fmtPKR(earnedProfit), '#0f6b4b', 'حاصل شدہ منافع'],
+         ['Active Plans', this.state.plans.filter(p => p.status === 'active').length, '#1a2b1f', 'فعال پلانز'],
+         ['Customers', this.state.customers.length, '#1a2b1f', 'گاہک']].map(([l, v, c, ur], i) =>
+          h('div', { key: i, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 16, padding: 18 } },
+            h('div', { style: { fontSize: 10, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, l),
+            h('div', { className: 'ur', style: { fontSize: 10, color: '#7a7663' } }, ur),
+            h('div', { className: 'mono', style: { fontSize: 24, fontWeight: 700, color: c, marginTop: 6, letterSpacing: '-0.02em' } }, v),
           )),
       ),
+
+      this.card([
+        this.sectionHeader('This Month', 'اس ماہ'),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginTop: 8 } },
+          [['Collected', this.fmtPKR(thisMonth.collected), '#0f6b4b'],
+           ['Down Payments', this.fmtPKR(thisMonth.down), '#1a2b1f'],
+           ['Profit (new plans)', this.fmtPKR(thisMonth.profit), '#a26a10'],
+           ['New Plans', thisMonth.plans, '#1a2b1f']].map(([l, v, c], i) =>
+            h('div', { key: i, style: { background: '#fdfcf8', border: '1px solid #ece8dc', borderRadius: 12, padding: 14 } },
+              h('div', { style: { fontSize: 10, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, l),
+              h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 700, color: c, marginTop: 4 } }, v),
+            )),
+        ),
+      ]),
+
+      h('div', { style: { height: 20 } }),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 20 } },
         this.card([
-          this.sectionHeader('Monthly cash-in', 'ماہانہ آمدنی'),
-          h('div', { style: { display: 'flex', gap: 12, alignItems: 'flex-end', height: 220, paddingTop: 20 } },
-            months.map(m => h('div', { key: m, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 } },
-              h('div', { className: 'mono', style: { fontSize: 11, color: '#5a6a5f', fontWeight: 600 } }, Math.round(monthAgg[m] / 1000) + 'k'),
-              h('div', { style: { width: '100%', maxWidth: 40, background: 'linear-gradient(180deg,#14a374,#0f6b4b)', borderRadius: '8px 8px 0 0', height: (monthAgg[m] / max * 160) + 'px', minHeight: 4, transition: 'height .4s' } }),
-              h('div', { style: { fontSize: 12, color: '#7a7663', fontWeight: 600 } }, m),
-            )),
+          this.sectionHeader('Monthly Collections', 'ماہانہ وصولی'),
+          h('div', { style: { display: 'flex', gap: 10, alignItems: 'flex-end', height: 200, paddingTop: 16 } },
+            monthKeys.map(k => {
+              const md = monthlyData[k];
+              const isCur = k === curKey;
+              return h('div', { key: k, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
+                h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, Math.round(md.collected / 1000) + 'k'),
+                h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? 'linear-gradient(180deg,#14a374,#0f6b4b)' : '#d9d5c7', borderRadius: '6px 6px 0 0', height: (md.collected / maxCollected * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
+                h('div', { style: { fontSize: 11, color: isCur ? '#0f6b4b' : '#7a7663', fontWeight: isCur ? 700 : 500 } }, md.label),
+              );
+            }),
           ),
         ]),
         this.card([
           this.sectionHeader('Sales by category', 'زمرہ جات'),
           h('div', { style: { display: 'flex', gap: 20, alignItems: 'center' } },
-            h('svg', { width: 140, height: 140, viewBox: '0 0 42 42', style: { transform: 'rotate(-90deg)', flexShrink: 0 } },
+            h('svg', { width: 130, height: 130, viewBox: '0 0 42 42', style: { transform: 'rotate(-90deg)', flexShrink: 0 } },
               (() => { let offset = 0; return catEntries.map(([k, v], i) => { const pct = v / catTotal * 100; const el = h('circle', { key: k, cx: 21, cy: 21, r: 15.915, fill: 'transparent', stroke: catColors[i % catColors.length], strokeWidth: 6, strokeDasharray: pct + ' ' + (100 - pct), strokeDashoffset: -offset }); offset += pct; return el; }); })(),
             ),
             h('div', { style: { flex: 1 } },
-              catEntries.map(([k, v], i) => h('div', { key: k, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 13 } },
+              catEntries.map(([k, v], i) => h('div', { key: k, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 13 } },
                 h('div', { style: { width: 12, height: 12, borderRadius: 3, background: catColors[i % catColors.length] } }),
                 h('div', { style: { flex: 1 } }, k),
                 h('div', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(v)),
@@ -1108,6 +1177,37 @@ export default class App extends React.Component {
           ),
         ]),
       ),
+
+      h('div', { style: { height: 20 } }),
+      this.card([
+        this.sectionHeader('Monthly Breakdown', 'ماہانہ تفصیلات'),
+        h('div', { style: { overflowX: 'auto' } },
+          h('table', { style: { width: '100%', borderCollapse: 'collapse', minWidth: 500 } },
+            h('thead', {},
+              h('tr', {},
+                h('th', { style: { ...tblHead, textAlign: 'left' } }, 'Month'),
+                h('th', { style: tblHead }, 'Collected'),
+                h('th', { style: tblHead }, 'Down Pmts'),
+                h('th', { style: tblHead }, 'Profit'),
+                h('th', { style: tblHead }, 'New Plans'),
+              ),
+            ),
+            h('tbody', {},
+              monthKeys.slice().reverse().map(k => {
+                const md = monthlyData[k];
+                const isCur = k === curKey;
+                return h('tr', { key: k, style: isCur ? { background: '#fdfcf8' } : {} },
+                  h('td', { style: { ...tblCell, textAlign: 'left', fontWeight: isCur ? 700 : 600, color: isCur ? '#0f6b4b' : '#1a2b1f' } }, md.label, isCur ? ' ●' : ''),
+                  h('td', { className: 'mono', style: { ...tblCell, color: '#0f6b4b' } }, this.fmtPKR(md.collected)),
+                  h('td', { className: 'mono', style: tblCell }, this.fmtPKR(md.down)),
+                  h('td', { className: 'mono', style: { ...tblCell, color: '#a26a10' } }, this.fmtPKR(md.profit)),
+                  h('td', { className: 'mono', style: tblCell }, md.plans),
+                );
+              }),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 
