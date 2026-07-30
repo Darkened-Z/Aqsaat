@@ -411,8 +411,8 @@ export default class App extends React.Component {
     this.closeEditCustomer();
   };
   deleteCustomer = (id) => {
-    const used = this.state.plans.some(pl => pl.customerId === id);
-    if (used) { alert('This customer has existing plans and cannot be deleted.\nاس گاہک کے موجودہ پلانز ہیں اور اسے ڈیلیٹ نہیں کیا جا سکتا۔'); return; }
+    const used = this.state.plans.some(pl => pl.customerId === id && pl.status === 'active');
+    if (used) { alert('This customer has active plans and cannot be deleted.\nاس گاہک کے فعال پلانز ہیں اور اسے ڈیلیٹ نہیں کیا جا سکتا۔'); return; }
     if (!confirm('Delete this customer?\nکیا آپ یہ گاہک ڈیلیٹ کرنا چاہتے ہیں؟')) return;
     this.setState({ customers: this.state.customers.filter(c => c.id !== id) });
     this.closeEditCustomer();
@@ -584,8 +584,8 @@ export default class App extends React.Component {
     this.closeEditProduct();
   };
   deleteProduct = (id) => {
-    const used = this.state.plans.some(pl => pl.productId === id);
-    if (used) { alert('This product is used in existing plans and cannot be deleted.\nیہ پروڈکٹ موجودہ پلانز میں استعمال ہو رہی ہے۔'); return; }
+    const used = this.state.plans.some(pl => pl.productId === id && pl.status === 'active');
+    if (used) { alert('This product is used in active plans and cannot be deleted.\nیہ پروڈکٹ فعال پلانز میں استعمال ہو رہی ہے۔'); return; }
     if (!confirm('Delete this product?\nکیا آپ یہ پروڈکٹ ڈیلیٹ کرنا چاہتے ہیں؟')) return;
     this.setState({ products: this.state.products.filter(p => p.id !== id) });
     this.closeEditProduct();
@@ -1066,14 +1066,16 @@ export default class App extends React.Component {
     const totalReceived = this.state.plans.reduce((a, p) => a + this.planStats(p).paidAmount, 0);
     const totalOut = this.state.plans.reduce((a, p) => a + this.planStats(p).remaining, 0);
 
-    const calcProfit = (pl) => {
+    const profitOf = (pl) => {
       const financed = Math.max(0, pl.total - pl.down);
       return financed * (pl.interest || 0) / 100;
     };
-    const totalProfit = this.state.plans.reduce((a, pl) => a + calcProfit(pl), 0);
+    const totalProfit = this.state.plans.reduce((a, pl) => a + profitOf(pl), 0);
     const earnedProfit = this.state.plans.reduce((a, pl) => {
-      const st = this.planStats(pl);
-      return a + calcProfit(pl) * st.progress;
+      const profit = profitOf(pl);
+      const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
+      const paidTotal = pl.schedule.filter(s => s.paid).reduce((s, x) => s + x.amount, 0);
+      return a + profit * (paidTotal / scheduleTotal);
     }, 0);
 
     const monthlyData = {};
@@ -1081,30 +1083,33 @@ export default class App extends React.Component {
       const d = new Date(curYear, curMonth - i, 1);
       const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
       const label = d.toLocaleDateString('en', { month: 'short', year: '2-digit' });
-      monthlyData[key] = { label, collected: 0, profit: 0, plans: 0, down: 0 };
+      monthlyData[key] = { label, collected: 0, profitEarned: 0, plans: 0, down: 0 };
     }
     this.state.plans.forEach(pl => {
       const startKey = pl.startDate ? pl.startDate.slice(0, 7) : '';
       if (monthlyData[startKey]) {
         monthlyData[startKey].plans++;
         monthlyData[startKey].down += pl.down || 0;
-        monthlyData[startKey].profit += calcProfit(pl);
       }
+      const profit = profitOf(pl);
+      const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
+      const profitPerRupee = profit / scheduleTotal;
       pl.schedule.forEach(s => {
         if (s.paid && s.paidDate) {
           const mKey = s.paidDate.slice(0, 7);
-          if (monthlyData[mKey]) monthlyData[mKey].collected += s.amount;
+          if (monthlyData[mKey]) {
+            monthlyData[mKey].collected += s.amount;
+            monthlyData[mKey].profitEarned += s.amount * profitPerRupee;
+          }
         }
       });
     });
     const monthKeys = Object.keys(monthlyData);
-    const maxCollected = Math.max(...monthKeys.map(k => monthlyData[k].collected), 1);
-
+    const maxCollected = Math.max(...monthKeys.map(k => monthlyData[k].collected + monthlyData[k].down), 1);
     const curKey = curYear + '-' + String(curMonth + 1).padStart(2, '0');
-    const thisMonth = monthlyData[curKey] || { collected: 0, profit: 0, plans: 0, down: 0 };
 
     const byCat = {};
-    this.state.plans.forEach(pl => { const p = this.state.products.find(x => x.id === pl.productId); byCat[p.category] = (byCat[p.category] || 0) + this.planStats(pl).total; });
+    this.state.plans.forEach(pl => { const p = this.state.products.find(x => x.id === pl.productId); if (p) byCat[p.category] = (byCat[p.category] || 0) + this.planStats(pl).total; });
     const catEntries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
     const catTotal = catEntries.reduce((a, [, v]) => a + v, 0) || 1;
     const catColors = ['#0f6b4b','#14a374','#3ba777','#a26a10','#d4a94a','#a4362b','#6b4a1a','#0a5138'];
@@ -1117,45 +1122,29 @@ export default class App extends React.Component {
         h('button', { onClick: this.exportCSV, style: { background: '#f4f1e6', color: '#3a4a3f', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 } }, '⬇ Export CSV'),
       ),
 
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 14, marginBottom: 24 } },
-        [['Received (all time)', this.fmtPKR(totalReceived), '#0f6b4b', 'کل وصولی'],
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 24 } },
+        [['Collected', this.fmtPKR(totalReceived), '#0f6b4b', 'کل وصولی'],
          ['Outstanding', this.fmtPKR(totalOut), '#1a2b1f', 'باقی رقم'],
-         ['Total Profit', this.fmtPKR(totalProfit), '#a26a10', 'کل منافع'],
-         ['Earned Profit', this.fmtPKR(earnedProfit), '#0f6b4b', 'حاصل شدہ منافع'],
-         ['Active Plans', this.state.plans.filter(p => p.status === 'active').length, '#1a2b1f', 'فعال پلانز'],
-         ['Customers', this.state.customers.length, '#1a2b1f', 'گاہک']].map(([l, v, c, ur], i) =>
-          h('div', { key: i, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 16, padding: 18 } },
-            h('div', { style: { fontSize: 10, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, l),
+         ['Profit (expected)', this.fmtPKR(totalProfit), '#a26a10', 'متوقع منافع'],
+         ['Profit (earned)', this.fmtPKR(earnedProfit), '#0f6b4b', 'حاصل شدہ منافع']].map(([l, v, c, ur], i) =>
+          h('div', { key: i, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 16, padding: 20 } },
+            h('div', { style: { fontSize: 11, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, l),
             h('div', { className: 'ur', style: { fontSize: 10, color: '#7a7663' } }, ur),
-            h('div', { className: 'mono', style: { fontSize: 24, fontWeight: 700, color: c, marginTop: 6, letterSpacing: '-0.02em' } }, v),
+            h('div', { className: 'mono', style: { fontSize: 26, fontWeight: 700, color: c, marginTop: 6, letterSpacing: '-0.02em' } }, v),
           )),
       ),
 
-      this.card([
-        this.sectionHeader('This Month', 'اس ماہ'),
-        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginTop: 8 } },
-          [['Collected', this.fmtPKR(thisMonth.collected), '#0f6b4b'],
-           ['Down Payments', this.fmtPKR(thisMonth.down), '#1a2b1f'],
-           ['Profit (new plans)', this.fmtPKR(thisMonth.profit), '#a26a10'],
-           ['New Plans', thisMonth.plans, '#1a2b1f']].map(([l, v, c], i) =>
-            h('div', { key: i, style: { background: '#fdfcf8', border: '1px solid #ece8dc', borderRadius: 12, padding: 14 } },
-              h('div', { style: { fontSize: 10, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, l),
-              h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 700, color: c, marginTop: 4 } }, v),
-            )),
-        ),
-      ]),
-
-      h('div', { style: { height: 20 } }),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 20 } },
         this.card([
-          this.sectionHeader('Monthly Collections', 'ماہانہ وصولی'),
-          h('div', { style: { display: 'flex', gap: 10, alignItems: 'flex-end', height: 200, paddingTop: 16 } },
+          this.sectionHeader('Monthly Income', 'ماہانہ آمدنی'),
+          h('div', { style: { display: 'flex', gap: 8, alignItems: 'flex-end', height: 200, paddingTop: 16 } },
             monthKeys.map(k => {
               const md = monthlyData[k];
               const isCur = k === curKey;
+              const total = md.collected + md.down;
               return h('div', { key: k, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
-                h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, Math.round(md.collected / 1000) + 'k'),
-                h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? 'linear-gradient(180deg,#14a374,#0f6b4b)' : '#d9d5c7', borderRadius: '6px 6px 0 0', height: (md.collected / maxCollected * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
+                h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, total >= 1000 ? Math.round(total / 1000) + 'k' : total),
+                h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? 'linear-gradient(180deg,#14a374,#0f6b4b)' : '#d9d5c7', borderRadius: '6px 6px 0 0', height: (total / maxCollected * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
                 h('div', { style: { fontSize: 11, color: isCur ? '#0f6b4b' : '#7a7663', fontWeight: isCur ? 700 : 500 } }, md.label),
               );
             }),
@@ -1186,9 +1175,9 @@ export default class App extends React.Component {
             h('thead', {},
               h('tr', {},
                 h('th', { style: { ...tblHead, textAlign: 'left' } }, 'Month'),
-                h('th', { style: tblHead }, 'Collected'),
+                h('th', { style: tblHead }, 'Installments'),
                 h('th', { style: tblHead }, 'Down Pmts'),
-                h('th', { style: tblHead }, 'Profit'),
+                h('th', { style: tblHead }, 'Profit Earned'),
                 h('th', { style: tblHead }, 'New Plans'),
               ),
             ),
@@ -1200,7 +1189,7 @@ export default class App extends React.Component {
                   h('td', { style: { ...tblCell, textAlign: 'left', fontWeight: isCur ? 700 : 600, color: isCur ? '#0f6b4b' : '#1a2b1f' } }, md.label, isCur ? ' ●' : ''),
                   h('td', { className: 'mono', style: { ...tblCell, color: '#0f6b4b' } }, this.fmtPKR(md.collected)),
                   h('td', { className: 'mono', style: tblCell }, this.fmtPKR(md.down)),
-                  h('td', { className: 'mono', style: { ...tblCell, color: '#a26a10' } }, this.fmtPKR(md.profit)),
+                  h('td', { className: 'mono', style: { ...tblCell, color: '#a26a10' } }, this.fmtPKR(Math.round(md.profitEarned))),
                   h('td', { className: 'mono', style: tblCell }, md.plans),
                 );
               }),
