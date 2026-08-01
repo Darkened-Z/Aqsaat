@@ -219,7 +219,7 @@ export default class App extends React.Component {
   computeLateFee(installment, plan) {
     if (installment.paid) return 0;
     const rules = plan.lateFee || this.state.settings;
-    const daysLate = this.daysBetween(new Date(installment.dueDate), this.today()) - (rules.graceDays || 0);
+    const daysLate = -this.dayDiff(installment.dueDate) - (rules.graceDays || 0);
     if (daysLate <= 0) return 0;
     const fee = (rules.lateFeeFlat || 0) + daysLate * (rules.lateFeePerDay || 0);
     return Math.min(fee, rules.maxLateFee || Infinity);
@@ -237,6 +237,18 @@ export default class App extends React.Component {
     return Math.round((new Date(b) - new Date(a)) / 86400000);
   }
   today() { return new Date(); }
+  // Local calendar date as 'YYYY-MM-DD' (matches how schedule dueDates are stored).
+  todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  // Whole-day difference from today to a 'YYYY-MM-DD' date (negative = overdue, 0 = due today).
+  dayDiff(dueStr) {
+    if (!dueStr) return 0;
+    const t = new Date(this.todayStr() + 'T00:00:00');
+    const d = new Date(String(dueStr).slice(0, 10) + 'T00:00:00');
+    return Math.round((d - t) / 86400000);
+  }
   activeCustomers() { return (this.state.customers || []).filter(c => !c._deleted); }
   activeProducts() { return (this.state.products || []).filter(p => !p._deleted); }
 
@@ -246,7 +258,7 @@ export default class App extends React.Component {
     const total = pl.schedule.reduce((a, s) => a + s.amount, 0) + pl.down;
     const remaining = total - paidAmount;
     const next = pl.schedule.find(s => !s.paid);
-    const overdue = pl.schedule.filter(s => !s.paid && new Date(s.dueDate) < this.today());
+    const overdue = pl.schedule.filter(s => !s.paid && this.dayDiff(s.dueDate) < 0);
     const lateFees = overdue.reduce((a, s) => a + this.computeLateFee(s, pl), 0);
     return { paid, paidAmount, total, remaining, next, overdue, lateFees, progress: total ? paidAmount / total : 0 };
   }
@@ -338,9 +350,13 @@ export default class App extends React.Component {
     const total = parseFloat(np.totalPrice) || product.price;
     const down = parseFloat(np.downPayment) || 0;
     const financed = Math.max(0, total - down);
+    const directAmt = parseFloat(np.interestAmount);
+    const hasDirect = np.interestAmount !== '' && np.interestAmount != null && !isNaN(directAmt);
     const rawPct = Math.min(parseFloat(np.interest) || 0, 100);
-    const profit = financed * rawPct / 100;
-    const profitPct = rawPct;
+    // Direct profit amount is the source of truth when entered; else derive from markup %.
+    const profit = Math.max(0, hasDirect ? directAmt : financed * rawPct / 100);
+    // Store full-precision percentage so profitOf reproduces the exact profit amount.
+    const profitPct = financed > 0 ? (profit / financed) * 100 : 0;
     const total2Pay = Math.max(0, financed + profit);
     const installAmt = parseFloat(np.installmentAmount) || 0;
     const fixedMonths = parseInt(np.customMonths || np.months) || 6;
@@ -366,7 +382,9 @@ export default class App extends React.Component {
         const d = new Date(start);
         if (np.frequency === 'days') d.setDate(d.getDate() + i * freqDays);
         else d.setMonth(d.getMonth() + i);
-        schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount: equalAmt, paid: false, paidDate: null });
+        // Last installment absorbs the rounding remainder so the schedule sums to total2Pay exactly.
+        const amount = i === fixedMonths - 1 ? Math.round(total2Pay - equalAmt * (fixedMonths - 1)) : equalAmt;
+        schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount, paid: false, paidDate: null });
       }
     }
     const months = schedule.length;
@@ -533,21 +551,44 @@ export default class App extends React.Component {
   openEditPlan = (planId) => {
     const pl = this.state.plans.find(p => p.id === planId);
     if (!pl) return;
-    const doOpen = () => this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
+    const financed0 = Math.max(0, (pl.total || 0) - (pl.down || 0));
+    const initAmt = String(Math.round(financed0 * (pl.interest || 0) / 100));
+    const doOpen = () => this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftInterestAmount: initAmt, draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
     this.requirePin(doOpen);
   };
-  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
   _doSaveEditPlan = () => {
     const em = this.state.editPlanModal;
     const plans = this.state.plans.map(pl => {
       if (pl.id !== em.planId) return pl;
-      const allPaid = em.draftSchedule.every(s => s.paid);
       const total = parseFloat(em.draftTotal) || pl.total;
       const down = parseFloat(em.draftDown) || 0;
-      const interest = parseFloat(em.draftInterest) || 0;
-      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, startDate: em.draftStartDate || pl.startDate, months: em.draftSchedule.length, schedule: em.draftSchedule, imei: em.draftImei, chassisNo: em.draftChassisNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
+      const financed = Math.max(0, total - down);
+      // Direct profit amount is the source of truth; interest % is derived at full precision.
+      const directAmt = parseFloat(em.draftInterestAmount);
+      const hasDirect = em.draftInterestAmount !== '' && em.draftInterestAmount != null && !isNaN(directAmt);
+      const profit = Math.max(0, hasDirect ? directAmt : financed * Math.min(parseFloat(em.draftInterest) || 0, 100) / 100);
+      const interest = financed > 0 ? (profit / financed) * 100 : 0;
+      const total2Pay = financed + profit;
+      // Rebuild the schedule so it always sums to total2Pay: keep paid installments and
+      // their due dates, redistribute the remainder equally across the unpaid ones.
+      const paidSum = em.draftSchedule.filter(s => s.paid).reduce((a, s) => a + s.amount, 0);
+      const unpaid = em.draftSchedule.filter(s => !s.paid);
+      const remain = Math.max(0, total2Pay - paidSum);
+      const per = unpaid.length > 0 ? Math.round(remain / unpaid.length) : 0;
+      let u = 0;
+      const schedule = em.draftSchedule.map(s => {
+        if (s.paid) return s;
+        u++;
+        const amt = u === unpaid.length ? Math.round(remain - per * (unpaid.length - 1)) : per;
+        return { ...s, amount: amt };
+      });
+      const allPaid = schedule.length > 0 && schedule.every(s => s.paid);
+      const months = schedule.length;
+      const monthly = unpaid.length > 0 ? per : (months > 0 ? Math.round(total2Pay / months) : 0);
+      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, startDate: em.draftStartDate || pl.startDate, months, schedule, imei: em.draftImei, chassisNo: em.draftChassisNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
     });
-    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
   };
   submitEditPlanPin = () => {
     const { pinInput } = this.state.editPlanModal;
@@ -624,13 +665,12 @@ export default class App extends React.Component {
       const c = customers.find(x => x.id === pl.customerId);
       const p = products.find(x => x.id === pl.productId);
       pl.schedule.forEach(s => {
-        const due = new Date(s.dueDate);
-        const diff = this.daysBetween(today, due);
+        const diff = this.dayDiff(s.dueDate);
         if (!s.paid && diff === 0) { cashToday += s.amount; dueTodayList.push({ pl, s, c, p, diff }); }
         if (!s.paid && diff > 0 && diff <= 7) { upcomingWeek += s.amount; upcomingList.push({ pl, s, c, p, diff }); }
         if (!s.paid && diff < 0) { overdueTotal += s.amount; overdueCount++; overdueList.push({ pl, s, c, p, diff }); }
         if (s.paid && s.paidDate) {
-          const pDiff = this.daysBetween(new Date(s.paidDate), today);
+          const pDiff = -this.dayDiff(s.paidDate);
           if (pDiff >= 0 && pDiff <= 14) recentPayments.push({ pl, s, c, p, pDiff });
         }
       });
@@ -655,8 +695,8 @@ export default class App extends React.Component {
 
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14, flexWrap: 'wrap' } },
-        h('div', { style: { fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em' } }, 'Sunday, 19 July 2026'),
-        h('div', { style: { fontSize: 12, color: '#7a7663' } }, '· Assalam-o-Alaikum, Rehan'),
+        h('div', { style: { fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em' } }, new Date().toLocaleDateString('en-PK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })),
+        h('div', { style: { fontSize: 12, color: '#7a7663' } }, '· Assalam-o-Alaikum' + (this.state.settings.ownerName ? ', ' + this.state.settings.ownerName.split(' ')[0] : '')),
       ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10, marginBottom: 16 } },
         kpiCard('Cash Today',    'آج کی وصولی', this.fmtPKR(cashToday),       dueTodayList.length + ' installments due', 'green'),
@@ -861,15 +901,14 @@ export default class App extends React.Component {
       ),
       h('div', { style: { marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(76px,1fr))', gap: 6 } },
         pl.schedule.map(s => {
-          const due = new Date(s.dueDate);
-          const isOverdueS = !s.paid && due < this.today();
+          const isOverdueS = !s.paid && this.dayDiff(s.dueDate) < 0;
           const isNext = st.next && st.next.n === s.n;
           const bg = s.paid ? '#eaf5ee' : isOverdueS ? '#fdecea' : isNext ? '#fdf2d9' : '#fdfcf8';
           const col = s.paid ? '#0f6b4b' : isOverdueS ? '#a4362b' : isNext ? '#a26a10' : '#7a7663';
           return h('button', { key: s.n, onClick: () => !s.paid && this.openPayment(pl.id, s.n), style: { background: bg, border: '1px solid ' + (isNext ? '#f0c977' : '#ece8dc'), borderRadius: 10, padding: '8px 6px', textAlign: 'center', cursor: s.paid ? 'default' : 'pointer' } },
             h('div', { style: { fontSize: 10, fontWeight: 700, color: col, textTransform: 'uppercase' } }, s.paid ? '✓ Paid' : isOverdueS ? 'Late' : '#' + s.n),
             h('div', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: '#1a2b1f', marginTop: 2 } }, Math.round(s.amount / 1000) + 'k'),
-            h('div', { style: { fontSize: 9, color: col, marginTop: 1 } }, due.toLocaleDateString('en', { day: '2-digit', month: 'short' })),
+            h('div', { style: { fontSize: 9, color: col, marginTop: 1 } }, new Date(s.dueDate).toLocaleDateString('en', { day: '2-digit', month: 'short' })),
           );
         }),
       ),
@@ -1004,11 +1043,9 @@ export default class App extends React.Component {
             const t = parseFloat(np.totalPrice) || 0;
             const d = parseFloat(np.downPayment) || 0;
             const fin = Math.max(0, t - d);
-            const pct = parseFloat(np.interest) || 0;
-            const amt = Math.round(fin * pct / 100);
             return h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
-              field('Profit Rs', 'منافع رقم', h('input', { type: 'number', min: 0, value: amt, onChange: e => { const a = parseFloat(e.target.value) || 0; const p = fin > 0 ? Math.min((a / fin) * 100, 100) : 0; set('interest', String(Math.round(p * 100) / 100)); }, placeholder: 'e.g. 5000', style: inpStyle })),
-              field('Markup %', 'منافع %', h('input', { type: 'number', max: 100, min: 0, value: np.interest, onChange: e => { const v = parseFloat(e.target.value); set('interest', v > 100 ? '100' : e.target.value); }, placeholder: '12', style: inpStyle })),
+              field('Profit Rs', 'منافع رقم', h('input', { type: 'number', min: 0, value: np.interestAmount, onChange: e => { const raw = e.target.value; const amt = parseFloat(raw) || 0; const pct = fin > 0 ? (amt / fin) * 100 : 0; this.setState({ newPlan: { ...np, interestAmount: raw, interest: fin > 0 ? String(Math.round(pct * 100) / 100) : np.interest } }); }, placeholder: 'e.g. 5000', style: inpStyle })),
+              field('Markup %', 'منافع %', h('input', { type: 'number', max: 100, min: 0, value: np.interest, onChange: e => { const raw = e.target.value; const pct = Math.min(parseFloat(raw) || 0, 100); const amt = Math.round(fin * pct / 100); this.setState({ newPlan: { ...np, interest: (parseFloat(raw) > 100 ? '100' : raw), interestAmount: fin > 0 ? String(amt) : np.interestAmount } }); }, placeholder: '12', style: inpStyle })),
             );
           })(),
           field('Installments', 'اقساط کی تعداد',
@@ -1214,7 +1251,7 @@ export default class App extends React.Component {
     this.state.plans.forEach(pl => {
       const c = this.state.customers.find(x => x.id === pl.customerId);
       const p = this.state.products.find(x => x.id === pl.productId);
-      pl.schedule.forEach(s => { const due = new Date(s.dueDate); if (!s.paid && due < this.today()) overdueList.push({ pl, s, c, p, diff: this.daysBetween(this.today(), due) }); });
+      pl.schedule.forEach(s => { const diff = this.dayDiff(s.dueDate); if (!s.paid && diff < 0) overdueList.push({ pl, s, c, p, diff }); });
     });
     overdueList.sort((a, b) => a.diff - b.diff);
     return h('div', { className: 'screen' },
@@ -1712,7 +1749,7 @@ export default class App extends React.Component {
         h('div', { style: { width: 64, height: 64, borderRadius: '50%', background: '#eaf5ee', color: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 16px' } }, '✓'),
         h('div', { style: { fontSize: 20, fontWeight: 800, letterSpacing: '-0.01em' } }, 'Payment Received'),
         h('div', { className: 'ur', style: { fontSize: 14, color: '#7a7663', marginTop: 2 } }, 'ادائیگی وصول ہوگئی'),
-        h('div', { className: 'mono', style: { fontSize: 32, fontWeight: 800, color: '#0f6b4b', margin: '20px 0 4px' } }, this.fmtPKR(r.installment.amount)),
+        h('div', { className: 'mono', style: { fontSize: 32, fontWeight: 800, color: '#0f6b4b', margin: '20px 0 4px' } }, this.fmtPKR(r.amountCollected != null ? r.amountCollected : r.installment.amount)),
         h('div', { style: { fontSize: 12, color: '#7a7663' } }, 'Receipt #' + r.receiptNo),
         h('div', { style: { textAlign: 'left', background: '#fdfcf8', border: '1px dashed #d9d5c7', borderRadius: 12, padding: 16, marginTop: 20, fontSize: 13 } },
           [['Customer', r.customer.name], ['Product', r.product.name], ['Installment', r.installment.n + ' / ' + r.plan.months], ['Voucher', r.plan.voucherNo || '—'], ['Date', this.fmtDate(r.date)]].map(([l, v], i) =>
@@ -1800,16 +1837,14 @@ export default class App extends React.Component {
           ),
           (() => {
             const financed = Math.max(0, (parseFloat(em.draftTotal) || 0) - (parseFloat(em.draftDown) || 0));
-            const curPct = parseFloat(em.draftInterest) || 0;
-            const curAmt = Math.round(financed * curPct / 100);
             return h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
               h('div', {},
-                h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Markup % ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'منافع %')),
-                h('input', { type: 'number', max: 100, min: 0, value: em.draftInterest, onChange: e => { const v = parseFloat(e.target.value); setDraft('draftInterest', v > 100 ? '100' : e.target.value); }, style: { ...inpStyle, width: '100%' } }),
+                h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Profit Rs ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'منافع رقم')),
+                h('input', { type: 'number', min: 0, value: em.draftInterestAmount, onChange: e => { const raw = e.target.value; const amt = parseFloat(raw) || 0; const pct = financed > 0 ? (amt / financed) * 100 : 0; this.setState({ editPlanModal: { ...this.state.editPlanModal, draftInterestAmount: raw, draftInterest: financed > 0 ? String(Math.round(pct * 100) / 100) : em.draftInterest } }); }, style: { ...inpStyle, width: '100%' } }),
               ),
               h('div', {},
-                h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Profit Rs ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'منافع رقم')),
-                h('input', { type: 'number', min: 0, value: curAmt, onChange: e => { const amt = parseFloat(e.target.value) || 0; const pct = financed > 0 ? Math.min((amt / financed) * 100, 100) : 0; setDraft('draftInterest', String(Math.round(pct * 100) / 100)); }, style: { ...inpStyle, width: '100%' } }),
+                h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Markup % ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'منافع %')),
+                h('input', { type: 'number', max: 100, min: 0, value: em.draftInterest, onChange: e => { const raw = e.target.value; const pct = Math.min(parseFloat(raw) || 0, 100); const amt = Math.round(financed * pct / 100); this.setState({ editPlanModal: { ...this.state.editPlanModal, draftInterest: (parseFloat(raw) > 100 ? '100' : raw), draftInterestAmount: financed > 0 ? String(amt) : em.draftInterestAmount } }); }, style: { ...inpStyle, width: '100%' } }),
               ),
             );
           })(),
