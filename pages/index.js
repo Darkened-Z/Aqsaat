@@ -235,6 +235,8 @@ export default class App extends React.Component {
     return Math.round((new Date(b) - new Date(a)) / 86400000);
   }
   today() { return new Date(); }
+  activeCustomers() { return (this.state.customers || []).filter(c => !c._deleted); }
+  activeProducts() { return (this.state.products || []).filter(p => !p._deleted); }
 
   planStats(pl) {
     const paid = pl.schedule.filter(s => s.paid);
@@ -415,7 +417,7 @@ export default class App extends React.Component {
     const used = this.state.plans.some(pl => pl.customerId === id && pl.status === 'active');
     if (used) { alert('This customer has active plans and cannot be deleted.\nاس گاہک کے فعال پلانز ہیں اور اسے ڈیلیٹ نہیں کیا جا سکتا۔'); return; }
     if (!confirm('Delete this customer?\nکیا آپ یہ گاہک ڈیلیٹ کرنا چاہتے ہیں؟')) return;
-    this.setState({ customers: this.state.customers.filter(c => c.id !== id) });
+    this.setState({ customers: this.state.customers.map(c => c.id === id ? { ...c, _deleted: true } : c) });
     this.closeEditCustomer();
     this.go('customers');
   };
@@ -588,7 +590,7 @@ export default class App extends React.Component {
     const used = this.state.plans.some(pl => pl.productId === id && pl.status === 'active');
     if (used) { alert('This product is used in active plans and cannot be deleted.\nیہ پروڈکٹ فعال پلانز میں استعمال ہو رہی ہے۔'); return; }
     if (!confirm('Delete this product?\nکیا آپ یہ پروڈکٹ ڈیلیٹ کرنا چاہتے ہیں؟')) return;
-    this.setState({ products: this.state.products.filter(p => p.id !== id) });
+    this.setState({ products: this.state.products.map(p => p.id === id ? { ...p, _deleted: true } : p) });
     this.closeEditProduct();
   };
 
@@ -737,12 +739,13 @@ export default class App extends React.Component {
   renderCustomers() {
     const h = this.h;
     const q = this.state.searchQuery.toLowerCase();
-    const rows = this.state.customers
+    const customers = this.activeCustomers();
+    const rows = customers
       .filter(c => !q || c.name.toLowerCase().includes(q) || c.nameUr.includes(q) || c.phone.includes(q) || (c.area || '').toLowerCase().includes(q))
       .map(c => ({ c, st: this.customerStats(c.id) }));
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 } },
-        h('div', {}, h('div', { style: { fontSize: 14, color: '#7a7663' } }, this.state.customers.length + ' customers')),
+        h('div', {}, h('div', { style: { fontSize: 14, color: '#7a7663' } }, customers.length + ' customers')),
         h('div', { style: { display: 'flex', gap: 8 } },
           h('button', { onClick: () => this.go('newplan'), style: { background: '#f4f1e6', color: '#3a4a3f', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13 } }, '＋ New Plan'),
           h('button', { onClick: this.openAddCustomer, style: { background: '#0f6b4b', color: 'white', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13 } }, '＋ Add Customer'),
@@ -913,11 +916,11 @@ export default class App extends React.Component {
     const h = this.h;
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 } },
-        h('div', { style: { fontSize: 13, color: '#7a7663' } }, this.state.products.length + ' products'),
+        h('div', { style: { fontSize: 13, color: '#7a7663' } }, this.activeProducts().length + ' products'),
         h('button', { onClick: this.openAddProduct, style: { background: '#0f6b4b', color: 'white', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13 } }, '＋ Add Product'),
       ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 } },
-        this.state.products.map(p => {
+        this.activeProducts().map(p => {
           const sold = this.state.plans.filter(pl => pl.productId === p.id).length;
           return h('div', { key: p.id, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 16 } },
             h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } },
@@ -991,8 +994,8 @@ export default class App extends React.Component {
         h('div', { style: { fontSize: 18, fontWeight: 700, marginBottom: 4 } }, 'Create Installment Plan'),
         h('div', { style: { fontSize: 13, color: '#7a7663', marginBottom: 20 } }, 'Enter the deal terms. Preview updates live on the right.'),
         h('div', { style: { display: 'grid', gap: 16 } },
-          field('Customer', 'گاہک', h('select', { value: np.customerId, onChange: e => set('customerId', e.target.value), style: inpStyle }, h('option', { value: '' }, 'Select customer…'), this.state.customers.map(c => h('option', { key: c.id, value: c.id }, c.name + ' · ' + c.phone)))),
-          field('Product', 'مصنوعات', h('select', { value: np.productId, onChange: e => { const p = this.state.products.find(x => x.id === e.target.value); this.setState({ newPlan: { ...np, productId: e.target.value, totalPrice: p ? String(p.price) : '' } }); }, style: inpStyle }, h('option', { value: '' }, 'Select product…'), this.state.products.map(p => h('option', { key: p.id, value: p.id }, p.name + ' — ' + this.fmtPKR(p.price))))),
+          field('Customer', 'گاہک', h('select', { value: np.customerId, onChange: e => set('customerId', e.target.value), style: inpStyle }, h('option', { value: '' }, 'Select customer…'), this.activeCustomers().map(c => h('option', { key: c.id, value: c.id }, c.name + ' · ' + c.phone)))),
+          field('Product', 'مصنوعات', h('select', { value: np.productId, onChange: e => { const p = this.state.products.find(x => x.id === e.target.value); this.setState({ newPlan: { ...np, productId: e.target.value, totalPrice: p ? String(p.price) : '' } }); }, style: inpStyle }, h('option', { value: '' }, 'Select product…'), this.activeProducts().map(p => h('option', { key: p.id, value: p.id }, p.name + ' — ' + this.fmtPKR(p.price))))),
           h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
             field('Sale Price (Rs)', 'فروخت قیمت', h('input', { type: 'number', value: np.totalPrice, onChange: e => set('totalPrice', e.target.value), placeholder: 'e.g. 165000', style: inpStyle })),
             field('Down Payment (Rs)', 'ایڈوانس', h('input', { type: 'number', value: np.downPayment, onChange: e => set('downPayment', e.target.value), placeholder: '0', style: inpStyle })),
@@ -1775,11 +1778,11 @@ export default class App extends React.Component {
           h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
             h('div', {},
               h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Customer ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'گاہک')),
-              h('select', { value: em.draftCustomerId, onChange: e => setDraft('draftCustomerId', e.target.value), style: { ...inpStyle, width: '100%' } }, this.state.customers.map(cx => h('option', { key: cx.id, value: cx.id }, cx.name + ' · ' + cx.phone))),
+              h('select', { value: em.draftCustomerId, onChange: e => setDraft('draftCustomerId', e.target.value), style: { ...inpStyle, width: '100%' } }, this.activeCustomers().map(cx => h('option', { key: cx.id, value: cx.id }, cx.name + ' · ' + cx.phone))),
             ),
             h('div', {},
               h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Product ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'مصنوعات')),
-              h('select', { value: em.draftProductId, onChange: e => setDraft('draftProductId', e.target.value), style: { ...inpStyle, width: '100%' } }, this.state.products.map(px => h('option', { key: px.id, value: px.id }, px.name + ' — ' + this.fmtPKR(px.price)))),
+              h('select', { value: em.draftProductId, onChange: e => setDraft('draftProductId', e.target.value), style: { ...inpStyle, width: '100%' } }, this.activeProducts().map(px => h('option', { key: px.id, value: px.id }, px.name + ' — ' + this.fmtPKR(px.price)))),
             ),
           ),
           h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } },
