@@ -252,7 +252,7 @@ export default class App extends React.Component {
   }
 
   customerStats(cId) {
-    const cPlans = this.state.plans.filter(p => p.customerId === cId);
+    const cPlans = this.state.plans.filter(p => p.customerId === cId).sort((a, b) => (b.startDate || '').localeCompare(a.startDate || '') || (b.id || '').localeCompare(a.id || ''));
     let total = 0, paid = 0, overdue = 0;
     cPlans.forEach(pl => {
       const st = this.planStats(pl);
@@ -946,7 +946,7 @@ export default class App extends React.Component {
   renderPlans() {
     const h = this.h;
     const filter = this.state.planFilter || 'all';
-    let plans = this.state.plans;
+    let plans = this.state.plans.slice().sort((a, b) => (b.startDate || '').localeCompare(a.startDate || '') || (b.id || '').localeCompare(a.id || ''));
     if (filter === 'active') plans = plans.filter(p => p.status === 'active');
     if (filter === 'completed') plans = plans.filter(p => p.status === 'completed');
     if (filter === 'overdue') plans = plans.filter(p => this.planStats(p).overdue.length > 0);
