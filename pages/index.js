@@ -553,10 +553,42 @@ export default class App extends React.Component {
     if (!pl) return;
     const financed0 = Math.max(0, (pl.total || 0) - (pl.down || 0));
     const initAmt = String(Math.round(financed0 * (pl.interest || 0) / 100));
-    const doOpen = () => this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftInterestAmount: initAmt, draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
+    const firstUnpaid = pl.schedule.find(s => !s.paid);
+    const initInst = String(firstUnpaid ? firstUnpaid.amount : (pl.installmentAmount || pl.monthly || 0));
+    const doOpen = () => this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftInterestAmount: initAmt, draftInstallmentAmount: initInst, draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftNotes: pl.notes || '' } });
     this.requirePin(doOpen);
   };
-  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftInstallmentAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
+  // Rebuilds the unpaid part of a schedule so it sums to total2Pay, keeping paid
+  // installments untouched. With a fixed installment amount it produces clean
+  // "amt × N + remainder" installments; otherwise it splits equally.
+  _rebuildSchedule(draftSchedule, total2Pay, installAmt, freq, freqDays, startBase) {
+    const paidList = draftSchedule.filter(s => s.paid);
+    const oldUnpaid = draftSchedule.filter(s => !s.paid);
+    const paidSum = paidList.reduce((a, s) => a + s.amount, 0);
+    const remain = Math.max(0, Math.round(total2Pay - paidSum));
+    const stepDate = (idx) => {
+      const d = new Date(startBase);
+      if (freq === 'days') d.setDate(d.getDate() + idx * freqDays);
+      else d.setMonth(d.getMonth() + idx);
+      return d.toISOString().slice(0, 10);
+    };
+    let unpaidAmounts = [];
+    if (installAmt > 0 && remain > 0) {
+      let r = remain, guard = 0;
+      while (r > 0.5 && guard < 600) { const amt = Math.min(installAmt, Math.round(r)); unpaidAmounts.push(amt); r -= amt; guard++; }
+    } else if (oldUnpaid.length > 0 && remain > 0) {
+      const per = Math.round(remain / oldUnpaid.length);
+      unpaidAmounts = oldUnpaid.map((_, i) => i === oldUnpaid.length - 1 ? Math.round(remain - per * (oldUnpaid.length - 1)) : per);
+    }
+    const schedule = paidList.map((s, i) => ({ ...s, n: i + 1 }));
+    unpaidAmounts.forEach((amt, j) => {
+      const globalIdx = paidList.length + j;
+      const dueDate = j < oldUnpaid.length ? oldUnpaid[j].dueDate : stepDate(globalIdx);
+      schedule.push({ n: globalIdx + 1, dueDate, amount: amt, paid: false, paidDate: null });
+    });
+    return schedule;
+  }
   _doSaveEditPlan = () => {
     const em = this.state.editPlanModal;
     const plans = this.state.plans.map(pl => {
@@ -570,23 +602,16 @@ export default class App extends React.Component {
       const profit = Math.max(0, hasDirect ? directAmt : financed * Math.min(parseFloat(em.draftInterest) || 0, 100) / 100);
       const interest = financed > 0 ? (profit / financed) * 100 : 0;
       const total2Pay = financed + profit;
-      // Rebuild the schedule so it always sums to total2Pay: keep paid installments and
-      // their due dates, redistribute the remainder equally across the unpaid ones.
-      const paidSum = em.draftSchedule.filter(s => s.paid).reduce((a, s) => a + s.amount, 0);
-      const unpaid = em.draftSchedule.filter(s => !s.paid);
-      const remain = Math.max(0, total2Pay - paidSum);
-      const per = unpaid.length > 0 ? Math.round(remain / unpaid.length) : 0;
-      let u = 0;
-      const schedule = em.draftSchedule.map(s => {
-        if (s.paid) return s;
-        u++;
-        const amt = u === unpaid.length ? Math.round(remain - per * (unpaid.length - 1)) : per;
-        return { ...s, amount: amt };
-      });
+      const installAmt = parseFloat(em.draftInstallmentAmount) || 0;
+      const freq = pl.frequency || 'monthly';
+      const freqDays = parseInt(pl.frequencyDays) || 30;
+      const startBase = em.draftStartDate || pl.startDate || new Date().toISOString().slice(0, 10);
+      const schedule = this._rebuildSchedule(em.draftSchedule, total2Pay, installAmt, freq, freqDays, startBase);
       const allPaid = schedule.length > 0 && schedule.every(s => s.paid);
       const months = schedule.length;
-      const monthly = unpaid.length > 0 ? per : (months > 0 ? Math.round(total2Pay / months) : 0);
-      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, startDate: em.draftStartDate || pl.startDate, months, schedule, imei: em.draftImei, chassisNo: em.draftChassisNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
+      const firstUnpaid = schedule.find(s => !s.paid);
+      const monthly = installAmt > 0 ? installAmt : (firstUnpaid ? firstUnpaid.amount : (months > 0 ? Math.round(total2Pay / months) : 0));
+      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, installmentAmount: installAmt, startDate: em.draftStartDate || pl.startDate, months, schedule, imei: em.draftImei, chassisNo: em.draftChassisNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
     });
     this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftNotes: '' } });
   };
@@ -1846,6 +1871,28 @@ export default class App extends React.Component {
                 h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Markup % ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'منافع %')),
                 h('input', { type: 'number', max: 100, min: 0, value: em.draftInterest, onChange: e => { const raw = e.target.value; const pct = Math.min(parseFloat(raw) || 0, 100); const amt = Math.round(financed * pct / 100); this.setState({ editPlanModal: { ...this.state.editPlanModal, draftInterest: (parseFloat(raw) > 100 ? '100' : raw), draftInterestAmount: financed > 0 ? String(amt) : em.draftInterestAmount } }); }, style: { ...inpStyle, width: '100%' } }),
               ),
+            );
+          })(),
+          (() => {
+            const financed = Math.max(0, (parseFloat(em.draftTotal) || 0) - (parseFloat(em.draftDown) || 0));
+            const dAmt = parseFloat(em.draftInterestAmount);
+            const profit = Math.max(0, (em.draftInterestAmount !== '' && !isNaN(dAmt)) ? dAmt : financed * Math.min(parseFloat(em.draftInterest) || 0, 100) / 100);
+            const total2Pay = financed + profit;
+            const paidSum = em.draftSchedule.filter(s => s.paid).reduce((a, s) => a + s.amount, 0);
+            const remain = Math.max(0, Math.round(total2Pay - paidSum));
+            const installAmt = parseFloat(em.draftInstallmentAmount) || 0;
+            let preview = 'Leave blank to split the balance equally';
+            if (installAmt > 0 && remain > 0) {
+              const full = Math.floor(remain / installAmt);
+              const rem = remain - full * installAmt;
+              preview = rem > 0
+                ? (full > 0 ? this.fmtPKR(installAmt) + ' × ' + full + '  +  ' + this.fmtPKR(rem) + ' × 1' : this.fmtPKR(rem) + ' × 1')
+                : this.fmtPKR(installAmt) + ' × ' + full;
+            }
+            return h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Installment Amount ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'قسط کی رقم')),
+              h('input', { type: 'number', min: 0, value: em.draftInstallmentAmount, onChange: e => setDraft('draftInstallmentAmount', e.target.value), placeholder: 'e.g. 3000', style: { ...inpStyle, width: '100%' } }),
+              h('div', { style: { marginTop: 6, background: '#eaf5ee', borderRadius: 8, padding: '7px 10px', fontSize: 12, color: '#0f6b4b', fontWeight: 600 } }, preview),
             );
           })(),
           h('div', { style: { display: 'grid', gridTemplateColumns: isMobile || isBike ? '1fr 1fr' : '1fr', gap: 10 } },
