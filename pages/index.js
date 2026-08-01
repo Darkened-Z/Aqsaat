@@ -339,10 +339,8 @@ export default class App extends React.Component {
     const down = parseFloat(np.downPayment) || 0;
     const financed = Math.max(0, total - down);
     const rawPct = Math.min(parseFloat(np.interest) || 0, 100);
-    const profit = np.interestType === 'amount'
-      ? parseFloat(np.interestAmount) || 0
-      : financed * rawPct / 100;
-    const profitPct = np.interestType === 'amount' && financed > 0 ? Math.min((profit / financed) * 100, 100) : rawPct;
+    const profit = financed * rawPct / 100;
+    const profitPct = rawPct;
     const total2Pay = Math.max(0, financed + profit);
     const installAmt = parseFloat(np.installmentAmount) || 0;
     const fixedMonths = parseInt(np.customMonths || np.months) || 6;
@@ -970,7 +968,7 @@ export default class App extends React.Component {
     const total = parseFloat(np.totalPrice) || (product ? product.price : 0);
     const down = parseFloat(np.downPayment) || 0;
     const financed = Math.max(0, total - down);
-    const profit = np.interestType === 'amount' ? parseFloat(np.interestAmount) || 0 : financed * Math.min(parseFloat(np.interest) || 0, 100) / 100;
+    const profit = financed * Math.min(parseFloat(np.interest) || 0, 100) / 100;
     const installAmt = parseFloat(np.installmentAmount) || 0;
     const total2Pay = Math.max(0, financed + profit);
     let fullInst = 0, remainder = 0, months, monthly;
@@ -1002,17 +1000,17 @@ export default class App extends React.Component {
             field('Sale Price (Rs)', 'فروخت قیمت', h('input', { type: 'number', value: np.totalPrice, onChange: e => set('totalPrice', e.target.value), placeholder: 'e.g. 165000', style: inpStyle })),
             field('Down Payment (Rs)', 'ایڈوانس', h('input', { type: 'number', value: np.downPayment, onChange: e => set('downPayment', e.target.value), placeholder: '0', style: inpStyle })),
           ),
-          field('Profit / Munafa', 'منافع',
-            h('div', { style: { display: 'grid', gap: 8 } },
-              h('div', { style: { display: 'flex', gap: 6 } },
-                h('button', { type: 'button', onClick: () => set('interestType', 'percent'), style: { flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: np.interestType === 'percent' ? '#0f6b4b' : '#fdfcf8', color: np.interestType === 'percent' ? 'white' : '#3a4a3f', border: '1px solid ' + (np.interestType === 'percent' ? '#0f6b4b' : '#ece8dc') } }, '% Percentage'),
-                h('button', { type: 'button', onClick: () => set('interestType', 'amount'), style: { flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: np.interestType === 'amount' ? '#0f6b4b' : '#fdfcf8', color: np.interestType === 'amount' ? 'white' : '#3a4a3f', border: '1px solid ' + (np.interestType === 'amount' ? '#0f6b4b' : '#ece8dc') } }, 'Rs Amount'),
-              ),
-              np.interestType === 'percent'
-                ? h('input', { type: 'number', value: np.interest, max: 100, min: 0, onChange: e => { const v = parseFloat(e.target.value); if (v > 100) { set('interest', '100'); } else { set('interest', e.target.value); } }, placeholder: '12', style: inpStyle })
-                : h('input', { type: 'number', value: np.interestAmount, onChange: e => set('interestAmount', e.target.value), placeholder: 'e.g. 5000', style: inpStyle }),
-            ),
-          ),
+          (() => {
+            const t = parseFloat(np.totalPrice) || 0;
+            const d = parseFloat(np.downPayment) || 0;
+            const fin = Math.max(0, t - d);
+            const pct = parseFloat(np.interest) || 0;
+            const amt = Math.round(fin * pct / 100);
+            return h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+              field('Profit Rs', 'منافع رقم', h('input', { type: 'number', min: 0, value: amt, onChange: e => { const a = parseFloat(e.target.value) || 0; const p = fin > 0 ? Math.min((a / fin) * 100, 100) : 0; set('interest', String(Math.round(p * 100) / 100)); }, placeholder: 'e.g. 5000', style: inpStyle })),
+              field('Markup %', 'منافع %', h('input', { type: 'number', max: 100, min: 0, value: np.interest, onChange: e => { const v = parseFloat(e.target.value); set('interest', v > 100 ? '100' : e.target.value); }, placeholder: '12', style: inpStyle })),
+            );
+          })(),
           field('Installments', 'اقساط کی تعداد',
             h('div', { style: { display: 'grid', gap: 8 } },
               h('div', { style: { display: 'flex', gap: 4, flexWrap: 'wrap' } },
