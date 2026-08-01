@@ -334,10 +334,11 @@ export default class App extends React.Component {
     const total = parseFloat(np.totalPrice) || product.price;
     const down = parseFloat(np.downPayment) || 0;
     const financed = Math.max(0, total - down);
+    const rawPct = Math.min(parseFloat(np.interest) || 0, 100);
     const profit = np.interestType === 'amount'
       ? parseFloat(np.interestAmount) || 0
-      : financed * (parseFloat(np.interest) || 0) / 100;
-    const profitPct = np.interestType === 'amount' && financed > 0 ? (profit / financed) * 100 : parseFloat(np.interest) || 0;
+      : financed * rawPct / 100;
+    const profitPct = np.interestType === 'amount' && financed > 0 ? Math.min((profit / financed) * 100, 100) : rawPct;
     const total2Pay = Math.max(0, financed + profit);
     const installAmt = parseFloat(np.installmentAmount) || 0;
     const fixedMonths = parseInt(np.customMonths || np.months) || 6;
@@ -964,7 +965,7 @@ export default class App extends React.Component {
     const total = parseFloat(np.totalPrice) || (product ? product.price : 0);
     const down = parseFloat(np.downPayment) || 0;
     const financed = Math.max(0, total - down);
-    const profit = np.interestType === 'amount' ? parseFloat(np.interestAmount) || 0 : financed * (parseFloat(np.interest) || 0) / 100;
+    const profit = np.interestType === 'amount' ? parseFloat(np.interestAmount) || 0 : financed * Math.min(parseFloat(np.interest) || 0, 100) / 100;
     const installAmt = parseFloat(np.installmentAmount) || 0;
     const total2Pay = Math.max(0, financed + profit);
     let fullInst = 0, remainder = 0, months, monthly;
@@ -1003,7 +1004,7 @@ export default class App extends React.Component {
                 h('button', { onClick: () => set('interestType', 'amount'), style: { flex: 1, padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: np.interestType === 'amount' ? '#0f6b4b' : '#fdfcf8', color: np.interestType === 'amount' ? 'white' : '#3a4a3f', border: '1px solid ' + (np.interestType === 'amount' ? '#0f6b4b' : '#ece8dc') } }, 'Rs Amount'),
               ),
               np.interestType === 'percent'
-                ? h('input', { type: 'number', value: np.interest, onChange: e => set('interest', e.target.value), placeholder: '12', style: inpStyle })
+                ? h('input', { type: 'number', value: np.interest, max: 100, min: 0, onChange: e => { const v = parseFloat(e.target.value); if (v > 100) { set('interest', '100'); } else { set('interest', e.target.value); } }, placeholder: '12', style: inpStyle })
                 : h('input', { type: 'number', value: np.interestAmount, onChange: e => set('interestAmount', e.target.value), placeholder: 'e.g. 5000', style: inpStyle }),
             ),
           ),
@@ -1068,7 +1069,8 @@ export default class App extends React.Component {
 
     const profitOf = (pl) => {
       const financed = Math.max(0, pl.total - pl.down);
-      return financed * (pl.interest || 0) / 100;
+      const scheduleTotal = pl.schedule.reduce((a, s) => a + s.amount, 0);
+      return Math.max(0, scheduleTotal - financed);
     };
     const totalProfit = this.state.plans.reduce((a, pl) => a + profitOf(pl), 0);
     const earnedProfit = this.state.plans.reduce((a, pl) => {
