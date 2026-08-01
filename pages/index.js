@@ -1072,8 +1072,8 @@ export default class App extends React.Component {
 
     const profitOf = (pl) => {
       const financed = Math.max(0, pl.total - pl.down);
-      const scheduleTotal = pl.schedule.reduce((a, s) => a + s.amount, 0);
-      return Math.max(0, scheduleTotal - financed);
+      const pct = Math.min(Math.max(pl.interest || 0, 0), 100);
+      return financed * pct / 100;
     };
     const totalProfit = this.state.plans.reduce((a, pl) => a + profitOf(pl), 0);
     const earnedProfit = this.state.plans.reduce((a, pl) => {
@@ -1896,9 +1896,9 @@ export default class App extends React.Component {
     const dots = [];
     for (let i = 0; i < len; i++) dots.push(h('div', { key: i, style: { width: 18, height: 18, borderRadius: '50%', background: i < pin.length ? dotColor : 'transparent', border: '2px solid ' + (i < pin.length ? dotColor : '#c5c0b0'), transition: 'all .15s ease', transform: i === pin.length - 1 && pin.length > 0 ? 'scale(1.2)' : 'scale(1)' } }));
     const keys = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','del']];
-    const btnBase = { width: 64, height: 52, borderRadius: 14, border: '1px solid #ece8dc', background: '#fdfcf8', fontSize: 22, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a2b1f', transition: 'background .1s' };
+    const btnBase = { width: 72, height: 60, borderRadius: 14, border: '1px solid #ece8dc', background: '#fdfcf8', fontSize: 24, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a2b1f', transition: 'background .1s', touchAction: 'manipulation', userSelect: 'none', WebkitTapHighlightColor: 'transparent' };
     return h('div', { onClick: this.closePinModal, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20, backdropFilter: 'blur(6px)' } },
-      h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 24, padding: '32px 28px 24px', width: '100%', maxWidth: 320, animation: 'slideIn .2s ease', textAlign: 'center' } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 24, padding: '32px 24px 24px', width: '100%', maxWidth: 340, animation: 'slideIn .2s ease', textAlign: 'center' } },
         h('div', { style: { fontSize: 36, marginBottom: 8 } }, isReset ? '🛡️' : '🔐'),
         h('div', { style: { fontSize: 17, fontWeight: 800, marginBottom: 2, color: isReset ? '#a4362b' : '#1a2b1f' } }, isReset ? 'Enter Reset PIN' : 'Enter PIN'),
         h('div', { className: 'ur', style: { fontSize: 13, color: '#7a7663', marginBottom: 20 } }, isReset ? '6 ہندسوں کا ری سیٹ PIN درج کریں' : 'PIN درج کریں'),
@@ -1906,10 +1906,10 @@ export default class App extends React.Component {
         pm.error ? h('div', { style: { color: '#d93b3b', fontSize: 13, fontWeight: 600, marginTop: 8, marginBottom: 4 } }, pm.error) : h('div', { style: { height: 25 } }),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', marginTop: 12 } },
           ...keys.map((row, ri) => h('div', { key: ri, style: { display: 'flex', gap: 12 } },
-            ...row.map(k => k === '' ? h('div', { key: 'blank', style: { width: 64, height: 52 } }) : h('button', { key: k, onClick: () => this.pinModalKey(k), style: { ...btnBase, ...(k === 'del' ? { fontSize: 16, color: '#7a7663' } : {}) } }, k === 'del' ? '⌫' : k))
+            ...row.map(k => k === '' ? h('div', { key: 'blank', style: { width: 72, height: 60 } }) : h('button', { key: k, type: 'button', onClick: (e) => { e.stopPropagation(); this.pinModalKey(k); }, style: { ...btnBase, ...(k === 'del' ? { fontSize: 18, color: '#7a7663' } : {}) } }, k === 'del' ? '⌫' : k))
           ))
         ),
-        h('button', { onClick: this.closePinModal, style: { marginTop: 18, background: 'none', border: 'none', color: '#7a7663', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: '8px 20px' } }, 'Cancel / منسوخ'),
+        h('button', { type: 'button', onClick: this.closePinModal, style: { marginTop: 18, background: 'none', border: 'none', color: '#7a7663', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: '8px 20px' } }, 'Cancel / منسوخ'),
       ),
     );
   }
@@ -1921,17 +1921,17 @@ export default class App extends React.Component {
     const dots = [];
     for (let i = 0; i < len; i++) dots.push(h('div', { key: i, style: { width: 18, height: 18, borderRadius: '50%', background: i < pin.length ? '#0f6b4b' : 'transparent', border: i < pin.length ? '2px solid #0f6b4b' : '2px solid #c5c0b0', transition: 'all .15s ease', transform: i === pin.length - 1 && pin.length > 0 ? 'scale(1.2)' : 'scale(1)' } }));
     const keys = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','del']];
-    const btnBase = { width: 72, height: 56, borderRadius: 16, border: '1px solid #ece8dc', background: '#fdfcf8', fontSize: 24, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a2b1f', transition: 'background .1s' };
+    const btnBase = { width: 76, height: 64, borderRadius: 16, border: '1px solid #ece8dc', background: '#fdfcf8', fontSize: 26, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a2b1f', transition: 'background .1s', touchAction: 'manipulation', userSelect: 'none', WebkitTapHighlightColor: 'transparent' };
     return h('div', { style: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef' } },
-      h('div', { style: { textAlign: 'center', width: '100%', maxWidth: 340, padding: '0 16px' } },
+      h('div', { style: { textAlign: 'center', width: '100%', maxWidth: 360, padding: '0 12px' } },
         h('div', { style: { width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 26, margin: '0 auto 16px' } }, 'A'),
         h('div', { style: { fontSize: 22, fontWeight: 800, marginBottom: 2, color: '#1a2b1f' } }, 'Aqsat'),
         h('div', { style: { fontSize: 13, color: '#7a7663', marginBottom: 28 } }, 'Enter PIN to unlock / PIN درج کریں'),
         h('div', { style: { display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 10 } }, ...dots),
         this.state.pinLockError ? h('div', { style: { color: '#d93b3b', fontSize: 13, fontWeight: 600, marginTop: 8, marginBottom: 4, animation: 'shake .3s ease' } }, 'Wrong PIN / غلط PIN') : h('div', { style: { height: 25 } }),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', marginTop: 16 } },
-          ...keys.map((row, ri) => h('div', { key: ri, style: { display: 'flex', gap: 14 } },
-            ...row.map(k => k === '' ? h('div', { key: 'blank', style: { width: 72, height: 56 } }) : h('button', { key: k, onClick: () => this.pinLockKey(k), style: { ...btnBase, ...(k === 'del' ? { fontSize: 18, color: '#7a7663' } : {}) } }, k === 'del' ? '⌫' : k))
+          ...keys.map((row, ri) => h('div', { key: ri, style: { display: 'flex', gap: 12 } },
+            ...row.map(k => k === '' ? h('div', { key: 'blank', style: { width: 76, height: 64 } }) : h('button', { key: k, type: 'button', onClick: () => this.pinLockKey(k), style: { ...btnBase, ...(k === 'del' ? { fontSize: 20, color: '#7a7663' } : {}) } }, k === 'del' ? '⌫' : k))
           ))
         ),
       ),
