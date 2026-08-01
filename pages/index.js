@@ -13,7 +13,7 @@ export default class App extends React.Component {
     customers: null,
     products: null,
     plans: null,
-    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 },
+    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 },
     paymentAmount: '',
     menuOpen: false,
     deletePlanModal: { open: false, planId: null, pinInput: '' },
@@ -35,7 +35,7 @@ export default class App extends React.Component {
     editProductModal: { open: false, id: null, name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
     addProductOpen: false,
     newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
-    settings: { graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, maxLateFee: 5000, businessName: 'Sadar Electronics', ownerName: 'Rehan Malik', city: 'Lahore' },
+    settings: { graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, maxLateFee: 0, businessName: 'Sadar Electronics', ownerName: 'Rehan Malik', city: 'Lahore' },
     searchQuery: '',
     darkMode: false,
     pinLocked: false,
@@ -376,7 +376,7 @@ export default class App extends React.Component {
     const voucherSeq = (this.state.plans.length + 1).toString().padStart(3, '0');
     const voucherNo = 'VCH-' + new Date().getFullYear() + '-' + voucherSeq;
     const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
-    this.setState({ plans: [plan, ...this.state.plans], newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 3, lateFeeFlat: 200, lateFeePerDay: 50, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 } });
+    this.setState({ plans: [plan, ...this.state.plans], newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 } });
     this.go('customer', { id: np.customerId });
   };
 
