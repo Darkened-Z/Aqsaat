@@ -1787,7 +1787,7 @@ export default class App extends React.Component {
               h('select', { value: em.draftProductId, onChange: e => setDraft('draftProductId', e.target.value), style: { ...inpStyle, width: '100%' } }, this.activeProducts().map(px => h('option', { key: px.id, value: px.id }, px.name + ' — ' + this.fmtPKR(px.price)))),
             ),
           ),
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } },
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
             h('div', {},
               h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Total Price ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'قیمت')),
               h('input', { type: 'number', value: em.draftTotal, onChange: e => setDraft('draftTotal', e.target.value), style: { ...inpStyle, width: '100%' } }),
@@ -1796,11 +1796,22 @@ export default class App extends React.Component {
               h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Down Payment ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'ایڈوانس')),
               h('input', { type: 'number', value: em.draftDown, onChange: e => setDraft('draftDown', e.target.value), style: { ...inpStyle, width: '100%' } }),
             ),
-            h('div', {},
-              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Markup % ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'منافع')),
-              h('input', { type: 'number', value: em.draftInterest, onChange: e => setDraft('draftInterest', e.target.value), style: { ...inpStyle, width: '100%' } }),
-            ),
           ),
+          (() => {
+            const financed = Math.max(0, (parseFloat(em.draftTotal) || 0) - (parseFloat(em.draftDown) || 0));
+            const curPct = parseFloat(em.draftInterest) || 0;
+            const curAmt = Math.round(financed * curPct / 100);
+            return h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+              h('div', {},
+                h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Markup % ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'منافع %')),
+                h('input', { type: 'number', max: 100, min: 0, value: em.draftInterest, onChange: e => { const v = parseFloat(e.target.value); setDraft('draftInterest', v > 100 ? '100' : e.target.value); }, style: { ...inpStyle, width: '100%' } }),
+              ),
+              h('div', {},
+                h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Profit Rs ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'منافع رقم')),
+                h('input', { type: 'number', min: 0, value: curAmt, onChange: e => { const amt = parseFloat(e.target.value) || 0; const pct = financed > 0 ? Math.min((amt / financed) * 100, 100) : 0; setDraft('draftInterest', String(Math.round(pct * 100) / 100)); }, style: { ...inpStyle, width: '100%' } }),
+              ),
+            );
+          })(),
           h('div', { style: { display: 'grid', gridTemplateColumns: isMobile || isBike ? '1fr 1fr' : '1fr', gap: 10 } },
             h('div', {},
               h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Start Date ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'آغاز')),
