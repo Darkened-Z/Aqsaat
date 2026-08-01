@@ -402,13 +402,13 @@ export default class App extends React.Component {
     const c = this.state.customers.find(x => x.id === id);
     if (!c) return;
     const g = c.guarantor || {};
-    this.requirePin(() => this.setState({ editCustomerModal: { open: true, id, step: 1, name: c.name, nameUr: c.nameUr || '', fatherName: c.fatherName || '', dob: c.dob || '', cnic: c.cnic || '', phone: c.phone || '', altPhone: c.altPhone || '', occupation: c.occupation || '', monthlyIncome: c.monthlyIncome || '', address: c.address || '', area: c.area || '', city: c.city || '', notes: c.notes || '', guarantorName: g.name || '', guarantorPhone: g.phone || '', guarantorCnic: g.cnic || '', guarantorRelation: g.relation || '' } }));
+    this.requirePin(() => this.setState({ editCustomerModal: { open: true, id, step: 1, name: c.name, nameUr: c.nameUr || '', fatherName: c.fatherName || '', dob: c.dob || '', cnic: c.cnic || '', phone: c.phone || '', altPhone: c.altPhone || '', occupation: c.occupation || '', monthlyIncome: c.monthlyIncome || '', address: c.address || '', area: c.area || '', city: c.city || '', notes: c.notes || '', guarantorName: g.name || '', guarantorPhone: g.phone || '', guarantorCnic: g.cnic || '', guarantorRelation: g.relation || '', documents: c.documents || [] } }));
   };
   closeEditCustomer = () => this.setState({ editCustomerModal: { open: false } });
   saveEditCustomer = () => {
     const ec = this.state.editCustomerModal;
     if (!ec.name || !ec.phone) { alert('Please enter name and phone'); return; }
-    this.updateCustomer(ec.id, { name: ec.name, nameUr: ec.nameUr || ec.name, fatherName: ec.fatherName, dob: ec.dob, cnic: ec.cnic, phone: ec.phone, altPhone: ec.altPhone, occupation: ec.occupation, monthlyIncome: ec.monthlyIncome, address: ec.address, area: ec.area || ec.city, city: ec.city, notes: ec.notes, guarantor: { name: ec.guarantorName, phone: ec.guarantorPhone, cnic: ec.guarantorCnic, relation: ec.guarantorRelation } });
+    this.updateCustomer(ec.id, { name: ec.name, nameUr: ec.nameUr || ec.name, fatherName: ec.fatherName, dob: ec.dob, cnic: ec.cnic, phone: ec.phone, altPhone: ec.altPhone, occupation: ec.occupation, monthlyIncome: ec.monthlyIncome, address: ec.address, area: ec.area || ec.city, city: ec.city, notes: ec.notes, guarantor: { name: ec.guarantorName, phone: ec.guarantorPhone, cnic: ec.guarantorCnic, relation: ec.guarantorRelation }, documents: ec.documents || [] });
     this.closeEditCustomer();
   };
   deleteCustomer = (id) => {
@@ -1456,57 +1456,89 @@ export default class App extends React.Component {
       node,
     );
     const stepper = h('div', { style: { display: 'flex', gap: 8, marginBottom: 24, alignItems: 'center' } },
-      ['Personal', 'Address', 'Guarantor'].map((label, i) => {
-        const n = i + 1; const active = step === n;
+      ['Personal', 'Address', 'Guarantor', 'Documents'].map((label, i) => {
+        const n = i + 1; const active = step === n; const done = step > n;
         return h(React.Fragment, { key: n },
-          h('button', { onClick: () => set('step', n), style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 20, background: active ? '#eaf5ee' : 'transparent', color: active ? '#0f6b4b' : '#7a7663', fontWeight: 600, fontSize: 12 } },
-            h('div', { style: { width: 22, height: 22, borderRadius: '50%', background: active ? '#0f6b4b' : '#e7e2d2', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 } }, n),
+          h('button', { onClick: () => set('step', n), style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 20, background: active ? '#eaf5ee' : 'transparent', color: active || done ? '#0f6b4b' : '#7a7663', fontWeight: 600, fontSize: 12 } },
+            h('div', { style: { width: 22, height: 22, borderRadius: '50%', background: active || done ? '#0f6b4b' : '#e7e2d2', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 } }, done ? '✓' : n),
             label,
           ),
-          i < 2 ? h('div', { style: { flex: 1, height: 1, background: '#ece8dc', maxWidth: 40 } }) : null,
+          i < 3 ? h('div', { style: { flex: 1, height: 1, background: '#ece8dc', maxWidth: 40 } }) : null,
         );
       }),
     );
+    const docs = ec.documents || [];
+    const addDoc = (kind, files) => {
+      const fs = Array.from(files || []).map(f => ({ name: f.name, kind, size: f.size, type: f.type }));
+      set('documents', [...docs, ...fs]);
+    };
+    const removeDoc = (i) => set('documents', docs.filter((_, idx) => idx !== i));
     let content = null;
     if (step === 1) {
       content = h('div', { style: { display: 'grid', gap: 16 } },
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
-          field('Full Name', 'پورا نام', h('input', { value: ec.name, onChange: e => set('name', e.target.value), style: inp }), true),
-          field('Name (Urdu)', 'اردو نام', h('input', { className: 'ur', value: ec.nameUr, onChange: e => set('nameUr', e.target.value), style: { ...inp, textAlign: 'right' } })),
+          field('Full Name', 'پورا نام', h('input', { value: ec.name, onChange: e => set('name', e.target.value), placeholder: 'Muhammad Ali', style: inp }), true),
+          field('Name (Urdu)', 'اردو نام', h('input', { className: 'ur', value: ec.nameUr, onChange: e => set('nameUr', e.target.value), placeholder: 'محمد علی', style: { ...inp, textAlign: 'right' } })),
         ),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
           field("Father's Name", 'والد کا نام', h('input', { value: ec.fatherName, onChange: e => set('fatherName', e.target.value), style: inp })),
           field('Date of Birth', 'تاریخ پیدائش', h('input', { type: 'date', value: ec.dob, onChange: e => set('dob', e.target.value), style: inp })),
         ),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
-          field('CNIC', 'شناختی کارڈ', h('input', { value: ec.cnic, onChange: e => set('cnic', e.target.value), className: 'mono', style: inp }), true),
-          field('Mobile', 'موبائل نمبر', h('input', { value: ec.phone, onChange: e => set('phone', e.target.value), style: inp }), true),
+          field('CNIC', 'شناختی کارڈ', h('input', { value: ec.cnic, onChange: e => set('cnic', e.target.value), placeholder: '35202-1234567-8', style: { ...inp, fontFamily: 'JetBrains Mono, monospace' } }), true),
+          field('Mobile', 'موبائل نمبر', h('input', { value: ec.phone, onChange: e => set('phone', e.target.value), placeholder: '0300-1234567', style: inp }), true),
         ),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
-          field('Alternate Phone', 'متبادل نمبر', h('input', { value: ec.altPhone, onChange: e => set('altPhone', e.target.value), style: inp })),
-          field('Occupation', 'پیشہ', h('input', { value: ec.occupation, onChange: e => set('occupation', e.target.value), style: inp })),
+          field('Alternate Phone', 'متبادل نمبر', h('input', { value: ec.altPhone, onChange: e => set('altPhone', e.target.value), placeholder: '042-1234567', style: inp })),
+          field('Occupation', 'پیشہ', h('input', { value: ec.occupation, onChange: e => set('occupation', e.target.value), placeholder: 'Shopkeeper…', style: inp })),
         ),
-        field('Monthly Income (Rs)', 'ماہانہ آمدنی', h('input', { type: 'number', value: ec.monthlyIncome, onChange: e => set('monthlyIncome', e.target.value), className: 'mono', style: inp })),
+        field('Monthly Income (Rs)', 'ماہانہ آمدنی', h('input', { type: 'number', value: ec.monthlyIncome, onChange: e => set('monthlyIncome', e.target.value), placeholder: '50000', style: inp })),
       );
     } else if (step === 2) {
       content = h('div', { style: { display: 'grid', gap: 16 } },
-        field('Full Address', 'مکمل پتہ', h('textarea', { value: ec.address, onChange: e => set('address', e.target.value), rows: 3, style: { ...inp, resize: 'vertical' } }), true),
+        field('Full Address', 'مکمل پتہ', h('textarea', { value: ec.address, onChange: e => set('address', e.target.value), rows: 3, placeholder: 'House 12, Street 5…', style: { ...inp, resize: 'vertical' } }), true),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
-          field('Area / Locality', 'علاقہ', h('input', { value: ec.area, onChange: e => set('area', e.target.value), style: inp })),
+          field('Area / Locality', 'علاقہ', h('input', { value: ec.area, onChange: e => set('area', e.target.value), placeholder: 'Model Town', style: inp })),
           field('City', 'شہر', h('select', { value: ec.city, onChange: e => set('city', e.target.value), style: inp }, h('option', { value: '' }, 'Select city…'), ['Lahore','Karachi','Islamabad','Rawalpindi','Faisalabad','Multan','Peshawar','Quetta','Sialkot','Gujranwala','Gujrat','Bahawalpur','Sargodha','Rahim Yar Khan','Other'].map(ci => h('option', { key: ci, value: ci }, ci)))),
         ),
-        field('Notes', 'اضافی معلومات', h('textarea', { value: ec.notes, onChange: e => set('notes', e.target.value), rows: 3, style: { ...inp, resize: 'vertical' } })),
+        field('Notes', 'اضافی معلومات', h('textarea', { value: ec.notes, onChange: e => set('notes', e.target.value), rows: 3, placeholder: 'Preferred collection day, landmarks…', style: { ...inp, resize: 'vertical' } })),
       );
-    } else {
+    } else if (step === 3) {
       content = h('div', { style: { display: 'grid', gap: 16 } },
+        h('div', { style: { background: '#fdf2d9', border: '1px solid #f0d894', borderRadius: 10, padding: 12, fontSize: 13, color: '#7a5100' } }, '⚠️ A guarantor is strongly recommended for plans above Rs 50,000.'),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
           field('Guarantor Name', 'ضامن کا نام', h('input', { value: ec.guarantorName, onChange: e => set('guarantorName', e.target.value), style: inp })),
           field('Relation', 'رشتہ', h('select', { value: ec.guarantorRelation, onChange: e => set('guarantorRelation', e.target.value), style: inp }, ['','Father','Brother','Uncle','Cousin','Friend','Colleague','Other'].map(r => h('option', { key: r, value: r }, r || 'Select…')))),
         ),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
-          field('Guarantor Phone', 'ضامن کا فون', h('input', { value: ec.guarantorPhone, onChange: e => set('guarantorPhone', e.target.value), style: inp })),
-          field('Guarantor CNIC', 'ضامن کا شناختی کارڈ', h('input', { value: ec.guarantorCnic, onChange: e => set('guarantorCnic', e.target.value), className: 'mono', style: inp })),
+          field('Guarantor Phone', 'ضامن کا فون', h('input', { value: ec.guarantorPhone, onChange: e => set('guarantorPhone', e.target.value), placeholder: '0300-0000000', style: inp })),
+          field('Guarantor CNIC', 'ضامن کا شناختی کارڈ', h('input', { value: ec.guarantorCnic, onChange: e => set('guarantorCnic', e.target.value), placeholder: '35202-0000000-0', style: { ...inp, fontFamily: 'JetBrains Mono, monospace' } })),
         ),
+      );
+    } else {
+      content = h('div', { style: { display: 'grid', gap: 16 } },
+        h('div', { style: { fontSize: 13, color: '#5a6a5f' } }, "Upload copies of the customer's documents. You can add more later from their profile."),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 10 } },
+          [{ key: 'cnic_front', label: 'CNIC – Front', icon: '🪪' }, { key: 'cnic_back', label: 'CNIC – Back', icon: '🪪' }, { key: 'guarantor_cnic', label: 'Guarantor CNIC', icon: '🪪' }, { key: 'utility_bill', label: 'Utility Bill', icon: '⚡' }, { key: 'salary_slip', label: 'Salary Slip', icon: '💵' }, { key: 'photo', label: 'Customer Photo', icon: '📷' }, { key: 'signed_agreement', label: 'Signed Agreement', icon: '📄' }, { key: 'other', label: 'Other Document', icon: '📎' }].map(d =>
+              h('label', { key: d.key, style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 16, border: '1.5px dashed #d9d5c7', borderRadius: 12, background: '#fdfcf8', cursor: 'pointer', textAlign: 'center' } },
+                h('div', { style: { fontSize: 24 } }, d.icon),
+                h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f' } }, d.label),
+                h('div', { style: { fontSize: 10, color: '#0f6b4b', fontWeight: 600, marginTop: 2 } }, '＋ Upload'),
+                h('input', { type: 'file', accept: 'image/*,.pdf', multiple: true, onChange: e => addDoc(d.key, e.target.files), style: { display: 'none' } }),
+              )),
+        ),
+        docs.length > 0 ? h('div', {},
+          h('div', { style: { fontSize: 12, fontWeight: 700, color: '#3a4a3f', marginBottom: 8, marginTop: 8 } }, 'Uploaded (' + docs.length + ')'),
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+            docs.map((d, i) => h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#eaf5ee', border: '1px solid #cfe0d5', borderRadius: 8 } },
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { fontSize: 13, fontWeight: 600 } }, d.name),
+                h('div', { style: { fontSize: 11, color: '#5a6a5f' } }, d.kind.replace(/_/g, ' ') + ' · ' + Math.round(d.size / 1024) + ' KB'),
+              ),
+              h('button', { onClick: () => removeDoc(i), style: { color: '#a4362b', fontSize: 12, fontWeight: 600 } }, 'Remove'),
+            )),
+          ),
+        ) : null,
       );
     }
     return h('div', { onClick: this.closeEditCustomer, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)', overflow: 'auto' } },
@@ -1522,8 +1554,8 @@ export default class App extends React.Component {
             h('button', { onClick: () => this.deleteCustomer(ec.id), style: { padding: '10px 14px', borderRadius: 10, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 13 } }, '🗑 Delete'),
             h('button', { onClick: () => step > 1 ? set('step', step - 1) : this.closeEditCustomer(), style: { padding: '10px 16px', borderRadius: 10, background: '#f4f1e6', fontWeight: 600, fontSize: 13, color: '#3a4a3f' } }, step > 1 ? '← Back' : 'Cancel'),
           ),
-          h('div', { style: { fontSize: 12, color: '#7a7663', alignSelf: 'center' } }, 'Step ' + step + ' of 3'),
-          step < 3
+          h('div', { style: { fontSize: 12, color: '#7a7663', alignSelf: 'center' } }, 'Step ' + step + ' of 4'),
+          step < 4
             ? h('button', { onClick: () => set('step', step + 1), style: { padding: '10px 20px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, 'Continue →')
             : h('button', { onClick: this.saveEditCustomer, style: { padding: '10px 20px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, '✓ Save Changes'),
         ),
