@@ -88,12 +88,14 @@ export default class App extends React.Component {
 
   _applyCloudData = (d) => {
     this._fromCloud = true;
-    const settings = d.settings || this.state.settings;
+    const local = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings } : null;
+    const merged = local ? this._mergeData(local, d) : { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings };
+    const settings = merged.settings || this.state.settings;
     const cloudPin = settings.pin || '';
     if (cloudPin) { localStorage.setItem('aqsat_pin', cloudPin); }
-    const payload = { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings, syncStatus: 'synced' };
+    const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, syncStatus: 'synced' };
     if (cloudPin) payload.savedPin = cloudPin;
-    localStorage.setItem('aqsat_data', JSON.stringify(d));
+    localStorage.setItem('aqsat_data', JSON.stringify(merged));
     this.setState(payload);
   };
 
