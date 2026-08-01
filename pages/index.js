@@ -1091,10 +1091,13 @@ export default class App extends React.Component {
       monthlyData[key] = { label, collected: 0, profitEarned: 0, plans: 0, down: 0 };
     }
     this.state.plans.forEach(pl => {
-      const startKey = pl.startDate ? pl.startDate.slice(0, 7) : '';
-      if (monthlyData[startKey]) {
-        monthlyData[startKey].plans++;
-        monthlyData[startKey].down += pl.down || 0;
+      const idPart = (pl.id || '').replace(/^pl_/, '');
+      const createdMs = parseInt(idPart, 36);
+      const createdDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
+      const createdKey = createdDate ? createdDate.getFullYear() + '-' + String(createdDate.getMonth() + 1).padStart(2, '0') : '';
+      if (monthlyData[createdKey]) {
+        monthlyData[createdKey].plans++;
+        monthlyData[createdKey].down += pl.down || 0;
       }
       const profit = profitOf(pl);
       const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
