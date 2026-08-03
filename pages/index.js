@@ -35,13 +35,15 @@ export default class App extends React.Component {
     editProductModal: { open: false, id: null, name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
     addProductOpen: false,
     newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
-    settings: { graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, maxLateFee: 0, businessName: 'Sadar Electronics', ownerName: 'Rehan Malik', city: 'Lahore' },
+    settings: { graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, maxLateFee: 0, businessName: 'Sadar Electronics', ownerName: 'Rehan Malik', city: 'Lahore', accounts: [{ id: 'acc_cash', name: 'Cash in Hand', nameUr: 'نقد', emoji: '💵', balance: 0 }, { id: 'acc_ep', name: 'EasyPaisa', nameUr: 'ایزی پیسہ', emoji: '📱', balance: 0 }, { id: 'acc_bank', name: 'Bank', nameUr: 'بینک', emoji: '🏦', balance: 0 }] },
     searchQuery: '',
     darkMode: false,
     pinLocked: false,
     enteredPin: '',
     savedPin: '',
-    paymentMethod: 'cash',
+    paymentAccountId: '',
+    addAccountOpen: false,
+    newAccount: { name: '', nameUr: '', emoji: '💰', balance: '' },
     syncStatus: 'loading', // 'loading' | 'synced' | 'syncing' | 'offline' | 'error'
     syncError: '',
   };
@@ -91,6 +93,9 @@ export default class App extends React.Component {
     const local = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings } : null;
     const merged = local ? this._mergeData(local, d) : { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings };
     const settings = merged.settings || this.state.settings;
+    if (!settings.accounts || !settings.accounts.length) {
+      settings.accounts = [{ id: 'acc_cash', name: 'Cash in Hand', nameUr: 'نقد', emoji: '💵', balance: 0 }, { id: 'acc_ep', name: 'EasyPaisa', nameUr: 'ایزی پیسہ', emoji: '📱', balance: 0 }, { id: 'acc_bank', name: 'Bank', nameUr: 'بینک', emoji: '🏦', balance: 0 }];
+    }
     const cloudPin = settings.pin || '';
     if (cloudPin) { localStorage.setItem('aqsat_pin', cloudPin); }
     const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, syncStatus: 'synced' };
@@ -251,6 +256,16 @@ export default class App extends React.Component {
   }
   activeCustomers() { return (this.state.customers || []).filter(c => !c._deleted); }
   activeProducts() { return (this.state.products || []).filter(p => !p._deleted); }
+  getAccounts() { return (this.state.settings.accounts || []).filter(a => !a._deleted); }
+  accountBalance(accId) {
+    const acc = this.getAccounts().find(a => a.id === accId);
+    const base = acc ? (parseFloat(acc.balance) || 0) : 0;
+    const payments = (this.state.plans || []).reduce((sum, pl) => {
+      return sum + (pl.schedule || []).filter(s => s.paid && s.accountId === accId)
+        .reduce((a, s) => a + (s.amountPaid || s.amount || 0), 0);
+    }, 0);
+    return base + payments;
+  }
 
   planStats(pl) {
     const paid = pl.schedule.filter(s => s.paid);
@@ -319,17 +334,19 @@ export default class App extends React.Component {
     const pl = this.state.plans.find(p => p.id === planId);
     if (!pl) return;
     const s = pl.schedule.find(x => x.n === installmentN) || pl.schedule.find(x => !x.paid);
-    this.setState({ paymentModalOpen: true, paymentContext: { planId, installmentN: s ? s.n : null }, paymentAmount: s ? String(s.amount) : '' });
+    const accs = this.getAccounts();
+    this.setState({ paymentModalOpen: true, paymentContext: { planId, installmentN: s ? s.n : null }, paymentAmount: s ? String(s.amount) : '', paymentAccountId: accs.length > 0 ? accs[0].id : '' });
   }
   closePayment = () => this.setState({ paymentModalOpen: false, paymentContext: null });
   confirmPayment = () => {
     const ctx = this.state.paymentContext;
     const today = new Date().toISOString().slice(0, 10);
     const amountCollected = parseFloat(this.state.paymentAmount) || 0;
+    const accId = this.state.paymentAccountId;
     const plans = this.state.plans.map(pl => {
       if (pl.id !== ctx.planId) return pl;
       const schedule = pl.schedule.map(s => s.n === ctx.installmentN
-        ? { ...s, paid: true, paidDate: today, amountPaid: amountCollected || s.amount, lateFeeCharged: this.computeLateFee(s, pl) }
+        ? { ...s, paid: true, paidDate: today, amountPaid: amountCollected || s.amount, lateFeeCharged: this.computeLateFee(s, pl), accountId: accId || undefined }
         : s);
       const allPaid = schedule.every(s => s.paid);
       return { ...pl, schedule, status: allPaid ? 'completed' : pl.status };
@@ -338,7 +355,8 @@ export default class App extends React.Component {
     const customer = this.state.customers.find(c => c.id === pl.customerId);
     const product = this.state.products.find(p => p.id === pl.productId);
     const s = pl.schedule.find(x => x.n === ctx.installmentN);
-    this.setState({ plans, paymentModalOpen: false, receiptOpen: true, receiptData: { receiptNo: 'RCP-' + Date.now().toString().slice(-6), customer, product, plan: pl, installment: s, date: today, amountCollected: amountCollected || s.amount } });
+    const acc = this.getAccounts().find(a => a.id === accId);
+    this.setState({ plans, paymentModalOpen: false, receiptOpen: true, receiptData: { receiptNo: 'RCP-' + Date.now().toString().slice(-6), customer, product, plan: pl, installment: s, date: today, amountCollected: amountCollected || s.amount, accountName: acc ? acc.emoji + ' ' + acc.name : '' } });
   }
   closeReceipt = () => this.setState({ receiptOpen: false, receiptData: null });
 
@@ -1317,6 +1335,52 @@ export default class App extends React.Component {
       ]),
       h('div', { style: { height: 16 } }),
       this.card([
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 } },
+          h('div', {},
+            h('div', { style: { fontSize: 16, fontWeight: 700 } }, 'Payment Accounts'),
+            h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, 'ادائیگی اکاؤنٹس'),
+          ),
+          h('button', { type: 'button', onClick: () => this.setState({ addAccountOpen: !this.state.addAccountOpen, newAccount: { name: '', nameUr: '', emoji: '💰', balance: '' } }), style: { padding: '6px 12px', borderRadius: 8, background: '#eaf5ee', color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, '+ Add'),
+        ),
+        h('div', { style: { fontSize: 12, color: '#7a7663', marginBottom: 8 } }, 'Accounts where you receive payments. Base balance is your opening amount.'),
+        ...this.getAccounts().map(acc =>
+          h('div', { key: acc.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderTop: '1px solid #f2eee2' } },
+            h('div', { style: { fontSize: 20, width: 36, textAlign: 'center', flexShrink: 0 } }, acc.emoji),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 600, fontSize: 14 } }, acc.name),
+              acc.nameUr ? h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, acc.nameUr) : null,
+              h('div', { className: 'mono', style: { fontSize: 12, color: '#0f6b4b', fontWeight: 600, marginTop: 2 } }, 'Balance: ' + this.fmtPKR(this.accountBalance(acc.id))),
+            ),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 } },
+              h('span', { style: { fontSize: 11, color: '#7a7663' } }, 'Base:'),
+              h('input', { type: 'number', value: acc.balance || '', onChange: e => { const val = e.target.value; this.setState({ settings: { ...this.state.settings, accounts: (this.state.settings.accounts || []).map(a => a.id === acc.id ? { ...a, balance: val === '' ? 0 : parseFloat(val) || 0 } : a) } }); }, placeholder: '0', style: { ...inp, width: 80 } }),
+              h('button', { type: 'button', onClick: () => { if (!confirm('Delete account "' + acc.name + '"?')) return; this.setState({ settings: { ...this.state.settings, accounts: (this.state.settings.accounts || []).map(a => a.id === acc.id ? { ...a, _deleted: true } : a) } }); }, style: { padding: '4px 8px', borderRadius: 6, background: '#fdecea', color: '#a4362b', fontSize: 12, fontWeight: 600 } }, '✕'),
+            ),
+          ),
+        ),
+        this.state.addAccountOpen ? h('div', { style: { borderTop: '1px solid #f2eee2', padding: '12px 0', display: 'flex', flexDirection: 'column', gap: 8 } },
+          h('div', { style: { display: 'flex', gap: 8 } },
+            h('input', { value: this.state.newAccount.emoji, onChange: e => this.setState({ newAccount: { ...this.state.newAccount, emoji: e.target.value } }), placeholder: '💰', style: { ...inp, width: 44, textAlign: 'center', fontSize: 18 } }),
+            h('input', { value: this.state.newAccount.name, onChange: e => this.setState({ newAccount: { ...this.state.newAccount, name: e.target.value } }), placeholder: 'Account name', style: { ...inp, flex: 1 } }),
+          ),
+          h('div', { style: { display: 'flex', gap: 8 } },
+            h('input', { value: this.state.newAccount.nameUr, onChange: e => this.setState({ newAccount: { ...this.state.newAccount, nameUr: e.target.value } }), placeholder: 'اردو نام (optional)', className: 'ur', style: { ...inp, flex: 1 } }),
+            h('input', { type: 'number', value: this.state.newAccount.balance, onChange: e => this.setState({ newAccount: { ...this.state.newAccount, balance: e.target.value } }), placeholder: 'Base balance', style: { ...inp, width: 100 } }),
+          ),
+          h('div', { style: { display: 'flex', gap: 8 } },
+            h('button', { type: 'button', onClick: () => this.setState({ addAccountOpen: false }), style: { flex: 1, padding: '8px 12px', borderRadius: 8, background: '#f4f1e6', fontWeight: 600, fontSize: 12 } }, 'Cancel'),
+            h('button', { type: 'button', onClick: () => {
+              const na = this.state.newAccount;
+              if (!na.name.trim()) { alert('Account name is required'); return; }
+              const id = 'acc_' + Date.now().toString(36);
+              const acc = { id, name: na.name.trim(), nameUr: na.nameUr.trim(), emoji: na.emoji || '💰', balance: parseFloat(na.balance) || 0 };
+              this.setState({ settings: { ...this.state.settings, accounts: [...(this.state.settings.accounts || []), acc] }, addAccountOpen: false, newAccount: { name: '', nameUr: '', emoji: '💰', balance: '' } });
+            }, style: { flex: 2, padding: '8px 12px', borderRadius: 8, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 12 } }, '✓ Add Account'),
+          ),
+        ) : null,
+      ]),
+      h('div', { style: { height: 16 } }),
+      this.card([
         h('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 4 } }, 'Late Fee Rules'),
         h('div', { style: { fontSize: 12, color: '#7a7663', marginBottom: 8 } }, 'Defaults for new plans.'),
         row('Grace period (days)', 'مہلت کے دن', h('input', { type: 'number', value: st.graceDays, onChange: e => setS('graceDays', parseInt(e.target.value) || 0), style: inp })),
@@ -1753,10 +1817,20 @@ export default class App extends React.Component {
           lateFee > 0 ? h('div', { style: { marginTop: 10, padding: '6px 10px', background: '#fdecea', color: '#a4362b', borderRadius: 8, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 } },
             h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(s.amount)), ' installment + ', h('span', { className: 'mono', style: { fontWeight: 700 } }, this.fmtPKR(lateFee)), ' late fee') : null,
         ),
-        h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Payment method'),
-        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 20 } },
-          ['💵 Cash', '📱 EasyPaisa', '🏦 Bank'].map((m, i) => { const k = ['cash','easypaisa','bank'][i]; const active = this.state.paymentMethod === k; return h('button', { key: i, onClick: () => this.setState({ paymentMethod: k }), style: { padding: 12, borderRadius: 10, border: '1px solid ' + (active ? '#0f6b4b' : '#ece8dc'), background: active ? '#eaf5ee' : '#fdfcf8', fontSize: 12, fontWeight: 600, color: active ? '#0f6b4b' : '#3a4a3f' } }, m); }),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f' } }, 'Receive in account'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اکاؤنٹ منتخب کریں'),
         ),
+        (() => { const accs = this.getAccounts(); return accs.length > 0
+          ? h('div', { style: { display: 'grid', gridTemplateColumns: accs.length <= 3 ? 'repeat(' + accs.length + ',1fr)' : 'repeat(2,1fr)', gap: 8, marginBottom: 20 } },
+              accs.map(acc => { const active = this.state.paymentAccountId === acc.id; return h('button', { type: 'button', key: acc.id, onClick: () => this.setState({ paymentAccountId: acc.id }), style: { padding: '10px 8px', borderRadius: 10, border: '1px solid ' + (active ? '#0f6b4b' : '#ece8dc'), background: active ? '#eaf5ee' : '#fdfcf8', fontSize: 12, fontWeight: 600, color: active ? '#0f6b4b' : '#3a4a3f', textAlign: 'center' } },
+                h('div', { style: { fontSize: 16 } }, acc.emoji),
+                h('div', { style: { marginTop: 2 } }, acc.name),
+                h('div', { className: 'mono', style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, 'Bal: ' + this.fmtPKR(this.accountBalance(acc.id))),
+              ); }),
+            )
+          : h('div', { style: { padding: '12px 0', marginBottom: 20, color: '#7a7663', fontSize: 12 } }, 'No accounts set up. Add them in Settings → Payment Accounts.');
+        })(),
         h('div', { style: { display: 'flex', gap: 10 } },
           h('button', { onClick: this.closePayment, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600, color: '#3a4a3f' } }, 'Cancel'),
           h('button', { onClick: this.confirmPayment, style: { flex: 2, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, '✓ Confirm Payment'),
@@ -1777,7 +1851,7 @@ export default class App extends React.Component {
         h('div', { className: 'mono', style: { fontSize: 32, fontWeight: 800, color: '#0f6b4b', margin: '20px 0 4px' } }, this.fmtPKR(r.amountCollected != null ? r.amountCollected : r.installment.amount)),
         h('div', { style: { fontSize: 12, color: '#7a7663' } }, 'Receipt #' + r.receiptNo),
         h('div', { style: { textAlign: 'left', background: '#fdfcf8', border: '1px dashed #d9d5c7', borderRadius: 12, padding: 16, marginTop: 20, fontSize: 13 } },
-          [['Customer', r.customer.name], ['Product', r.product.name], ['Installment', r.installment.n + ' / ' + r.plan.months], ['Voucher', r.plan.voucherNo || '—'], ['Date', this.fmtDate(r.date)]].map(([l, v], i) =>
+          [['Customer', r.customer.name], ['Product', r.product.name], ['Installment', r.installment.n + ' / ' + r.plan.months], ['Account', r.accountName || '—'], ['Voucher', r.plan.voucherNo || '—'], ['Date', this.fmtDate(r.date)]].map(([l, v], i) =>
             h('div', { key: i, style: { display: 'flex', justifyContent: 'space-between', padding: '4px 0' } },
               h('span', { style: { color: '#7a7663' } }, l), h('span', { style: { fontWeight: 600 } }, v))),
         ),
