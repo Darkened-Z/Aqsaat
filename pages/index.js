@@ -1461,6 +1461,79 @@ export default class App extends React.Component {
     );
   }
 
+  renderAccounts() {
+    const h = this.h;
+    const accs = this.getAccounts();
+    const allTx = [];
+    (this.state.plans || []).forEach(pl => {
+      const c = (this.state.customers || []).find(x => x.id === pl.customerId);
+      const p = (this.state.products || []).find(x => x.id === pl.productId);
+      (pl.schedule || []).forEach(s => {
+        if (s.paid && s.accountId) allTx.push({ accountId: s.accountId, amount: s.amountPaid || s.amount, date: s.paidDate, customer: c, product: p, plan: pl, installment: s });
+      });
+    });
+    allTx.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const totalBalance = accs.reduce((sum, acc) => sum + this.accountBalance(acc.id), 0);
+
+    return h('div', { className: 'screen', style: { maxWidth: 720 } },
+      this.card([
+        h('div', { style: { textAlign: 'center', padding: '8px 0 4px' } },
+          h('div', { style: { fontSize: 11, fontWeight: 600, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Total Balance'),
+          h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, 'کل بیلنس'),
+          h('div', { className: 'mono', style: { fontSize: 32, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(totalBalance)),
+          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 4 } }, accs.length + ' accounts'),
+        ),
+      ]),
+      h('div', { style: { height: 12 } }),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 } },
+        ...accs.map(acc => {
+          const bal = this.accountBalance(acc.id);
+          const base = parseFloat(acc.balance) || 0;
+          const received = bal - base;
+          return this.card([
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 } },
+              h('div', { style: { fontSize: 24, width: 40, height: 40, borderRadius: 10, background: '#eaf5ee', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }, acc.emoji),
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { fontWeight: 700, fontSize: 14 } }, acc.name),
+                acc.nameUr ? h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, acc.nameUr) : null,
+              ),
+            ),
+            h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#1a2b1f', marginBottom: 8 } }, this.fmtPKR(bal)),
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#7a7663', borderTop: '1px solid #f2eee2', paddingTop: 8 } },
+              h('span', {}, 'Base: ' + this.fmtPKR(base)),
+              h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+ ' + this.fmtPKR(received) + ' received'),
+            ),
+          ]);
+        }),
+      ),
+      h('div', { style: { height: 12 } }),
+      this.card([
+        this.sectionHeader('Recent Transactions', 'حالیہ لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, allTx.length + ' total')),
+        allTx.length === 0
+          ? h('div', { style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No payments recorded to any account yet.')
+          : allTx.slice(0, 20).map((tx, i) => {
+            const acc = accs.find(a => a.id === tx.accountId);
+            return h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+              h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, acc ? acc.emoji : '💰'),
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.customer ? tx.customer.name : 'Unknown'),
+                h('div', { style: { fontSize: 11, color: '#7a7663', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                  (tx.product ? tx.product.name : '') + ' · #' + tx.installment.n + '/' + tx.plan.months + (acc ? ' · ' + acc.name : ''),
+                ),
+              ),
+              h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: '#0f6b4b' } }, '+ ' + this.fmtPKR(tx.amount)),
+                h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(tx.date)),
+              ),
+            );
+          }),
+      ]),
+      h('div', { style: { textAlign: 'center', padding: '16px 0' } },
+        h('button', { type: 'button', onClick: () => this.go('settings'), style: { padding: '10px 20px', borderRadius: 10, background: '#f4f1e6', fontWeight: 600, fontSize: 13, color: '#3a4a3f' } }, '⚙ Manage Accounts in Settings'),
+      ),
+    );
+  }
+
   renderAddCustomer() {
     const h = this.h;
     const nc = this.state.newCustomer;
@@ -2117,6 +2190,7 @@ export default class App extends React.Component {
       record:     ['Record Payment', 'رقم وصول', 'Fast collection'],
       reports:    ['Reports',   'رپورٹس',    'Cashflow & analytics'],
       reminders:  ['Reminders', 'یاد دہانی', 'Follow-ups & notifications'],
+      accounts:   ['Accounts',  'اکاؤنٹس',  'Payment accounts & balances'],
       settings:   ['Settings',  'ترتیبات',   'Business preferences'],
     };
     const t = titles[route] || titles.dashboard;
@@ -2133,6 +2207,7 @@ export default class App extends React.Component {
       { key: 'products',  label: 'Products',   icon: '📦', go: () => this.go('products') },
       { key: 'reports',   label: 'Reports',    icon: '📊', go: () => this.go('reports') },
       { key: 'reminders', label: 'Reminders',  icon: '🔔', go: () => this.go('reminders'), badge: overdueCount > 0 ? String(overdueCount) : null },
+      { key: 'accounts',  label: 'Accounts',   icon: '💰', go: () => this.go('accounts') },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -2224,6 +2299,7 @@ export default class App extends React.Component {
             {route === 'record'     && this.renderRecordPayment()}
             {route === 'reports'    && this.renderReports()}
             {route === 'reminders'  && this.renderReminders()}
+            {route === 'accounts'   && this.renderAccounts()}
             {route === 'settings'   && this.renderSettings()}
           </div>
         </main>
