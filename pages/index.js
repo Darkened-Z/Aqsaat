@@ -48,9 +48,13 @@ export default class App extends React.Component {
     syncStatus: 'loading', // 'loading' | 'synced' | 'syncing' | 'offline' | 'error'
     syncError: '',
     ledger: null,
+    udpiEntries: null,
     ledgerModal: { open: false, type: 'expense', amount: '', accountId: '', category: '', note: '', date: new Date().toISOString().slice(0, 10), editId: null },
     ledgerFilter: 'all',
     ledgerMonthFilter: '',
+    ledgerSearch: '',
+    recurringModal: { open: false, editId: null, type: 'expense', amount: '', accountId: '', category: '', note: '', day: 1 },
+    udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: new Date().toISOString().slice(0, 10) },
   };
 
   componentDidMount() {
@@ -77,11 +81,10 @@ export default class App extends React.Component {
 
   componentDidUpdate(_, prev) {
     if (typeof window === 'undefined') return;
-    const { customers, products, plans, settings, ledger } = this.state;
+    const { customers, products, plans, settings, ledger, udpiEntries } = this.state;
     if (!customers) return;
-    // Skip push if this state change came FROM a cloud sync (prevents write loops)
     if (this._fromCloud) { this._fromCloud = false; return; }
-    if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings || ledger !== prev.ledger) {
+    if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings || ledger !== prev.ledger || udpiEntries !== prev.udpiEntries) {
       clearTimeout(this._syncTimer);
       this._syncTimer = setTimeout(this.pushToSupabase, 1200);
     }
@@ -95,18 +98,18 @@ export default class App extends React.Component {
 
   _applyCloudData = (d) => {
     this._fromCloud = true;
-    const local = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [] } : null;
-    const merged = local ? this._mergeData(local, d) : { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, ledger: d.ledger || [] };
+    const local = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [] } : null;
+    const merged = local ? this._mergeData(local, d) : { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, ledger: d.ledger || [], udpiEntries: d.udpiEntries || [] };
     const settings = merged.settings || this.state.settings;
     if (!settings.accounts || !settings.accounts.length) {
       settings.accounts = [{ id: 'acc_cash', name: 'Cash in Hand', nameUr: 'نقد', emoji: '💵', balance: 0 }, { id: 'acc_ep', name: 'EasyPaisa', nameUr: 'ایزی پیسہ', emoji: '📱', balance: 0 }, { id: 'acc_bank', name: 'Bank', nameUr: 'بینک', emoji: '🏦', balance: 0 }];
     }
     const cloudPin = settings.pin || '';
     if (cloudPin) { localStorage.setItem('aqsat_pin', cloudPin); }
-    const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, ledger: merged.ledger || [], syncStatus: 'synced' };
+    const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], syncStatus: 'synced' };
     if (cloudPin) payload.savedPin = cloudPin;
     localStorage.setItem('aqsat_data', JSON.stringify(merged));
-    this.setState(payload);
+    this.setState(payload, () => this.processRecurring());
   };
 
   initSupabaseSync = async () => {
@@ -127,7 +130,7 @@ export default class App extends React.Component {
         const localCount = (localData?.plans?.length || 0) + (localData?.customers?.length || 0);
         if (localCount > 0) {
           // Push local data up to cloud and use it
-          this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], syncStatus: 'synced' }, this.pushToSupabase);
+          this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], udpiEntries: localData.udpiEntries || [], syncStatus: 'synced' }, this.pushToSupabase);
         } else {
           this.seed();
           this.setState({ syncStatus: 'synced' });
@@ -137,7 +140,7 @@ export default class App extends React.Component {
       // Network error — load localStorage silently, retry sync on next interaction
       let localData = null;
       try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch(e) {}
-      if (localData?.customers) this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [] });
+      if (localData?.customers) this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], udpiEntries: localData.udpiEntries || [] });
       else this.seed();
       this.setState({ syncStatus: 'offline', syncError: err.message || '' });
       return;
@@ -163,7 +166,7 @@ export default class App extends React.Component {
         localStorage.setItem('aqsat_data', JSON.stringify(merged));
         const cloudPin = (merged.settings || {}).pin || '';
         if (cloudPin) localStorage.setItem('aqsat_pin', cloudPin);
-        this.setState({ ...merged, syncStatus: 'synced', ...(cloudPin ? { savedPin: cloudPin } : {}) });
+        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], syncStatus: 'synced', ...(cloudPin ? { savedPin: cloudPin } : {}) });
       }
     } catch(e) {}
     this._refetching = false;
@@ -182,22 +185,23 @@ export default class App extends React.Component {
       plans: mergeArr(local.plans, cloud.plans),
       settings: { ...(cloud.settings || {}), ...(local.settings || {}) },
       ledger: mergeArr(local.ledger, cloud.ledger),
+      udpiEntries: mergeArr(local.udpiEntries, cloud.udpiEntries),
     };
   };
 
   pushToSupabase = async () => {
-    const { customers, products, plans, settings, ledger } = this.state;
+    const { customers, products, plans, settings, ledger, udpiEntries } = this.state;
     if (!customers) return;
     this.setState({ syncStatus: 'syncing' });
     try {
       const { data: cloud } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
-      const localData = { customers, products, plans, settings, ledger: ledger || [] };
+      const localData = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [] };
       const merged = cloud?.data ? this._mergeData(localData, cloud.data) : localData;
       localStorage.setItem('aqsat_data', JSON.stringify(merged));
       const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: merged, updated_at: new Date().toISOString() });
       if (!error && merged !== localData) {
         this._fromCloud = true;
-        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], syncStatus: 'synced' });
+        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], syncStatus: 'synced' });
       } else {
         this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
       }
@@ -209,7 +213,7 @@ export default class App extends React.Component {
   };
 
   seed() {
-    this.setState({ customers: [], products: [], plans: [], ledger: [] });
+    this.setState({ customers: [], products: [], plans: [], ledger: [], udpiEntries: [] });
   }
 
   resetAllData = () => {
@@ -218,7 +222,7 @@ export default class App extends React.Component {
     this.requireResetPin(() => {
       if (!confirm('⚠️ FINAL WARNING\nThis will permanently delete ALL customers, products, and plans.\n\nیہ تمام گاہکوں، پروڈکٹس اور پلانز کو مستقل طور پر ڈیلیٹ کر دے گا۔')) return;
       localStorage.removeItem('aqsat_data');
-      this.setState({ customers: [], products: [], plans: [], ledger: [], route: 'dashboard' });
+      this.setState({ customers: [], products: [], plans: [], ledger: [], udpiEntries: [], route: 'dashboard' });
     });
   };
   requireResetPin = (action) => {
@@ -272,7 +276,12 @@ export default class App extends React.Component {
     }, 0);
     const ledgerNet = (this.state.ledger || []).filter(le => !le._deleted && le.accountId === accId)
       .reduce((sum, le) => sum + (le.type === 'income' ? le.amount : -le.amount), 0);
-    return base + payments + ledgerNet;
+    const udpiNet = this.activeUdpiEntries().filter(u => u.accountId === accId)
+      .reduce((sum, u) => {
+        if (u.returned) return sum;
+        return sum + (u.direction === 'borrowed' ? u.amount : -u.amount);
+      }, 0);
+    return base + payments + ledgerNet + udpiNet;
   }
   activeLedger() { return (this.state.ledger || []).filter(le => !le._deleted); }
   ledgerCategories() {
@@ -297,6 +306,111 @@ export default class App extends React.Component {
       ],
     };
   }
+
+  activeUdpiEntries() { return (this.state.udpiEntries || []).filter(u => !u._deleted); }
+  getRecurring() { return (this.state.settings.recurring || []); }
+
+  processRecurring = () => {
+    const now = new Date();
+    const pfx = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const day = now.getDate();
+    const recurring = this.getRecurring();
+    if (!recurring.length) return;
+    let added = 0;
+    const ledger = [...(this.state.ledger || [])];
+    const updatedRec = recurring.map(r => {
+      if (r.lastAdded === pfx) return r;
+      const targetDay = Math.min(r.day || 1, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate());
+      if (day < targetDay) return r;
+      const dateStr = pfx + '-' + String(targetDay).padStart(2, '0');
+      const txId = 'le_rec_' + r.id + '_' + pfx;
+      if (ledger.some(le => le.id === txId)) return { ...r, lastAdded: pfx };
+      ledger.unshift({ id: txId, type: r.type, amount: r.amount, accountId: r.accountId, category: r.category, note: r.note || '(recurring)', date: dateStr });
+      added++;
+      return { ...r, lastAdded: pfx };
+    });
+    if (added) {
+      const settings = { ...this.state.settings, recurring: updatedRec };
+      this.setState({ ledger, settings });
+    }
+  };
+
+  openRecurringModal = (editId) => {
+    const accs = this.getAccounts();
+    if (editId) {
+      const r = this.getRecurring().find(x => x.id === editId);
+      if (!r) return;
+      this.setState({ recurringModal: { open: true, editId, type: r.type, amount: String(r.amount), accountId: r.accountId, category: r.category, note: r.note || '', day: r.day } });
+    } else {
+      this.setState({ recurringModal: { open: true, editId: null, type: 'expense', amount: '', accountId: accs.length > 0 ? accs[0].id : '', category: '', note: '', day: 1 } });
+    }
+  };
+  closeRecurringModal = () => this.setState({ recurringModal: { ...this.state.recurringModal, open: false } });
+  submitRecurring = () => {
+    const m = this.state.recurringModal;
+    const amount = parseFloat(m.amount);
+    if (!amount || amount <= 0) { alert('Enter a valid amount'); return; }
+    if (!m.category) { alert('Select a category'); return; }
+    if (!m.accountId) { alert('Select an account'); return; }
+    const recurring = [...this.getRecurring()];
+    if (m.editId) {
+      const idx = recurring.findIndex(x => x.id === m.editId);
+      if (idx >= 0) recurring[idx] = { ...recurring[idx], type: m.type, amount, accountId: m.accountId, category: m.category, note: m.note, day: m.day };
+    } else {
+      recurring.push({ id: 'rec_' + Date.now().toString(36), type: m.type, amount, accountId: m.accountId, category: m.category, note: m.note, day: m.day });
+    }
+    this.setState({ settings: { ...this.state.settings, recurring }, recurringModal: { ...m, open: false } });
+  };
+  deleteRecurring = (id) => {
+    if (!confirm('Delete this recurring entry?\nیہ بار بار کا اندراج حذف کریں؟')) return;
+    const recurring = this.getRecurring().filter(r => r.id !== id);
+    this.setState({ settings: { ...this.state.settings, recurring } });
+  };
+
+  openUdpiModal = (editId) => {
+    const accs = this.getAccounts();
+    if (editId) {
+      const u = this.activeUdpiEntries().find(x => x.id === editId);
+      if (!u) return;
+      this.setState({ udpiModal: { open: true, editId, direction: u.direction, amount: String(u.amount), person: u.person, accountId: u.accountId, note: u.note || '', date: u.date } });
+    } else {
+      this.setState({ udpiModal: { open: true, editId: null, direction: 'lent', amount: '', person: '', accountId: accs.length > 0 ? accs[0].id : '', note: '', date: this.todayStr() } });
+    }
+  };
+  closeUdpiModal = () => this.setState({ udpiModal: { ...this.state.udpiModal, open: false } });
+  submitUdpiEntry = () => {
+    const m = this.state.udpiModal;
+    const amount = parseFloat(m.amount);
+    if (!amount || amount <= 0) { alert('Enter a valid amount'); return; }
+    if (!m.person.trim()) { alert('Enter person name / نام درج کریں'); return; }
+    if (!m.accountId) { alert('Select an account'); return; }
+    const udpiEntries = [...(this.state.udpiEntries || [])];
+    if (m.editId) {
+      const idx = udpiEntries.findIndex(x => x.id === m.editId);
+      if (idx >= 0) udpiEntries[idx] = { ...udpiEntries[idx], direction: m.direction, amount, person: m.person.trim(), accountId: m.accountId, note: m.note, date: m.date };
+    } else {
+      udpiEntries.unshift({ id: 'ud_' + Date.now().toString(36), direction: m.direction, amount, person: m.person.trim(), accountId: m.accountId, note: m.note, date: m.date, returned: false, returnedDate: '' });
+    }
+    this.setState({ udpiEntries, udpiModal: { ...m, open: false } });
+  };
+  markUdpiReturned = (id) => {
+    const udpiEntries = (this.state.udpiEntries || []).map(u => u.id === id ? { ...u, returned: true, returnedDate: this.todayStr() } : u);
+    this.setState({ udpiEntries });
+  };
+  deleteUdpiEntry = (id) => {
+    if (!confirm('Delete this entry?\nیہ اندراج حذف کریں؟')) return;
+    const udpiEntries = (this.state.udpiEntries || []).map(u => u.id === id ? { ...u, _deleted: true } : u);
+    this.setState({ udpiEntries });
+  };
+
+  exportAllData = () => {
+    const { customers, products, plans, settings, ledger, udpiEntries } = this.state;
+    const d = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], exportedAt: new Date().toISOString(), app: 'Aqsat', v: '2.0' };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }));
+    a.download = 'aqsat-backup-' + this.todayStr() + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
 
   planStats(pl) {
     const paid = pl.schedule.filter(s => s.paid);
@@ -507,7 +621,7 @@ export default class App extends React.Component {
   };
 
   exportBackup = () => {
-    const data = { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, exportedAt: new Date().toISOString(), version: 1 };
+    const data = { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], exportedAt: new Date().toISOString(), version: 2 };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -526,7 +640,7 @@ export default class App extends React.Component {
           const d = JSON.parse(e.target.result);
           if (!d.customers || !d.products || !d.plans) { alert('Invalid backup file'); return; }
           if (!window.confirm(`Import backup?\n\nThis will replace:\n• ${d.customers.length} customers\n• ${d.products.length} products\n• ${d.plans.length} plans\n\nCurrent data will be overwritten.`)) return;
-          this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings });
+          this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings, ledger: d.ledger || [], udpiEntries: d.udpiEntries || [] });
           alert('✓ Backup imported successfully!');
         } catch(e) { alert('Could not read file — make sure it is a valid Aqsat backup.'); }
       };
@@ -1556,6 +1670,9 @@ export default class App extends React.Component {
     this.activeLedger().forEach(le => {
       tx.push({ source: 'ledger', accountId: le.accountId, amount: le.amount, date: le.date, ledgerEntry: le });
     });
+    this.activeUdpiEntries().forEach(u => {
+      tx.push({ source: 'udpi', accountId: u.accountId, amount: u.amount, date: u.date, udpiEntry: u });
+    });
     tx.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     return tx;
   }
@@ -1586,6 +1703,23 @@ export default class App extends React.Component {
           ),
         );
       }
+      if (tx.source === 'udpi') {
+        const u = tx.udpiEntry;
+        const isLent = u.direction === 'lent';
+        return h('div', { key: 'ud-' + i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+          h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, isLent ? '💸' : '📥'),
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, u.person),
+            h('div', { style: { fontSize: 11, color: '#7a7663', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+              (isLent ? 'Lent / اُدھار دیا' : 'Borrowed / اُدھار لیا') + (u.returned ? ' ✅' : '') + (showAccount && acc ? ' · ' + acc.name : ''),
+            ),
+          ),
+          h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+            h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isLent ? '#b91c1c' : '#3b82f6' } }, (isLent ? '- ' : '+ ') + this.fmtPKR(u.amount)),
+            h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(u.date)),
+          ),
+        );
+      }
       return h('div', { key: 'pl-' + i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
         h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, acc ? acc.emoji : '💰'),
         h('div', { style: { flex: 1, minWidth: 0 } },
@@ -1608,11 +1742,13 @@ export default class App extends React.Component {
     const entries = this.activeLedger();
     const filter = this.state.ledgerFilter;
     const monthFilter = this.state.ledgerMonthFilter;
+    const search = (this.state.ledgerSearch || '').toLowerCase();
     const curMonth = this.todayStr().slice(0, 7);
 
     const filtered = entries.filter(le => {
       if (filter !== 'all' && le.type !== filter) return false;
       if (monthFilter && !le.date.startsWith(monthFilter)) return false;
+      if (search && !(le.category || '').toLowerCase().includes(search) && !(le.note || '').toLowerCase().includes(search)) return false;
       return true;
     }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
@@ -1641,37 +1777,114 @@ export default class App extends React.Component {
 
     const filterBtn = (label, val) => h('button', { key: val, onClick: () => this.setState({ ledgerFilter: val }), style: { padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: filter === val ? '#0f6b4b' : '#f4f1e6', color: filter === val ? 'white' : '#3a4a3f', border: filter === val ? '1px solid #0f6b4b' : '1px solid #ece8dc' } }, label);
 
+    // Quick-add chips: top 6 most-used categories
+    const catCount = {};
+    entries.forEach(le => { const k = le.type + '|' + le.category; catCount[k] = (catCount[k] || 0) + 1; });
+    const topChips = Object.entries(catCount).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+    // Recurring entries
+    const recurring = this.getRecurring();
+
+    // Udhar (lent/borrowed)
+    const udpiList = this.activeUdpiEntries();
+    const lentOut = udpiList.filter(u => u.direction === 'lent' && !u.returned);
+    const borrowed = udpiList.filter(u => u.direction === 'borrowed' && !u.returned);
+    const lentTotal = lentOut.reduce((s, u) => s + u.amount, 0);
+    const borrowedTotal = borrowed.reduce((s, u) => s + u.amount, 0);
+
     return h('div', { className: 'screen', style: { maxWidth: 800 } },
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12, marginBottom: 14 } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 14 } },
         this.card([
           h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Income'),
           h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ آمدنی'),
-          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(thisMonth.inc)),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(thisMonth.inc)),
         ]),
         this.card([
           h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Expenses'),
           h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ اخراجات'),
-          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(thisMonth.exp)),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(thisMonth.exp)),
         ]),
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Net'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ خالص'),
-          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: thisMonth.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (thisMonth.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(thisMonth.net))),
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Net'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'خالص'),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: allTime.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (allTime.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(allTime.net))),
         ]),
-        this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'All Time Net'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'کل خالص'),
-          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: allTime.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (allTime.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(allTime.net))),
-        ]),
+        (lentTotal > 0 || borrowedTotal > 0) ? this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Udhar Outstanding'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'بقایا اُدھار'),
+          lentTotal > 0 ? h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#b91c1c', marginTop: 4 } }, '💸 ' + this.fmtPKR(lentTotal) + ' lent') : null,
+          borrowedTotal > 0 ? h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#3b82f6', marginTop: 2 } }, '📥 ' + this.fmtPKR(borrowedTotal) + ' owed') : null,
+        ]) : null,
       ),
+      // Quick-add chips
+      topChips.length > 0 ? h('div', { style: { marginBottom: 12 } },
+        h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Quick Add'),
+        h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+          ...topChips.map(([k]) => {
+            const [type, cat] = k.split('|');
+            return h('button', { key: k, onClick: () => { this.openLedgerModal(); setTimeout(() => { const m = this.state.ledgerModal; this.setState({ ledgerModal: { ...m, type, category: cat } }); }, 50); }, style: { padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: type === 'income' ? '#eaf5ee' : '#fef2f2', color: type === 'income' ? '#0f6b4b' : '#b91c1c', border: '1px solid ' + (type === 'income' ? '#c8e6d0' : '#f5cac2'), cursor: 'pointer' } }, (catMap[cat] || '💡') + ' ' + cat);
+          }),
+        ),
+      ) : null,
+      // Action buttons
       h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 } },
-        h('button', { onClick: () => this.openLedgerModal(), style: { padding: '10px 18px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, '＋ Add Entry'),
+        h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+          h('button', { onClick: () => this.openLedgerModal(), style: { padding: '10px 16px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, '＋ Entry'),
+          h('button', { onClick: () => this.openUdpiModal(), style: { padding: '10px 16px', borderRadius: 10, background: '#3b82f6', color: 'white', fontWeight: 700, fontSize: 13 } }, '💸 Udhar'),
+          h('button', { onClick: () => this.openRecurringModal(), style: { padding: '10px 16px', borderRadius: 10, background: '#f4f1e6', color: '#3a4a3f', fontWeight: 700, fontSize: 13, border: '1px solid #ece8dc' } }, '🔄 Recurring'),
+        ),
         h('div', { style: { display: 'flex', gap: 4 } }, filterBtn('All', 'all'), filterBtn('Income', 'income'), filterBtn('Expense', 'expense')),
+      ),
+      // Search
+      h('div', { style: { marginBottom: 12 } },
+        h('input', { type: 'text', placeholder: 'Search entries... / تلاش کریں', value: this.state.ledgerSearch, onChange: e => this.setState({ ledgerSearch: e.target.value }), style: { width: '100%', padding: '8px 12px', border: '1px solid #ece8dc', borderRadius: 10, fontSize: 13, background: '#fdfcf8', outline: 'none' } }),
       ),
       months.length > 1 ? h('div', { style: { display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' } },
         h('button', { onClick: () => this.setState({ ledgerMonthFilter: '' }), style: { padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: !monthFilter ? '#0f6b4b' : '#f4f1e6', color: !monthFilter ? 'white' : '#7a7663', border: '1px solid ' + (!monthFilter ? '#0f6b4b' : '#ece8dc') } }, 'All'),
         ...months.map(m => h('button', { key: m, onClick: () => this.setState({ ledgerMonthFilter: m }), style: { padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: monthFilter === m ? '#0f6b4b' : '#f4f1e6', color: monthFilter === m ? 'white' : '#7a7663', border: '1px solid ' + (monthFilter === m ? '#0f6b4b' : '#ece8dc') } }, new Date(m + '-01').toLocaleDateString('en-PK', { month: 'short', year: 'numeric' }))),
       ) : null,
+      // Udhar outstanding section
+      (lentOut.length > 0 || borrowed.length > 0) ? this.card([
+        this.sectionHeader('Udhar / اُدھار', '', h('span', { style: { fontSize: 12, color: '#7a7663' } }, (lentOut.length + borrowed.length) + ' outstanding')),
+        ...[...lentOut, ...borrowed].map((u, i) => {
+          const acc = accs.find(a => a.id === u.accountId);
+          const isLent = u.direction === 'lent';
+          return h('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+            h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, isLent ? '💸' : '📥'),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 600, fontSize: 13 } }, u.person),
+              h('div', { style: { fontSize: 11, color: '#7a7663' } }, (isLent ? 'Lent' : 'Borrowed') + (u.note ? ' · ' + u.note : '') + (acc ? ' · ' + acc.name : '') + ' · ' + this.fmtDate(u.date)),
+            ),
+            h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isLent ? '#b91c1c' : '#3b82f6', flexShrink: 0 } }, this.fmtPKR(u.amount)),
+            h('div', { style: { display: 'flex', gap: 4, flexShrink: 0 } },
+              h('button', { onClick: () => this.markUdpiReturned(u.id), style: { padding: '4px 8px', borderRadius: 6, background: '#eaf5ee', color: '#0f6b4b', fontSize: 11, fontWeight: 600 } }, '✅'),
+              h('button', { onClick: () => this.openUdpiModal(u.id), style: { padding: '4px 8px', borderRadius: 6, background: '#f4f1e6', fontSize: 11, fontWeight: 600 } }, '✏'),
+              h('button', { onClick: () => this.deleteUdpiEntry(u.id), style: { padding: '4px 8px', borderRadius: 6, background: '#fef2f2', color: '#b91c1c', fontSize: 11, fontWeight: 600 } }, '✕'),
+            ),
+          );
+        }),
+      ]) : null,
+      (lentOut.length > 0 || borrowed.length > 0) ? h('div', { style: { height: 12 } }) : null,
+      // Recurring entries section
+      recurring.length > 0 ? this.card([
+        this.sectionHeader('Recurring / بار بار', '', h('span', { style: { fontSize: 12, color: '#7a7663' } }, recurring.length + ' entries')),
+        ...recurring.map((r, i) => {
+          const acc = accs.find(a => a.id === r.accountId);
+          return h('div', { key: r.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+            h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, catMap[r.category] || '🔄'),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 600, fontSize: 13 } }, r.category + (r.note ? ' · ' + r.note : '')),
+              h('div', { style: { fontSize: 11, color: '#7a7663' } }, 'Day ' + r.day + ' every month' + (acc ? ' · ' + acc.name : '')),
+            ),
+            h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: r.type === 'income' ? '#0f6b4b' : '#b91c1c', flexShrink: 0 } }, (r.type === 'income' ? '+' : '-') + this.fmtPKR(r.amount)),
+            h('div', { style: { display: 'flex', gap: 4, flexShrink: 0 } },
+              h('button', { onClick: () => this.openRecurringModal(r.id), style: { padding: '4px 8px', borderRadius: 6, background: '#f4f1e6', fontSize: 11, fontWeight: 600 } }, '✏'),
+              h('button', { onClick: () => this.deleteRecurring(r.id), style: { padding: '4px 8px', borderRadius: 6, background: '#fef2f2', color: '#b91c1c', fontSize: 11, fontWeight: 600 } }, '✕'),
+            ),
+          );
+        }),
+      ]) : null,
+      recurring.length > 0 ? h('div', { style: { height: 12 } }) : null,
       catList.length > 0 ? this.card([
         this.sectionHeader('By Category', 'زمرے کے مطابق'),
         ...catList.map(([cat, v]) => {
@@ -1696,7 +1909,7 @@ export default class App extends React.Component {
       h('div', { style: { height: 12 } }),
       this.card([
         this.sectionHeader('Transactions', 'لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, filtered.length + ' entries')),
-        ...(filtered.length === 0 ? [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No entries yet. Tap + Add Entry to start.')] : filtered.map((le, i) => {
+        ...(filtered.length === 0 ? [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No entries yet. Tap + Entry to start.')] : filtered.map((le, i) => {
           const acc = accs.find(a => a.id === le.accountId);
           const isInc = le.type === 'income';
           return h('div', { key: le.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
@@ -1719,6 +1932,8 @@ export default class App extends React.Component {
         })),
       ]),
       this.renderLedgerModal(),
+      this.renderRecurringModal(),
+      this.renderUdpiModal(),
     );
   }
 
@@ -1778,6 +1993,110 @@ export default class App extends React.Component {
     );
   }
 
+  renderRecurringModal() {
+    const h = this.h;
+    const m = this.state.recurringModal;
+    if (!m.open) return null;
+    const accs = this.getAccounts();
+    const cats = this.ledgerCategories();
+    const typeCats = m.type === 'income' ? cats.income : cats.expense;
+    const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
+    const setM = (k, v) => this.setState({ recurringModal: { ...m, [k]: v } });
+    const typeBtn = (label, val, color) => h('button', { key: val, onClick: () => setM('type', val), style: { flex: 1, padding: '10px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: m.type === val ? (val === 'income' ? '#eaf5ee' : '#fef2f2') : '#f4f1e6', color: m.type === val ? color : '#7a7663', border: '1.5px solid ' + (m.type === val ? color : '#ece8dc') } }, label);
+
+    return h('div', { onClick: e => { if (e.target === e.currentTarget) this.closeRecurringModal(); }, style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#fdfcf8', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '90vh', overflowY: 'auto' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
+          h('div', { style: { fontSize: 18, fontWeight: 800 } }, '🔄 ', m.editId ? 'Edit Recurring' : 'New Recurring', ' ', h('span', { className: 'ur', style: { fontSize: 14, fontWeight: 400, color: '#7a7663' } }, 'بار بار')),
+          h('button', { onClick: () => this.closeRecurringModal(), style: { width: 32, height: 32, borderRadius: '50%', background: '#f4f1e6', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' } }, '✕'),
+        ),
+        h('div', { style: { display: 'flex', gap: 8, marginBottom: 14 } },
+          typeBtn('⬆ Income', 'income', '#0f6b4b'),
+          typeBtn('⬇ Expense', 'expense', '#b91c1c'),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Amount (Rs) ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'رقم')),
+          h('input', { type: 'number', min: 0, value: m.amount, onChange: e => setM('amount', e.target.value), placeholder: '0', style: { ...inpStyle, fontSize: 20, fontWeight: 700 } }),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Day of month ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'مہینے کا دن')),
+          h('input', { type: 'number', min: 1, max: 28, value: m.day, onChange: e => setM('day', Math.min(28, Math.max(1, parseInt(e.target.value) || 1))), style: inpStyle }),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Category ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'زمرہ')),
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+            ...typeCats.map(cat => h('button', { key: cat.name, onClick: () => setM('category', cat.name), style: { padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: m.category === cat.name ? (m.type === 'income' ? '#eaf5ee' : '#fef2f2') : '#f4f1e6', color: m.category === cat.name ? (m.type === 'income' ? '#0f6b4b' : '#b91c1c') : '#3a4a3f', border: '1.5px solid ' + (m.category === cat.name ? (m.type === 'income' ? '#0f6b4b' : '#b91c1c') : '#ece8dc') } }, cat.emoji + ' ' + cat.name)),
+          ),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Account ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'اکاؤنٹ')),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(' + Math.min(accs.length, 3) + ',1fr)', gap: 6 } },
+            ...accs.map(acc => h('button', { key: acc.id, onClick: () => setM('accountId', acc.id), style: { padding: '10px 8px', borderRadius: 10, fontSize: 12, fontWeight: 600, textAlign: 'center', background: m.accountId === acc.id ? '#eaf5ee' : '#f4f1e6', color: m.accountId === acc.id ? '#0f6b4b' : '#3a4a3f', border: '1.5px solid ' + (m.accountId === acc.id ? '#0f6b4b' : '#ece8dc') } },
+              h('div', { style: { fontSize: 18, marginBottom: 2 } }, acc.emoji),
+              h('div', {}, acc.name),
+            )),
+          ),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Note ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'نوٹ')),
+          h('input', { type: 'text', value: m.note, onChange: e => setM('note', e.target.value), placeholder: 'e.g. Shop rent', style: inpStyle }),
+        ),
+        h('button', { onClick: () => this.submitRecurring(), style: { width: '100%', padding: '14px', borderRadius: 12, background: '#0f6b4b', color: 'white', fontSize: 15, fontWeight: 800 } }, m.editId ? 'Save Changes' : '🔄 Add Recurring'),
+      ),
+    );
+  }
+
+  renderUdpiModal() {
+    const h = this.h;
+    const m = this.state.udpiModal;
+    if (!m.open) return null;
+    const accs = this.getAccounts();
+    const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
+    const setM = (k, v) => this.setState({ udpiModal: { ...m, [k]: v } });
+    const dirBtn = (label, val, color) => h('button', { key: val, onClick: () => setM('direction', val), style: { flex: 1, padding: '10px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: m.direction === val ? (val === 'lent' ? '#fef2f2' : '#eff6ff') : '#f4f1e6', color: m.direction === val ? color : '#7a7663', border: '1.5px solid ' + (m.direction === val ? color : '#ece8dc') } }, label);
+
+    return h('div', { onClick: e => { if (e.target === e.currentTarget) this.closeUdpiModal(); }, style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#fdfcf8', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '90vh', overflowY: 'auto' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
+          h('div', { style: { fontSize: 18, fontWeight: 800 } }, '💸 ', m.editId ? 'Edit Udhar' : 'New Udhar', ' ', h('span', { className: 'ur', style: { fontSize: 14, fontWeight: 400, color: '#7a7663' } }, 'اُدھار')),
+          h('button', { onClick: () => this.closeUdpiModal(), style: { width: 32, height: 32, borderRadius: '50%', background: '#f4f1e6', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' } }, '✕'),
+        ),
+        h('div', { style: { display: 'flex', gap: 8, marginBottom: 14 } },
+          dirBtn('💸 I Lent / میں نے دیا', 'lent', '#b91c1c'),
+          dirBtn('📥 I Borrowed / میں نے لیا', 'borrowed', '#3b82f6'),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Person ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'شخص کا نام')),
+          h('input', { type: 'text', value: m.person, onChange: e => setM('person', e.target.value), placeholder: 'Name...', style: inpStyle }),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Amount (Rs) ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'رقم')),
+          h('input', { type: 'number', min: 0, value: m.amount, onChange: e => setM('amount', e.target.value), placeholder: '0', style: { ...inpStyle, fontSize: 20, fontWeight: 700 } }),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Account ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'اکاؤنٹ')),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(' + Math.min(accs.length, 3) + ',1fr)', gap: 6 } },
+            ...accs.map(acc => h('button', { key: acc.id, onClick: () => setM('accountId', acc.id), style: { padding: '10px 8px', borderRadius: 10, fontSize: 12, fontWeight: 600, textAlign: 'center', background: m.accountId === acc.id ? '#eaf5ee' : '#f4f1e6', color: m.accountId === acc.id ? '#0f6b4b' : '#3a4a3f', border: '1.5px solid ' + (m.accountId === acc.id ? '#0f6b4b' : '#ece8dc') } },
+              h('div', { style: { fontSize: 18, marginBottom: 2 } }, acc.emoji),
+              h('div', {}, acc.name),
+            )),
+          ),
+        ),
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 } },
+          h('div', {},
+            h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Date ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'تاریخ')),
+            h('input', { type: 'date', value: m.date, onChange: e => setM('date', e.target.value), style: inpStyle }),
+          ),
+          h('div', {},
+            h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Note ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'نوٹ')),
+            h('input', { type: 'text', value: m.note, onChange: e => setM('note', e.target.value), placeholder: 'Optional', style: inpStyle }),
+          ),
+        ),
+        h('button', { onClick: () => this.submitUdpiEntry(), style: { width: '100%', padding: '14px', borderRadius: 12, background: m.direction === 'lent' ? '#b91c1c' : '#3b82f6', color: 'white', fontSize: 15, fontWeight: 800 } }, m.editId ? 'Save Changes' : (m.direction === 'lent' ? '💸 Record Lent' : '📥 Record Borrowed')),
+      ),
+    );
+  }
+
   renderAccounts() {
     const h = this.h;
     const accs = this.getAccounts();
@@ -1804,7 +2123,10 @@ export default class App extends React.Component {
           const accLedger = this.activeLedger().filter(le => le.accountId === acc.id);
           const accIncome = accLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
           const accExpense = accLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
-          const installments = bal - base - accIncome + accExpense;
+          const accUdpi = this.activeUdpiEntries().filter(u => u.accountId === acc.id && !u.returned);
+          const accLent = accUdpi.filter(u => u.direction === 'lent').reduce((s, u) => s + u.amount, 0);
+          const accBorrowed = accUdpi.filter(u => u.direction === 'borrowed').reduce((s, u) => s + u.amount, 0);
+          const installments = bal - base - accIncome + accExpense + accLent - accBorrowed;
           const received = bal - base;
           const isSelected = sel === acc.id;
           return h('div', { key: acc.id, onClick: () => this.setState({ selectedAccountId: isSelected ? null : acc.id }), style: { cursor: 'pointer' } },
@@ -1823,6 +2145,8 @@ export default class App extends React.Component {
                 installments > 0 ? h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+' + this.fmtPKR(installments) + ' inst') : null,
                 accIncome > 0 ? h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+' + this.fmtPKR(accIncome) + ' inc') : null,
                 accExpense > 0 ? h('span', { style: { color: '#b91c1c', fontWeight: 600 } }, '-' + this.fmtPKR(accExpense) + ' exp') : null,
+                accLent > 0 ? h('span', { style: { color: '#b91c1c', fontWeight: 600 } }, '-' + this.fmtPKR(accLent) + ' lent') : null,
+                accBorrowed > 0 ? h('span', { style: { color: '#3b82f6', fontWeight: 600 } }, '+' + this.fmtPKR(accBorrowed) + ' owed') : null,
               ),
             ], isSelected ? { border: '2px solid #0f6b4b' } : {}),
           );
