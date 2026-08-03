@@ -2097,6 +2097,200 @@ export default class App extends React.Component {
     );
   }
 
+  renderDayBook() {
+    const h = this.h;
+    const accs = this.getAccounts();
+    const dateStr = this.state.dayBookDate || new Date().toISOString().slice(0, 10);
+    const allTx = this._buildTxList();
+    const dayTx = allTx.filter(tx => tx.date === dateStr);
+
+    let totalIn = 0, totalOut = 0;
+    dayTx.forEach(tx => {
+      if (tx.source === 'plan') { totalIn += tx.amount; }
+      else if (tx.source === 'ledger') {
+        if (tx.ledgerEntry.type === 'income') totalIn += tx.amount;
+        else totalOut += tx.amount;
+      } else if (tx.source === 'udpi') {
+        if (tx.udpiEntry.direction === 'borrowed') totalIn += tx.amount;
+        else totalOut += tx.amount;
+      }
+    });
+    const net = totalIn - totalOut;
+
+    const shiftDay = (offset) => {
+      const d = new Date(dateStr + 'T00:00:00');
+      d.setDate(d.getDate() + offset);
+      this.setState({ dayBookDate: d.toISOString().slice(0, 10) });
+    };
+    const isToday = dateStr === new Date().toISOString().slice(0, 10);
+    const dayLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+
+    return h('div', { className: 'screen', style: { maxWidth: 720 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 } },
+        h('button', { onClick: () => shiftDay(-1), style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', fontWeight: 700, fontSize: 16, color: '#3a4a3f' } }, '‹'),
+        h('div', { style: { textAlign: 'center', flex: 1 } },
+          h('div', { style: { fontWeight: 700, fontSize: 15 } }, dayLabel),
+          h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, isToday ? 'آج' : ''),
+        ),
+        h('button', { onClick: () => shiftDay(1), style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', fontWeight: 700, fontSize: 16, color: '#3a4a3f' } }, '›'),
+        !isToday ? h('button', { onClick: () => this.setState({ dayBookDate: new Date().toISOString().slice(0, 10) }), style: { padding: '8px 12px', borderRadius: 10, background: '#eaf5ee', fontWeight: 600, fontSize: 12, color: '#0f6b4b' } }, 'Today') : null,
+      ),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 } },
+        h('div', { style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 14, textAlign: 'center' } },
+          h('div', { style: { fontSize: 10, fontWeight: 600, color: '#7a7663', textTransform: 'uppercase' } }, 'Money In'),
+          h('div', { className: 'ur', style: { fontSize: 10, color: '#7a7663' } }, 'آمد'),
+          h('div', { className: 'mono', style: { fontSize: 18, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(totalIn)),
+        ),
+        h('div', { style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 14, textAlign: 'center' } },
+          h('div', { style: { fontSize: 10, fontWeight: 600, color: '#7a7663', textTransform: 'uppercase' } }, 'Money Out'),
+          h('div', { className: 'ur', style: { fontSize: 10, color: '#7a7663' } }, 'خرچ'),
+          h('div', { className: 'mono', style: { fontSize: 18, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(totalOut)),
+        ),
+        h('div', { style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 14, textAlign: 'center' } },
+          h('div', { style: { fontSize: 10, fontWeight: 600, color: '#7a7663', textTransform: 'uppercase' } }, 'Net'),
+          h('div', { className: 'ur', style: { fontSize: 10, color: '#7a7663' } }, 'خالص'),
+          h('div', { className: 'mono', style: { fontSize: 18, fontWeight: 800, color: net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (net >= 0 ? '+' : '-') + this.fmtPKR(Math.abs(net))),
+        ),
+      ),
+      this.card([
+        this.sectionHeader('Transactions', 'لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, dayTx.length + ' entries')),
+        dayTx.length === 0
+          ? h('div', { style: { padding: '24px 0', textAlign: 'center', color: '#7a7663', fontSize: 14 } },
+              h('div', { style: { fontSize: 32, marginBottom: 8 } }, '📭'),
+              h('div', { style: { fontWeight: 600 } }, 'No transactions this day'),
+              h('div', { className: 'ur', style: { fontSize: 12, marginTop: 4 } }, 'آج کوئی لین دین نہیں'),
+            )
+          : this._renderTxList(dayTx, accs, true),
+      ]),
+    );
+  }
+
+  renderPnL() {
+    const h = this.h;
+    const now = new Date();
+    const selMonth = this.state.pnlMonth || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+
+    const profitOf = (pl) => {
+      const financed = Math.max(0, pl.total - pl.down);
+      const pct = Math.min(Math.max(pl.interest || 0, 0), 100);
+      return financed * pct / 100;
+    };
+
+    const months = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+    }
+
+    const buildMonth = (mKey) => {
+      let instCollected = 0, instProfit = 0, downPayments = 0;
+      (this.state.plans || []).forEach(pl => {
+        const profit = profitOf(pl);
+        const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
+        const profitPerRupee = profit / scheduleTotal;
+        const idPart = (pl.id || '').replace(/^pl_/, '');
+        const createdMs = parseInt(idPart, 36);
+        const createdDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
+        const createdKey = createdDate ? createdDate.getFullYear() + '-' + String(createdDate.getMonth() + 1).padStart(2, '0') : '';
+        if (createdKey === mKey) downPayments += (pl.down || 0);
+        pl.schedule.forEach(s => {
+          if (s.paid && s.paidDate && s.paidDate.slice(0, 7) === mKey) {
+            instCollected += (s.amountPaid || s.amount);
+            instProfit += (s.amountPaid || s.amount) * profitPerRupee;
+          }
+        });
+      });
+
+      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey);
+      const ledgerIncome = mLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
+      const ledgerExpense = mLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
+
+      const totalIncome = instCollected + downPayments + ledgerIncome;
+      const totalExpense = ledgerExpense;
+      const grossProfit = instProfit;
+      const netPnL = totalIncome - totalExpense;
+
+      return { instCollected, instProfit: Math.round(instProfit), downPayments, ledgerIncome, ledgerExpense, totalIncome, totalExpense, grossProfit: Math.round(grossProfit), netPnL };
+    };
+
+    const data = buildMonth(selMonth);
+    const monthLabel = new Date(selMonth + '-01T00:00:00').toLocaleDateString('en', { month: 'long', year: 'numeric' });
+
+    const trendData = months.map(m => ({ key: m, ...buildMonth(m) }));
+    const maxNet = Math.max(...trendData.map(t => Math.abs(t.netPnL)), 1);
+
+    const row = (label, ur, value, color, bold) => h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '1px solid #f2eee2', alignItems: 'center' } },
+      h('div', {},
+        h('div', { style: { fontSize: 13, fontWeight: bold ? 700 : 500 } }, label),
+        h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, ur),
+      ),
+      h('div', { className: 'mono', style: { fontSize: 15, fontWeight: 700, color: color || '#1a2b1f' } }, this.fmtPKR(value)),
+    );
+
+    return h('div', { className: 'screen', style: { maxWidth: 720 } },
+      h('div', { style: { display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 16, paddingBottom: 4 } },
+        months.map(m => {
+          const ml = new Date(m + '-01T00:00:00').toLocaleDateString('en', { month: 'short' });
+          const isSel = m === selMonth;
+          return h('button', { key: m, onClick: () => this.setState({ pnlMonth: m }), style: { padding: '8px 14px', borderRadius: 10, background: isSel ? '#0f6b4b' : '#f4f1e6', color: isSel ? '#fff' : '#3a4a3f', fontWeight: isSel ? 700 : 500, fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0 } }, ml);
+        }),
+      ),
+      h('div', { style: { textAlign: 'center', marginBottom: 16 } },
+        h('div', { style: { fontSize: 12, fontWeight: 600, color: '#7a7663', textTransform: 'uppercase' } }, monthLabel),
+        h('div', { className: 'mono', style: { fontSize: 32, fontWeight: 800, color: data.netPnL >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (data.netPnL >= 0 ? '+' : '-') + this.fmtPKR(Math.abs(data.netPnL))),
+        h('div', { className: 'ur', style: { fontSize: 13, color: '#7a7663', marginTop: 2 } }, data.netPnL >= 0 ? 'خالص منافع' : 'خالص نقصان'),
+      ),
+      this.card([
+        this.sectionHeader('Income', 'آمدنی'),
+        row('Installments Collected', 'اقساط وصول', data.instCollected, '#0f6b4b'),
+        row('Down Payments', 'ایڈوانس', data.downPayments, '#0f6b4b'),
+        row('Other Income (Ledger)', 'دیگر آمدنی', data.ledgerIncome, '#0f6b4b'),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderTop: '2px solid #ece8dc', alignItems: 'center' } },
+          h('div', { style: { fontWeight: 800, fontSize: 14 } }, 'Total Income'),
+          h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 17, color: '#0f6b4b' } }, this.fmtPKR(data.totalIncome)),
+        ),
+      ]),
+      h('div', { style: { height: 12 } }),
+      this.card([
+        this.sectionHeader('Expenses', 'اخراجات'),
+        row('Expenses (Ledger)', 'لیجر اخراجات', data.ledgerExpense, '#b91c1c'),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderTop: '2px solid #ece8dc', alignItems: 'center' } },
+          h('div', { style: { fontWeight: 800, fontSize: 14 } }, 'Total Expenses'),
+          h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 17, color: '#b91c1c' } }, this.fmtPKR(data.totalExpense)),
+        ),
+      ]),
+      h('div', { style: { height: 12 } }),
+      this.card([
+        this.sectionHeader('Profitability', 'منافع'),
+        row('Installment Markup Earned', 'قسط کا منافع', data.instProfit, '#a26a10'),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderTop: '2px solid #ece8dc', alignItems: 'center' } },
+          h('div', {},
+            h('div', { style: { fontWeight: 800, fontSize: 14 } }, 'Net P&L'),
+            h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, 'خالص نفع نقصان'),
+          ),
+          h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 20, color: data.netPnL >= 0 ? '#0f6b4b' : '#b91c1c' } }, (data.netPnL >= 0 ? '+' : '-') + this.fmtPKR(Math.abs(data.netPnL))),
+        ),
+      ]),
+      h('div', { style: { height: 12 } }),
+      this.card([
+        this.sectionHeader('6-Month Trend', 'چھ ماہ کا رجحان'),
+        h('div', { style: { display: 'flex', gap: 8, alignItems: 'flex-end', height: 160, paddingTop: 12 } },
+          trendData.map(t => {
+            const isSel = t.key === selMonth;
+            const isPositive = t.netPnL >= 0;
+            const barH = Math.max(4, Math.abs(t.netPnL) / maxNet * 120);
+            const ml = new Date(t.key + '-01T00:00:00').toLocaleDateString('en', { month: 'short' });
+            return h('div', { key: t.key, onClick: () => this.setState({ pnlMonth: t.key }), style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' } },
+              h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, t.netPnL >= 1000 || t.netPnL <= -1000 ? Math.round(t.netPnL / 1000) + 'k' : t.netPnL),
+              h('div', { style: { width: '100%', maxWidth: 36, borderRadius: '6px 6px 0 0', height: barH + 'px', background: isPositive ? (isSel ? 'linear-gradient(180deg,#14a374,#0f6b4b)' : '#b6e2cc') : (isSel ? 'linear-gradient(180deg,#ef4444,#b91c1c)' : '#fca5a5'), transition: 'height .3s' } }),
+              h('div', { style: { fontSize: 11, fontWeight: isSel ? 700 : 500, color: isSel ? '#0f6b4b' : '#7a7663' } }, ml),
+            );
+          }),
+        ),
+      ]),
+    );
+  }
+
   renderAccounts() {
     const h = this.h;
     const accs = this.getAccounts();
@@ -2838,6 +3032,8 @@ export default class App extends React.Component {
       reports:    ['Reports',   'رپورٹس',    'Cashflow & analytics'],
       reminders:  ['Reminders', 'یاد دہانی', 'Follow-ups & notifications'],
       ledger:     ['Ledger',     'لیجر',      'Income & expenses'],
+      daybook:    ['Daily Book', 'روزنامچہ',  'Day-by-day cash register'],
+      pnl:        ['Profit & Loss', 'نفع نقصان', 'Monthly P&L report'],
       accounts:   ['Accounts',  'اکاؤنٹس',  'Payment accounts & balances'],
       settings:   ['Settings',  'ترتیبات',   'Business preferences'],
     };
@@ -2856,6 +3052,8 @@ export default class App extends React.Component {
       { key: 'reports',   label: 'Reports',    icon: '📊', go: () => this.go('reports') },
       { key: 'reminders', label: 'Reminders',  icon: '🔔', go: () => this.go('reminders'), badge: overdueCount > 0 ? String(overdueCount) : null },
       { key: 'ledger',    label: 'Ledger',     icon: '📒', go: () => this.go('ledger') },
+      { key: 'daybook',   label: 'Daily Book', icon: '📅', go: () => this.go('daybook') },
+      { key: 'pnl',       label: 'P&L',        icon: '📈', go: () => this.go('pnl') },
       { key: 'accounts',  label: 'Accounts',   icon: '💰', go: () => this.go('accounts') },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
@@ -2864,7 +3062,7 @@ export default class App extends React.Component {
     const mobileNavActive = { ...mobileNavBase, color: '#0f6b4b', background: '#eaf5ee' };
     const mobileNav = [
       { key: 'dashboard', label: 'Home',      icon: '◆', go: () => this.go('dashboard') },
-      { key: 'customers', label: 'Customers', icon: '👥', go: () => this.go('customers') },
+      { key: 'ledger',    label: 'Ledger',    icon: '📒', go: () => this.go('ledger') },
       { key: 'newplan',   label: 'New',       icon: '＋', go: () => this.go('newplan') },
       { key: 'plans',     label: 'Plans',     icon: '📋', go: () => this.go('plans') },
       { key: 'menu',      label: 'Menu',      icon: '☰',  go: () => this.setState({ menuOpen: true }) },
@@ -2949,6 +3147,8 @@ export default class App extends React.Component {
             {route === 'reports'    && this.renderReports()}
             {route === 'reminders'  && this.renderReminders()}
             {route === 'ledger'     && this.renderLedger()}
+            {route === 'daybook'    && this.renderDayBook()}
+            {route === 'pnl'        && this.renderPnL()}
             {route === 'accounts'   && this.renderAccounts()}
             {route === 'settings'   && this.renderSettings()}
           </div>
