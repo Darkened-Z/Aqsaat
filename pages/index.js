@@ -1051,7 +1051,9 @@ export default class App extends React.Component {
     const total = parseFloat(np.totalPrice) || (product ? product.price : 0);
     const down = parseFloat(np.downPayment) || 0;
     const financed = Math.max(0, total - down);
-    const profit = financed * Math.min(parseFloat(np.interest) || 0, 100) / 100;
+    const _directAmt = parseFloat(np.interestAmount);
+    const _hasDirect = np.interestAmount !== '' && np.interestAmount != null && !isNaN(_directAmt);
+    const profit = Math.max(0, _hasDirect ? _directAmt : financed * Math.min(parseFloat(np.interest) || 0, 100) / 100);
     const installAmt = parseFloat(np.installmentAmount) || 0;
     const total2Pay = Math.max(0, financed + profit);
     let fullInst = 0, remainder = 0, months, monthly;
