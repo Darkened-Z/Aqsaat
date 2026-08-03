@@ -47,6 +47,10 @@ export default class App extends React.Component {
     newAccount: { name: '', nameUr: '', emoji: '💰', balance: '' },
     syncStatus: 'loading', // 'loading' | 'synced' | 'syncing' | 'offline' | 'error'
     syncError: '',
+    ledger: null,
+    ledgerModal: { open: false, type: 'expense', amount: '', accountId: '', category: '', note: '', date: new Date().toISOString().slice(0, 10), editId: null },
+    ledgerFilter: 'all',
+    ledgerMonthFilter: '',
   };
 
   componentDidMount() {
@@ -73,11 +77,11 @@ export default class App extends React.Component {
 
   componentDidUpdate(_, prev) {
     if (typeof window === 'undefined') return;
-    const { customers, products, plans, settings } = this.state;
+    const { customers, products, plans, settings, ledger } = this.state;
     if (!customers) return;
     // Skip push if this state change came FROM a cloud sync (prevents write loops)
     if (this._fromCloud) { this._fromCloud = false; return; }
-    if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings) {
+    if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings || ledger !== prev.ledger) {
       clearTimeout(this._syncTimer);
       this._syncTimer = setTimeout(this.pushToSupabase, 1200);
     }
@@ -91,15 +95,15 @@ export default class App extends React.Component {
 
   _applyCloudData = (d) => {
     this._fromCloud = true;
-    const local = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings } : null;
-    const merged = local ? this._mergeData(local, d) : { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings };
+    const local = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [] } : null;
+    const merged = local ? this._mergeData(local, d) : { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, ledger: d.ledger || [] };
     const settings = merged.settings || this.state.settings;
     if (!settings.accounts || !settings.accounts.length) {
       settings.accounts = [{ id: 'acc_cash', name: 'Cash in Hand', nameUr: 'نقد', emoji: '💵', balance: 0 }, { id: 'acc_ep', name: 'EasyPaisa', nameUr: 'ایزی پیسہ', emoji: '📱', balance: 0 }, { id: 'acc_bank', name: 'Bank', nameUr: 'بینک', emoji: '🏦', balance: 0 }];
     }
     const cloudPin = settings.pin || '';
     if (cloudPin) { localStorage.setItem('aqsat_pin', cloudPin); }
-    const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, syncStatus: 'synced' };
+    const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, ledger: merged.ledger || [], syncStatus: 'synced' };
     if (cloudPin) payload.savedPin = cloudPin;
     localStorage.setItem('aqsat_data', JSON.stringify(merged));
     this.setState(payload);
@@ -123,7 +127,7 @@ export default class App extends React.Component {
         const localCount = (localData?.plans?.length || 0) + (localData?.customers?.length || 0);
         if (localCount > 0) {
           // Push local data up to cloud and use it
-          this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, syncStatus: 'synced' }, this.pushToSupabase);
+          this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], syncStatus: 'synced' }, this.pushToSupabase);
         } else {
           this.seed();
           this.setState({ syncStatus: 'synced' });
@@ -133,7 +137,7 @@ export default class App extends React.Component {
       // Network error — load localStorage silently, retry sync on next interaction
       let localData = null;
       try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch(e) {}
-      if (localData?.customers) this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings });
+      if (localData?.customers) this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [] });
       else this.seed();
       this.setState({ syncStatus: 'offline', syncError: err.message || '' });
       return;
@@ -177,34 +181,35 @@ export default class App extends React.Component {
       products: mergeArr(local.products, cloud.products),
       plans: mergeArr(local.plans, cloud.plans),
       settings: { ...(cloud.settings || {}), ...(local.settings || {}) },
+      ledger: mergeArr(local.ledger, cloud.ledger),
     };
   };
 
   pushToSupabase = async () => {
-    const { customers, products, plans, settings } = this.state;
+    const { customers, products, plans, settings, ledger } = this.state;
     if (!customers) return;
     this.setState({ syncStatus: 'syncing' });
     try {
       const { data: cloud } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
-      const localData = { customers, products, plans, settings };
+      const localData = { customers, products, plans, settings, ledger: ledger || [] };
       const merged = cloud?.data ? this._mergeData(localData, cloud.data) : localData;
       localStorage.setItem('aqsat_data', JSON.stringify(merged));
       const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: merged, updated_at: new Date().toISOString() });
       if (!error && merged !== localData) {
         this._fromCloud = true;
-        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, syncStatus: 'synced' });
+        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], syncStatus: 'synced' });
       } else {
         this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
       }
     } catch(e) {
-      localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings }));
-      const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: { customers, products, plans, settings }, updated_at: new Date().toISOString() });
+      localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings, ledger: ledger || [] }));
+      const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: { customers, products, plans, settings, ledger: ledger || [] }, updated_at: new Date().toISOString() });
       this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
     }
   };
 
   seed() {
-    this.setState({ customers: [], products: [], plans: [] });
+    this.setState({ customers: [], products: [], plans: [], ledger: [] });
   }
 
   resetAllData = () => {
@@ -213,7 +218,7 @@ export default class App extends React.Component {
     this.requireResetPin(() => {
       if (!confirm('⚠️ FINAL WARNING\nThis will permanently delete ALL customers, products, and plans.\n\nیہ تمام گاہکوں، پروڈکٹس اور پلانز کو مستقل طور پر ڈیلیٹ کر دے گا۔')) return;
       localStorage.removeItem('aqsat_data');
-      this.setState({ customers: [], products: [], plans: [], route: 'dashboard' });
+      this.setState({ customers: [], products: [], plans: [], ledger: [], route: 'dashboard' });
     });
   };
   requireResetPin = (action) => {
@@ -265,7 +270,32 @@ export default class App extends React.Component {
       return sum + (pl.schedule || []).filter(s => s.paid && s.accountId === accId)
         .reduce((a, s) => a + (s.amountPaid || s.amount || 0), 0);
     }, 0);
-    return base + payments;
+    const ledgerNet = (this.state.ledger || []).filter(le => !le._deleted && le.accountId === accId)
+      .reduce((sum, le) => sum + (le.type === 'income' ? le.amount : -le.amount), 0);
+    return base + payments + ledgerNet;
+  }
+  activeLedger() { return (this.state.ledger || []).filter(le => !le._deleted); }
+  ledgerCategories() {
+    return {
+      income: [
+        { emoji: '💵', name: 'Sales', nameUr: 'فروخت' },
+        { emoji: '🔧', name: 'Repair', nameUr: 'مرمت' },
+        { emoji: '📦', name: 'Wholesale', nameUr: 'تھوک' },
+        { emoji: '🤝', name: 'Commission', nameUr: 'کمیشن' },
+        { emoji: '💡', name: 'Other Income', nameUr: 'دیگر آمدنی' },
+      ],
+      expense: [
+        { emoji: '🏠', name: 'Rent', nameUr: 'کرایہ' },
+        { emoji: '⚡', name: 'Electricity', nameUr: 'بجلی' },
+        { emoji: '🚗', name: 'Transport', nameUr: 'سفر' },
+        { emoji: '🍔', name: 'Food', nameUr: 'کھانا' },
+        { emoji: '🛒', name: 'Supplies', nameUr: 'سامان' },
+        { emoji: '💵', name: 'Salary', nameUr: 'تنخواہ' },
+        { emoji: '📱', name: 'Phone/Internet', nameUr: 'فون/انٹرنیٹ' },
+        { emoji: '🏥', name: 'Health', nameUr: 'صحت' },
+        { emoji: '💡', name: 'Other Expense', nameUr: 'دیگر خرچ' },
+      ],
+    };
   }
 
   planStats(pl) {
@@ -748,6 +778,24 @@ export default class App extends React.Component {
         kpiCard('Overdue',       'بقایا',        this.fmtPKR(overdueTotal),    overdueCount + ' late · +' + this.fmtPKR(plans.reduce((a, p) => a + this.planStats(p).lateFees, 0)) + ' fees', 'red'),
         kpiCard('Outstanding',   'باقی رقم',     this.fmtPKR(totalOutstanding), plans.filter(p => p.status === 'active').length + ' active plans', 'neutral'),
       ),
+      (() => {
+        const le = this.activeLedger();
+        const curMonth = this.todayStr().slice(0, 7);
+        const mEntries = le.filter(x => x.date.startsWith(curMonth));
+        const mInc = mEntries.filter(x => x.type === 'income').reduce((s, x) => s + x.amount, 0);
+        const mExp = mEntries.filter(x => x.type === 'expense').reduce((s, x) => s + x.amount, 0);
+        const mNet = mInc - mExp;
+        if (le.length === 0) return null;
+        return h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, padding: '10px 14px', background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, flexWrap: 'wrap', cursor: 'pointer' }, onClick: () => this.go('ledger') },
+          h('div', { style: { fontSize: 14, fontWeight: 700 } }, '📒 This Month Ledger'),
+          h('div', { style: { display: 'flex', gap: 14, marginLeft: 'auto' } },
+            h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#0f6b4b' } }, '↑ ' + this.fmtPKR(mInc)),
+            h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#b91c1c' } }, '↓ ' + this.fmtPKR(mExp)),
+            h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 800, color: mNet >= 0 ? '#0f6b4b' : '#b91c1c' } }, 'Net ' + (mNet >= 0 ? '+' : '-') + this.fmtPKR(Math.abs(mNet))),
+          ),
+          h('span', { style: { fontSize: 11, color: '#7a7663' } }, 'View →'),
+        );
+      })(),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 12 } },
         this.card([
           this.sectionHeader('Due Today', 'آج کی اقساط', h('button', { onClick: () => this.go('plans'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'View all →')),
@@ -1464,14 +1512,49 @@ export default class App extends React.Component {
     );
   }
 
+  openLedgerModal = (editId) => {
+    const accs = this.getAccounts();
+    if (editId) {
+      const le = this.activeLedger().find(x => x.id === editId);
+      if (!le) return;
+      this.setState({ ledgerModal: { open: true, type: le.type, amount: String(le.amount), accountId: le.accountId, category: le.category, note: le.note || '', date: le.date, editId } });
+    } else {
+      this.setState({ ledgerModal: { open: true, type: 'expense', amount: '', accountId: accs.length > 0 ? accs[0].id : '', category: '', note: '', date: this.todayStr(), editId: null } });
+    }
+  };
+  closeLedgerModal = () => this.setState({ ledgerModal: { ...this.state.ledgerModal, open: false } });
+  submitLedgerEntry = () => {
+    const m = this.state.ledgerModal;
+    const amount = parseFloat(m.amount);
+    if (!amount || amount <= 0) { alert('Enter a valid amount / درست رقم درج کریں'); return; }
+    if (!m.category) { alert('Select a category / زمرہ منتخب کریں'); return; }
+    if (!m.accountId) { alert('Select an account / اکاؤنٹ منتخب کریں'); return; }
+    const ledger = [...(this.state.ledger || [])];
+    if (m.editId) {
+      const idx = ledger.findIndex(x => x.id === m.editId);
+      if (idx >= 0) ledger[idx] = { ...ledger[idx], type: m.type, amount, accountId: m.accountId, category: m.category, note: m.note, date: m.date };
+    } else {
+      ledger.unshift({ id: 'le_' + Date.now().toString(36), type: m.type, amount, accountId: m.accountId, category: m.category, note: m.note, date: m.date });
+    }
+    this.setState({ ledger, ledgerModal: { ...m, open: false } });
+  };
+  deleteLedgerEntry = (id) => {
+    if (!confirm('Delete this entry?\nیہ اندراج حذف کریں؟')) return;
+    const ledger = (this.state.ledger || []).map(le => le.id === id ? { ...le, _deleted: true } : le);
+    this.setState({ ledger });
+  };
+
   _buildTxList() {
     const tx = [];
     (this.state.plans || []).forEach(pl => {
       const c = (this.state.customers || []).find(x => x.id === pl.customerId);
       const p = (this.state.products || []).find(x => x.id === pl.productId);
       (pl.schedule || []).forEach(s => {
-        if (s.paid && s.accountId) tx.push({ accountId: s.accountId, amount: s.amountPaid || s.amount, date: s.paidDate, customer: c, product: p, plan: pl, installment: s });
+        if (s.paid && s.accountId) tx.push({ source: 'plan', accountId: s.accountId, amount: s.amountPaid || s.amount, date: s.paidDate, customer: c, product: p, plan: pl, installment: s });
       });
+    });
+    this.activeLedger().forEach(le => {
+      tx.push({ source: 'ledger', accountId: le.accountId, amount: le.amount, date: le.date, ledgerEntry: le });
     });
     tx.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     return tx;
@@ -1479,10 +1562,31 @@ export default class App extends React.Component {
 
   _renderTxList(txList, accs, showAccount) {
     const h = this.h;
-    if (txList.length === 0) return [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No payments recorded yet.')];
+    if (txList.length === 0) return [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No transactions recorded yet.')];
+    const allCats = this.ledgerCategories();
+    const catMap = {};
+    [...allCats.income, ...allCats.expense].forEach(c => { catMap[c.name] = c.emoji; });
     return txList.map((tx, i) => {
       const acc = accs.find(a => a.id === tx.accountId);
-      return h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+      if (tx.source === 'ledger') {
+        const le = tx.ledgerEntry;
+        const isInc = le.type === 'income';
+        const catEmoji = catMap[le.category] || '💡';
+        return h('div', { key: 'le-' + i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+          h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, catEmoji),
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, le.category),
+            h('div', { style: { fontSize: 11, color: '#7a7663', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+              (le.note || (isInc ? 'Income' : 'Expense')) + (showAccount && acc ? ' · ' + acc.name : ''),
+            ),
+          ),
+          h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+            h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isInc ? '#0f6b4b' : '#b91c1c' } }, (isInc ? '+ ' : '- ') + this.fmtPKR(le.amount)),
+            h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(le.date)),
+          ),
+        );
+      }
+      return h('div', { key: 'pl-' + i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
         h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, acc ? acc.emoji : '💰'),
         h('div', { style: { flex: 1, minWidth: 0 } },
           h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.customer ? tx.customer.name : 'Unknown'),
@@ -1496,6 +1600,182 @@ export default class App extends React.Component {
         ),
       );
     });
+  }
+
+  renderLedger() {
+    const h = this.h;
+    const accs = this.getAccounts();
+    const entries = this.activeLedger();
+    const filter = this.state.ledgerFilter;
+    const monthFilter = this.state.ledgerMonthFilter;
+    const curMonth = this.todayStr().slice(0, 7);
+
+    const filtered = entries.filter(le => {
+      if (filter !== 'all' && le.type !== filter) return false;
+      if (monthFilter && !le.date.startsWith(monthFilter)) return false;
+      return true;
+    }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    const totals = (list) => {
+      let inc = 0, exp = 0;
+      list.forEach(le => { if (le.type === 'income') inc += le.amount; else exp += le.amount; });
+      return { inc, exp, net: inc - exp };
+    };
+    const allTime = totals(entries);
+    const thisMonth = totals(entries.filter(le => le.date.startsWith(curMonth)));
+
+    const allCats = this.ledgerCategories();
+    const catMap = {};
+    [...allCats.income, ...allCats.expense].forEach(c => { catMap[c.name] = c.emoji; });
+
+    const catBreakdown = {};
+    filtered.forEach(le => {
+      if (!catBreakdown[le.category]) catBreakdown[le.category] = { inc: 0, exp: 0 };
+      if (le.type === 'income') catBreakdown[le.category].inc += le.amount;
+      else catBreakdown[le.category].exp += le.amount;
+    });
+    const catList = Object.entries(catBreakdown).sort((a, b) => (b[1].inc + b[1].exp) - (a[1].inc + a[1].exp));
+    const maxCatAmt = catList.length > 0 ? catList[0][1].inc + catList[0][1].exp : 1;
+
+    const months = [...new Set(entries.map(le => le.date.slice(0, 7)))].sort().reverse();
+
+    const filterBtn = (label, val) => h('button', { key: val, onClick: () => this.setState({ ledgerFilter: val }), style: { padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: filter === val ? '#0f6b4b' : '#f4f1e6', color: filter === val ? 'white' : '#3a4a3f', border: filter === val ? '1px solid #0f6b4b' : '1px solid #ece8dc' } }, label);
+
+    return h('div', { className: 'screen', style: { maxWidth: 800 } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12, marginBottom: 14 } },
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Income'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ آمدنی'),
+          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(thisMonth.inc)),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Expenses'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ اخراجات'),
+          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(thisMonth.exp)),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Net'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ خالص'),
+          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: thisMonth.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (thisMonth.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(thisMonth.net))),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'All Time Net'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'کل خالص'),
+          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: allTime.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (allTime.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(allTime.net))),
+        ]),
+      ),
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 } },
+        h('button', { onClick: () => this.openLedgerModal(), style: { padding: '10px 18px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, '＋ Add Entry'),
+        h('div', { style: { display: 'flex', gap: 4 } }, filterBtn('All', 'all'), filterBtn('Income', 'income'), filterBtn('Expense', 'expense')),
+      ),
+      months.length > 1 ? h('div', { style: { display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' } },
+        h('button', { onClick: () => this.setState({ ledgerMonthFilter: '' }), style: { padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: !monthFilter ? '#0f6b4b' : '#f4f1e6', color: !monthFilter ? 'white' : '#7a7663', border: '1px solid ' + (!monthFilter ? '#0f6b4b' : '#ece8dc') } }, 'All'),
+        ...months.map(m => h('button', { key: m, onClick: () => this.setState({ ledgerMonthFilter: m }), style: { padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: monthFilter === m ? '#0f6b4b' : '#f4f1e6', color: monthFilter === m ? 'white' : '#7a7663', border: '1px solid ' + (monthFilter === m ? '#0f6b4b' : '#ece8dc') } }, new Date(m + '-01').toLocaleDateString('en-PK', { month: 'short', year: 'numeric' }))),
+      ) : null,
+      catList.length > 0 ? this.card([
+        this.sectionHeader('By Category', 'زمرے کے مطابق'),
+        ...catList.map(([cat, v]) => {
+          const total = v.inc + v.exp;
+          const pct = Math.round((total / maxCatAmt) * 100);
+          return h('div', { key: cat, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: '1px solid #f9f6ee' } },
+            h('div', { style: { fontSize: 16, width: 28, textAlign: 'center', flexShrink: 0 } }, catMap[cat] || '💡'),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 600, fontSize: 13 } }, cat),
+              h('div', { style: { height: 4, background: '#f2eee2', borderRadius: 2, marginTop: 4 } },
+                h('div', { style: { height: '100%', width: pct + '%', borderRadius: 2, background: v.exp > v.inc ? '#b91c1c' : '#0f6b4b' } }),
+              ),
+            ),
+            h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 700, textAlign: 'right', flexShrink: 0, minWidth: 80 } },
+              v.inc > 0 ? h('span', { style: { color: '#0f6b4b' } }, '+' + this.fmtPKR(v.inc)) : null,
+              v.inc > 0 && v.exp > 0 ? ' ' : null,
+              v.exp > 0 ? h('span', { style: { color: '#b91c1c' } }, '-' + this.fmtPKR(v.exp)) : null,
+            ),
+          );
+        }),
+      ]) : null,
+      h('div', { style: { height: 12 } }),
+      this.card([
+        this.sectionHeader('Transactions', 'لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, filtered.length + ' entries')),
+        ...(filtered.length === 0 ? [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No entries yet. Tap + Add Entry to start.')] : filtered.map((le, i) => {
+          const acc = accs.find(a => a.id === le.accountId);
+          const isInc = le.type === 'income';
+          return h('div', { key: le.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+            h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, catMap[le.category] || '💡'),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, le.category),
+              h('div', { style: { fontSize: 11, color: '#7a7663', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                (le.note || (isInc ? 'Income' : 'Expense')) + (acc ? ' · ' + acc.emoji + ' ' + acc.name : ''),
+              ),
+            ),
+            h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+              h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isInc ? '#0f6b4b' : '#b91c1c' } }, (isInc ? '+ ' : '- ') + this.fmtPKR(le.amount)),
+              h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(le.date)),
+            ),
+            h('div', { style: { display: 'flex', gap: 4, flexShrink: 0 } },
+              h('button', { onClick: e => { e.stopPropagation(); this.openLedgerModal(le.id); }, style: { padding: '4px 8px', borderRadius: 6, background: '#f4f1e6', fontSize: 11, fontWeight: 600 } }, '✏'),
+              h('button', { onClick: e => { e.stopPropagation(); this.deleteLedgerEntry(le.id); }, style: { padding: '4px 8px', borderRadius: 6, background: '#fef2f2', color: '#b91c1c', fontSize: 11, fontWeight: 600 } }, '✕'),
+            ),
+          );
+        })),
+      ]),
+      this.renderLedgerModal(),
+    );
+  }
+
+  renderLedgerModal() {
+    const h = this.h;
+    const m = this.state.ledgerModal;
+    if (!m.open) return null;
+    const accs = this.getAccounts();
+    const cats = this.ledgerCategories();
+    const typeCats = m.type === 'income' ? cats.income : cats.expense;
+    const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
+    const setM = (k, v) => this.setState({ ledgerModal: { ...m, [k]: v } });
+    const typeBtn = (label, val, color) => h('button', { key: val, onClick: () => setM('type', val), style: { flex: 1, padding: '10px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: m.type === val ? (val === 'income' ? '#eaf5ee' : '#fef2f2') : '#f4f1e6', color: m.type === val ? color : '#7a7663', border: '1.5px solid ' + (m.type === val ? color : '#ece8dc') } }, label);
+
+    return h('div', { onClick: e => { if (e.target === e.currentTarget) this.closeLedgerModal(); }, style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#fdfcf8', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '90vh', overflowY: 'auto' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
+          h('div', { style: { fontSize: 18, fontWeight: 800 } }, m.editId ? 'Edit Entry' : 'Add Entry', ' ', h('span', { className: 'ur', style: { fontSize: 14, fontWeight: 400, color: '#7a7663' } }, m.editId ? 'ترمیم' : 'نیا اندراج')),
+          h('button', { onClick: () => this.closeLedgerModal(), style: { width: 32, height: 32, borderRadius: '50%', background: '#f4f1e6', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' } }, '✕'),
+        ),
+        h('div', { style: { display: 'flex', gap: 8, marginBottom: 14 } },
+          typeBtn('⬆ Income / آمدنی', 'income', '#0f6b4b'),
+          typeBtn('⬇ Expense / خرچ', 'expense', '#b91c1c'),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Amount (Rs) ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'رقم')),
+          h('input', { type: 'number', min: 0, value: m.amount, onChange: e => setM('amount', e.target.value), placeholder: '0', style: { ...inpStyle, fontSize: 20, fontWeight: 700 } }),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Category ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'زمرہ')),
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+            ...typeCats.map(cat => h('button', { key: cat.name, onClick: () => setM('category', cat.name), style: { padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: m.category === cat.name ? (m.type === 'income' ? '#eaf5ee' : '#fef2f2') : '#f4f1e6', color: m.category === cat.name ? (m.type === 'income' ? '#0f6b4b' : '#b91c1c') : '#3a4a3f', border: '1.5px solid ' + (m.category === cat.name ? (m.type === 'income' ? '#0f6b4b' : '#b91c1c') : '#ece8dc') } }, cat.emoji + ' ' + cat.name)),
+          ),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Account ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'اکاؤنٹ')),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(' + Math.min(accs.length, 3) + ',1fr)', gap: 6 } },
+            ...accs.map(acc => h('button', { key: acc.id, onClick: () => setM('accountId', acc.id), style: { padding: '10px 8px', borderRadius: 10, fontSize: 12, fontWeight: 600, textAlign: 'center', background: m.accountId === acc.id ? '#eaf5ee' : '#f4f1e6', color: m.accountId === acc.id ? '#0f6b4b' : '#3a4a3f', border: '1.5px solid ' + (m.accountId === acc.id ? '#0f6b4b' : '#ece8dc') } },
+              h('div', { style: { fontSize: 18, marginBottom: 2 } }, acc.emoji),
+              h('div', {}, acc.name),
+              h('div', { className: 'mono', style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, this.fmtPKR(this.accountBalance(acc.id))),
+            )),
+          ),
+        ),
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 } },
+          h('div', {},
+            h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Date ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'تاریخ')),
+            h('input', { type: 'date', value: m.date, onChange: e => setM('date', e.target.value), style: inpStyle }),
+          ),
+          h('div', {},
+            h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Note ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'نوٹ')),
+            h('input', { type: 'text', value: m.note, onChange: e => setM('note', e.target.value), placeholder: 'Optional', style: inpStyle }),
+          ),
+        ),
+        h('button', { onClick: () => this.submitLedgerEntry(), style: { width: '100%', padding: '14px', borderRadius: 12, background: m.type === 'income' ? '#0f6b4b' : '#b91c1c', color: 'white', fontSize: 15, fontWeight: 800 } }, m.editId ? 'Save Changes' : (m.type === 'income' ? '⬆ Add Income' : '⬇ Add Expense')),
+      ),
+    );
   }
 
   renderAccounts() {
@@ -1521,6 +1801,10 @@ export default class App extends React.Component {
         ...accs.map(acc => {
           const bal = this.accountBalance(acc.id);
           const base = parseFloat(acc.balance) || 0;
+          const accLedger = this.activeLedger().filter(le => le.accountId === acc.id);
+          const accIncome = accLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
+          const accExpense = accLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
+          const installments = bal - base - accIncome + accExpense;
           const received = bal - base;
           const isSelected = sel === acc.id;
           return h('div', { key: acc.id, onClick: () => this.setState({ selectedAccountId: isSelected ? null : acc.id }), style: { cursor: 'pointer' } },
@@ -1534,9 +1818,11 @@ export default class App extends React.Component {
                 isSelected ? h('div', { style: { fontSize: 11, color: '#0f6b4b', fontWeight: 600 } }, '▾ History') : h('div', { style: { fontSize: 11, color: '#7a7663' } }, '▸ Tap'),
               ),
               h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#1a2b1f', marginBottom: 8 } }, this.fmtPKR(bal)),
-              h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#7a7663', borderTop: '1px solid #f2eee2', paddingTop: 8 } },
+              h('div', { style: { display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', fontSize: 11, color: '#7a7663', borderTop: '1px solid #f2eee2', paddingTop: 8, gap: 4 } },
                 h('span', {}, 'Base: ' + this.fmtPKR(base)),
-                h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+ ' + this.fmtPKR(received) + ' received'),
+                installments > 0 ? h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+' + this.fmtPKR(installments) + ' inst') : null,
+                accIncome > 0 ? h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+' + this.fmtPKR(accIncome) + ' inc') : null,
+                accExpense > 0 ? h('span', { style: { color: '#b91c1c', fontWeight: 600 } }, '-' + this.fmtPKR(accExpense) + ' exp') : null,
               ),
             ], isSelected ? { border: '2px solid #0f6b4b' } : {}),
           );
@@ -2227,6 +2513,7 @@ export default class App extends React.Component {
       record:     ['Record Payment', 'رقم وصول', 'Fast collection'],
       reports:    ['Reports',   'رپورٹس',    'Cashflow & analytics'],
       reminders:  ['Reminders', 'یاد دہانی', 'Follow-ups & notifications'],
+      ledger:     ['Ledger',     'لیجر',      'Income & expenses'],
       accounts:   ['Accounts',  'اکاؤنٹس',  'Payment accounts & balances'],
       settings:   ['Settings',  'ترتیبات',   'Business preferences'],
     };
@@ -2244,6 +2531,7 @@ export default class App extends React.Component {
       { key: 'products',  label: 'Products',   icon: '📦', go: () => this.go('products') },
       { key: 'reports',   label: 'Reports',    icon: '📊', go: () => this.go('reports') },
       { key: 'reminders', label: 'Reminders',  icon: '🔔', go: () => this.go('reminders'), badge: overdueCount > 0 ? String(overdueCount) : null },
+      { key: 'ledger',    label: 'Ledger',     icon: '📒', go: () => this.go('ledger') },
       { key: 'accounts',  label: 'Accounts',   icon: '💰', go: () => this.go('accounts') },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
@@ -2336,6 +2624,7 @@ export default class App extends React.Component {
             {route === 'record'     && this.renderRecordPayment()}
             {route === 'reports'    && this.renderReports()}
             {route === 'reminders'  && this.renderReminders()}
+            {route === 'ledger'     && this.renderLedger()}
             {route === 'accounts'   && this.renderAccounts()}
             {route === 'settings'   && this.renderSettings()}
           </div>
