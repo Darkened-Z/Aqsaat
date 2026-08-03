@@ -42,6 +42,7 @@ export default class App extends React.Component {
     enteredPin: '',
     savedPin: '',
     paymentAccountId: '',
+    selectedAccountId: null,
     addAccountOpen: false,
     newAccount: { name: '', nameUr: '', emoji: '💰', balance: '' },
     syncStatus: 'loading', // 'loading' | 'synced' | 'syncing' | 'offline' | 'error'
@@ -1461,19 +1462,48 @@ export default class App extends React.Component {
     );
   }
 
-  renderAccounts() {
-    const h = this.h;
-    const accs = this.getAccounts();
-    const allTx = [];
+  _buildTxList() {
+    const tx = [];
     (this.state.plans || []).forEach(pl => {
       const c = (this.state.customers || []).find(x => x.id === pl.customerId);
       const p = (this.state.products || []).find(x => x.id === pl.productId);
       (pl.schedule || []).forEach(s => {
-        if (s.paid && s.accountId) allTx.push({ accountId: s.accountId, amount: s.amountPaid || s.amount, date: s.paidDate, customer: c, product: p, plan: pl, installment: s });
+        if (s.paid && s.accountId) tx.push({ accountId: s.accountId, amount: s.amountPaid || s.amount, date: s.paidDate, customer: c, product: p, plan: pl, installment: s });
       });
     });
-    allTx.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    tx.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return tx;
+  }
+
+  _renderTxList(txList, accs, showAccount) {
+    const h = this.h;
+    if (txList.length === 0) return [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No payments recorded yet.')];
+    return txList.map((tx, i) => {
+      const acc = accs.find(a => a.id === tx.accountId);
+      return h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+        h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, acc ? acc.emoji : '💰'),
+        h('div', { style: { flex: 1, minWidth: 0 } },
+          h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.customer ? tx.customer.name : 'Unknown'),
+          h('div', { style: { fontSize: 11, color: '#7a7663', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            (tx.product ? tx.product.name : '') + ' · #' + tx.installment.n + '/' + tx.plan.months + (showAccount && acc ? ' · ' + acc.name : ''),
+          ),
+        ),
+        h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+          h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: '#0f6b4b' } }, '+ ' + this.fmtPKR(tx.amount)),
+          h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(tx.date)),
+        ),
+      );
+    });
+  }
+
+  renderAccounts() {
+    const h = this.h;
+    const accs = this.getAccounts();
+    const allTx = this._buildTxList();
     const totalBalance = accs.reduce((sum, acc) => sum + this.accountBalance(acc.id), 0);
+    const sel = this.state.selectedAccountId;
+    const selAcc = sel ? accs.find(a => a.id === sel) : null;
+    const selTx = sel ? allTx.filter(tx => tx.accountId === sel) : [];
 
     return h('div', { className: 'screen', style: { maxWidth: 720 } },
       this.card([
@@ -1490,43 +1520,48 @@ export default class App extends React.Component {
           const bal = this.accountBalance(acc.id);
           const base = parseFloat(acc.balance) || 0;
           const received = bal - base;
-          return this.card([
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 } },
-              h('div', { style: { fontSize: 24, width: 40, height: 40, borderRadius: 10, background: '#eaf5ee', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }, acc.emoji),
-              h('div', { style: { flex: 1, minWidth: 0 } },
-                h('div', { style: { fontWeight: 700, fontSize: 14 } }, acc.name),
-                acc.nameUr ? h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, acc.nameUr) : null,
+          const isSelected = sel === acc.id;
+          return h('div', { key: acc.id, onClick: () => this.setState({ selectedAccountId: isSelected ? null : acc.id }), style: { cursor: 'pointer' } },
+            this.card([
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 } },
+                h('div', { style: { fontSize: 24, width: 40, height: 40, borderRadius: 10, background: isSelected ? '#0f6b4b' : '#eaf5ee', color: isSelected ? 'white' : undefined, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .15s' } }, acc.emoji),
+                h('div', { style: { flex: 1, minWidth: 0 } },
+                  h('div', { style: { fontWeight: 700, fontSize: 14 } }, acc.name),
+                  acc.nameUr ? h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, acc.nameUr) : null,
+                ),
+                isSelected ? h('div', { style: { fontSize: 11, color: '#0f6b4b', fontWeight: 600 } }, '▾ History') : h('div', { style: { fontSize: 11, color: '#7a7663' } }, '▸ Tap'),
               ),
-            ),
-            h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#1a2b1f', marginBottom: 8 } }, this.fmtPKR(bal)),
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#7a7663', borderTop: '1px solid #f2eee2', paddingTop: 8 } },
-              h('span', {}, 'Base: ' + this.fmtPKR(base)),
-              h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+ ' + this.fmtPKR(received) + ' received'),
-            ),
-          ]);
+              h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#1a2b1f', marginBottom: 8 } }, this.fmtPKR(bal)),
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#7a7663', borderTop: '1px solid #f2eee2', paddingTop: 8 } },
+                h('span', {}, 'Base: ' + this.fmtPKR(base)),
+                h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+ ' + this.fmtPKR(received) + ' received'),
+              ),
+            ], isSelected ? { border: '2px solid #0f6b4b' } : {}),
+          );
         }),
       ),
+      selAcc ? h('div', { style: { marginTop: 12 } },
+        this.card([
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('span', { style: { fontSize: 20 } }, selAcc.emoji),
+              h('div', {},
+                h('div', { style: { fontWeight: 700, fontSize: 15 } }, selAcc.name + ' History'),
+                h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, 'لین دین کی تاریخ'),
+              ),
+            ),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#0f6b4b' } }, selTx.length + ' payments'),
+              h('button', { type: 'button', onClick: e => { e.stopPropagation(); this.setState({ selectedAccountId: null }); }, style: { padding: '4px 10px', borderRadius: 6, background: '#f4f1e6', fontSize: 12, fontWeight: 600, color: '#3a4a3f' } }, '✕ Close'),
+            ),
+          ),
+          ...this._renderTxList(selTx, accs, false),
+        ]),
+      ) : null,
       h('div', { style: { height: 12 } }),
       this.card([
-        this.sectionHeader('Recent Transactions', 'حالیہ لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, allTx.length + ' total')),
-        allTx.length === 0
-          ? h('div', { style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No payments recorded to any account yet.')
-          : allTx.slice(0, 20).map((tx, i) => {
-            const acc = accs.find(a => a.id === tx.accountId);
-            return h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
-              h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, acc ? acc.emoji : '💰'),
-              h('div', { style: { flex: 1, minWidth: 0 } },
-                h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, tx.customer ? tx.customer.name : 'Unknown'),
-                h('div', { style: { fontSize: 11, color: '#7a7663', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-                  (tx.product ? tx.product.name : '') + ' · #' + tx.installment.n + '/' + tx.plan.months + (acc ? ' · ' + acc.name : ''),
-                ),
-              ),
-              h('div', { style: { textAlign: 'right', flexShrink: 0 } },
-                h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: '#0f6b4b' } }, '+ ' + this.fmtPKR(tx.amount)),
-                h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(tx.date)),
-              ),
-            );
-          }),
+        this.sectionHeader('All Transactions', 'تمام لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, allTx.length + ' total')),
+        ...this._renderTxList(allTx.slice(0, 20), accs, true),
       ]),
       h('div', { style: { textAlign: 'center', padding: '16px 0' } },
         h('button', { type: 'button', onClick: () => this.go('settings'), style: { padding: '10px 20px', borderRadius: 10, background: '#f4f1e6', fontWeight: 600, fontSize: 13, color: '#3a4a3f' } }, '⚙ Manage Accounts in Settings'),
