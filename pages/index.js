@@ -3062,7 +3062,7 @@ export default class App extends React.Component {
     const mobileNavActive = { ...mobileNavBase, color: '#0f6b4b', background: '#eaf5ee' };
     const mobileNav = [
       { key: 'dashboard', label: 'Home',      icon: '◆', go: () => this.go('dashboard') },
-      { key: 'ledger',    label: 'Ledger',    icon: '📒', go: () => this.go('ledger') },
+      { key: 'customers', label: 'Customers', icon: '👥', go: () => this.go('customers') },
       { key: 'newplan',   label: 'New',       icon: '＋', go: () => this.go('newplan') },
       { key: 'plans',     label: 'Plans',     icon: '📋', go: () => this.go('plans') },
       { key: 'menu',      label: 'Menu',      icon: '☰',  go: () => this.setState({ menuOpen: true }) },
@@ -3185,6 +3185,10 @@ export default class App extends React.Component {
                   { icon: '📊', label: 'Reports',   go: 'reports' },
                   { icon: '🔔', label: 'Reminders', go: 'reminders', badge: overdueCount > 0 ? overdueCount : null },
                   { icon: '📦', label: 'Products',  go: 'products' },
+                  { icon: '📒', label: 'Ledger',    go: 'ledger' },
+                  { icon: '📅', label: 'Daily Book', go: 'daybook' },
+                  { icon: '📈', label: 'P&L',       go: 'pnl' },
+                  { icon: '💰', label: 'Accounts',  go: 'accounts' },
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
                   <button key={item.go} onClick={() => { this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
