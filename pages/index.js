@@ -55,6 +55,7 @@ export default class App extends React.Component {
     ledgerSearch: '',
     recurringModal: { open: false, editId: null, type: 'expense', amount: '', accountId: '', category: '', note: '', day: 1 },
     udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: new Date().toISOString().slice(0, 10) },
+    installmentMenu: null,
   };
 
   componentDidMount() {
@@ -491,7 +492,7 @@ export default class App extends React.Component {
     const plans = this.state.plans.map(pl => {
       if (pl.id !== ctx.planId) return pl;
       const schedule = pl.schedule.map(s => s.n === ctx.installmentN
-        ? { ...s, paid: true, paidDate: today, amountPaid: amountCollected || s.amount, lateFeeCharged: this.computeLateFee(s, pl), accountId: accId || undefined }
+        ? { ...s, paid: true, paidDate: ctx.isEdit ? (s.paidDate || today) : today, amountPaid: amountCollected || s.amount, lateFeeCharged: ctx.isEdit ? s.lateFeeCharged : this.computeLateFee(s, pl), accountId: accId || undefined }
         : s);
       const allPaid = schedule.every(s => s.paid);
       return { ...pl, schedule, status: allPaid ? 'completed' : pl.status };
@@ -501,9 +502,43 @@ export default class App extends React.Component {
     const product = this.state.products.find(p => p.id === pl.productId);
     const s = pl.schedule.find(x => x.n === ctx.installmentN);
     const acc = this.getAccounts().find(a => a.id === accId);
-    this.setState({ plans, paymentModalOpen: false, receiptOpen: true, receiptData: { receiptNo: 'RCP-' + Date.now().toString().slice(-6), customer, product, plan: pl, installment: s, date: today, amountCollected: amountCollected || s.amount, accountName: acc ? acc.emoji + ' ' + acc.name : '' } });
+    if (ctx.isEdit) {
+      this.setState({ plans, paymentModalOpen: false });
+    } else {
+      this.setState({ plans, paymentModalOpen: false, receiptOpen: true, receiptData: { receiptNo: 'RCP-' + Date.now().toString().slice(-6), customer, product, plan: pl, installment: s, date: today, amountCollected: amountCollected || s.amount, accountName: acc ? acc.emoji + ' ' + acc.name : '' } });
+    }
   }
   closeReceipt = () => this.setState({ receiptOpen: false, receiptData: null });
+
+  undoPayment = (planId, installmentN) => {
+    this.requirePin(() => {
+      if (!confirm('Undo payment for installment #' + installmentN + '?\nقسط نمبر ' + installmentN + ' کی ادائیگی واپس کریں؟')) return;
+      const plans = this.state.plans.map(pl => {
+        if (pl.id !== planId) return pl;
+        const schedule = pl.schedule.map(s => s.n === installmentN
+          ? { ...s, paid: false, paidDate: undefined, amountPaid: undefined, lateFeeCharged: undefined, accountId: undefined }
+          : s);
+        return { ...pl, schedule, status: 'active' };
+      });
+      this.setState({ plans });
+    });
+  }
+
+  editPayment = (planId, installmentN) => {
+    const pl = this.state.plans.find(p => p.id === planId);
+    if (!pl) return;
+    const s = pl.schedule.find(x => x.n === installmentN);
+    if (!s || !s.paid) return;
+    const accs = this.getAccounts();
+    this.requirePin(() => {
+      this.setState({
+        paymentModalOpen: true,
+        paymentContext: { planId, installmentN, isEdit: true },
+        paymentAmount: String(s.amountPaid || s.amount),
+        paymentAccountId: s.accountId || (accs.length > 0 ? accs[0].id : ''),
+      });
+    });
+  }
 
   createPlan = () => {
     const np = this.state.newPlan;
@@ -1111,10 +1146,16 @@ export default class App extends React.Component {
           const isNext = st.next && st.next.n === s.n;
           const bg = s.paid ? '#eaf5ee' : isOverdueS ? '#fdecea' : isNext ? '#fdf2d9' : '#fdfcf8';
           const col = s.paid ? '#0f6b4b' : isOverdueS ? '#a4362b' : isNext ? '#a26a10' : '#7a7663';
-          return h('button', { key: s.n, onClick: () => !s.paid && this.openPayment(pl.id, s.n), style: { background: bg, border: '1px solid ' + (isNext ? '#f0c977' : '#ece8dc'), borderRadius: 10, padding: '8px 6px', textAlign: 'center', cursor: s.paid ? 'default' : 'pointer' } },
-            h('div', { style: { fontSize: 10, fontWeight: 700, color: col, textTransform: 'uppercase' } }, s.paid ? '✓ Paid' : isOverdueS ? 'Late' : '#' + s.n),
-            h('div', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: '#1a2b1f', marginTop: 2 } }, Math.round(s.amount / 1000) + 'k'),
-            h('div', { style: { fontSize: 9, color: col, marginTop: 1 } }, new Date(s.dueDate).toLocaleDateString('en', { day: '2-digit', month: 'short' })),
+          return h('div', { key: s.n, style: { position: 'relative' } },
+            h('button', { onClick: () => s.paid ? this.setState({ installmentMenu: this.state.installmentMenu === pl.id + '_' + s.n ? null : pl.id + '_' + s.n }) : this.openPayment(pl.id, s.n), style: { width: '100%', background: bg, border: '1px solid ' + (isNext ? '#f0c977' : '#ece8dc'), borderRadius: 10, padding: '8px 6px', textAlign: 'center', cursor: 'pointer' } },
+              h('div', { style: { fontSize: 10, fontWeight: 700, color: col, textTransform: 'uppercase' } }, s.paid ? '✓ Paid' : isOverdueS ? 'Late' : '#' + s.n),
+              h('div', { className: 'mono', style: { fontSize: 11, fontWeight: 700, color: '#1a2b1f', marginTop: 2 } }, s.paid ? this.fmtPKR(s.amountPaid || s.amount).replace('Rs ', '') : Math.round(s.amount / 1000) + 'k'),
+              h('div', { style: { fontSize: 9, color: col, marginTop: 1 } }, s.paid ? new Date(s.paidDate).toLocaleDateString('en', { day: '2-digit', month: 'short' }) : new Date(s.dueDate).toLocaleDateString('en', { day: '2-digit', month: 'short' })),
+            ),
+            this.state.installmentMenu === pl.id + '_' + s.n ? h('div', { style: { position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', zIndex: 10, background: '#fff', border: '1px solid #ece8dc', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,.12)', padding: 6, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 120, marginTop: 4 } },
+              h('button', { onClick: () => { this.setState({ installmentMenu: null }); this.editPayment(pl.id, s.n); }, style: { padding: '8px 10px', borderRadius: 8, background: '#eaf5ee', color: '#0f6b4b', fontSize: 12, fontWeight: 600, textAlign: 'left' } }, '✎ Edit Payment'),
+              h('button', { onClick: () => { this.setState({ installmentMenu: null }); this.undoPayment(pl.id, s.n); }, style: { padding: '8px 10px', borderRadius: 8, background: '#fdecea', color: '#a4362b', fontSize: 12, fontWeight: 600, textAlign: 'left' } }, '↩ Undo Payment'),
+            ) : null,
           );
         }),
       ),
@@ -2747,7 +2788,7 @@ export default class App extends React.Component {
         })(),
         h('div', { style: { display: 'flex', gap: 10 } },
           h('button', { onClick: this.closePayment, style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600, color: '#3a4a3f' } }, 'Cancel'),
-          h('button', { onClick: this.confirmPayment, style: { flex: 2, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, '✓ Confirm Payment'),
+          h('button', { onClick: this.confirmPayment, style: { flex: 2, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, ctx.isEdit ? '✓ Update Payment' : '✓ Confirm Payment'),
         ),
       ),
     );
