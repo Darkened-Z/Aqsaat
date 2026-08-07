@@ -56,6 +56,7 @@ export default class App extends React.Component {
     recurringModal: { open: false, editId: null, type: 'expense', amount: '', accountId: '', category: '', note: '', day: 1 },
     udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: new Date().toISOString().slice(0, 10) },
     installmentMenu: null,
+    reportAccounts: null,
   };
 
   componentDidMount() {
@@ -696,6 +697,141 @@ export default class App extends React.Component {
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     const a = document.createElement('a'); a.href = url; a.download = 'aqsat-plans.csv'; a.click();
   };
+
+  getReportAccounts() {
+    const accs = this.getAccounts();
+    const sel = this.state.reportAccounts;
+    if (!sel || sel.length === 0) return accs.map(a => a.id);
+    return sel;
+  }
+
+  toggleReportAccount = (accId) => {
+    const accs = this.getAccounts();
+    const all = accs.map(a => a.id);
+    let sel = this.state.reportAccounts || [...all];
+    if (sel.includes(accId)) {
+      sel = sel.filter(id => id !== accId);
+      if (sel.length === 0) sel = [...all];
+    } else {
+      sel = [...sel, accId];
+    }
+    if (sel.length === all.length) sel = null;
+    this.setState({ reportAccounts: sel });
+  }
+
+  downloadReportPDF = (type) => {
+    const accs = this.getAccounts();
+    const selIds = this.getReportAccounts();
+    const selAccs = accs.filter(a => selIds.includes(a.id));
+    const biz = this.state.settings.businessName || 'Aqsat';
+    const owner = this.state.settings.ownerName || '';
+
+    let title, dateLabel, rows = [];
+
+    if (type === 'daily') {
+      const dateStr = this.state.dayBookDate || new Date().toISOString().slice(0, 10);
+      const dayLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      title = 'Daily Report / روزنامچہ';
+      dateLabel = dayLabel;
+      const allTx = this._buildTxList().filter(tx => tx.date === dateStr && selIds.includes(tx.accountId));
+      let totalIn = 0, totalOut = 0;
+      allTx.forEach(tx => {
+        const acc = accs.find(a => a.id === tx.accountId);
+        const accName = acc ? acc.name : '';
+        if (tx.source === 'plan') {
+          totalIn += tx.amount;
+          rows.push({ desc: (tx.customer ? tx.customer.name : 'Customer') + ' — Installment', account: accName, inAmt: tx.amount, outAmt: 0 });
+        } else if (tx.source === 'ledger') {
+          const le = tx.ledgerEntry;
+          const isInc = le.type === 'income';
+          if (isInc) { totalIn += tx.amount; rows.push({ desc: le.category + (le.note ? ' — ' + le.note : ''), account: accName, inAmt: tx.amount, outAmt: 0 }); }
+          else { totalOut += tx.amount; rows.push({ desc: le.category + (le.note ? ' — ' + le.note : ''), account: accName, inAmt: 0, outAmt: tx.amount }); }
+        } else if (tx.source === 'udpi') {
+          const u = tx.udpiEntry;
+          if (u.direction === 'borrowed') { totalIn += tx.amount; rows.push({ desc: u.person + ' (Borrowed)', account: accName, inAmt: tx.amount, outAmt: 0 }); }
+          else { totalOut += tx.amount; rows.push({ desc: u.person + ' (Lent)', account: accName, inAmt: 0, outAmt: tx.amount }); }
+        }
+      });
+      rows.push({ desc: 'TOTAL', account: '', inAmt: totalIn, outAmt: totalOut, isTotal: true });
+    } else {
+      const mKey = this.state.pnlMonth || (new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0'));
+      const mLabel = new Date(mKey + '-01T00:00:00').toLocaleDateString('en', { month: 'long', year: 'numeric' });
+      title = 'Monthly P&L Report / ماہانہ نفع نقصان';
+      dateLabel = mLabel;
+      let instCollected = 0, instProfit = 0, downPayments = 0;
+      (this.state.plans || []).forEach(pl => {
+        const financed = Math.max(0, pl.total - pl.down);
+        const pct = Math.min(Math.max(pl.interest || 0, 0), 100);
+        const profit = financed * pct / 100;
+        const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
+        const profitPerRupee = profit / scheduleTotal;
+        const idPart = (pl.id || '').replace(/^pl_/, '');
+        const createdMs = parseInt(idPart, 36);
+        const createdDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
+        const createdKey = createdDate ? createdDate.getFullYear() + '-' + String(createdDate.getMonth() + 1).padStart(2, '0') : '';
+        if (createdKey === mKey) downPayments += (pl.down || 0);
+        pl.schedule.forEach(s => {
+          if (s.paid && s.paidDate && s.paidDate.slice(0, 7) === mKey && selIds.includes(s.accountId)) {
+            instCollected += (s.amountPaid || s.amount);
+            instProfit += (s.amountPaid || s.amount) * profitPerRupee;
+          }
+        });
+      });
+      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId));
+      const ledgerIncome = mLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
+      const ledgerExpense = mLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
+      const totalIncome = instCollected + downPayments + ledgerIncome;
+      const totalExpense = ledgerExpense;
+      const netPnL = totalIncome - totalExpense;
+      rows = [
+        { section: 'Income / آمدنی' },
+        { desc: 'Installments Collected / اقساط وصول', amount: instCollected },
+        { desc: 'Down Payments / ایڈوانس', amount: downPayments },
+        { desc: 'Other Income / دیگر آمدنی', amount: ledgerIncome },
+        { desc: 'Total Income / کل آمدنی', amount: totalIncome, isTotal: true },
+        { section: 'Expenses / اخراجات' },
+        { desc: 'Expenses / لیجر اخراجات', amount: ledgerExpense },
+        { desc: 'Total Expenses / کل اخراجات', amount: totalExpense, isTotal: true },
+        { section: 'Profitability / منافع' },
+        { desc: 'Markup Earned / قسط کا منافع', amount: Math.round(instProfit) },
+        { desc: 'Net P&L / خالص نفع نقصان', amount: netPnL, isTotal: true, isNet: true },
+      ];
+    }
+
+    const accLabel = selAccs.length === accs.length ? 'All Accounts' : selAccs.map(a => a.name).join(', ');
+    const fmtPKR = (n) => 'Rs ' + (Math.round(n) || 0).toLocaleString('en-PK');
+    let html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title + '</title>';
+    html += '<style>body{font-family:Arial,sans-serif;margin:40px;color:#1a2b1f}h1{font-size:20px;margin:0}h2{font-size:13px;color:#7a7663;margin:4px 0 0}.meta{font-size:12px;color:#7a7663;margin:16px 0 20px;border-bottom:2px solid #ece8dc;padding-bottom:12px}';
+    html += 'table{width:100%;border-collapse:collapse;margin-top:12px}th{text-align:left;font-size:11px;color:#7a7663;text-transform:uppercase;padding:8px 6px;border-bottom:2px solid #ece8dc}td{padding:8px 6px;font-size:13px;border-bottom:1px solid #f2eee2}';
+    html += '.mono{font-family:monospace}.right{text-align:right}.green{color:#0f6b4b}.red{color:#b91c1c}.bold{font-weight:700}.total-row{border-top:2px solid #ece8dc;font-weight:700;font-size:14px}.section{font-weight:700;font-size:14px;padding-top:16px;border:none}.net{font-size:16px}';
+    html += '@media print{body{margin:20px}}</style></head><body>';
+    html += '<h1>' + biz + '</h1><h2>' + title + '</h2>';
+    html += '<div class="meta">' + dateLabel + '<br>Accounts: ' + accLabel + (owner ? '<br>Prepared by: ' + owner : '') + '<br>Generated: ' + new Date().toLocaleString('en-PK') + '</div>';
+
+    if (type === 'daily') {
+      html += '<table><thead><tr><th>Description</th><th>Account</th><th class="right">Money In</th><th class="right">Money Out</th></tr></thead><tbody>';
+      rows.forEach(r => {
+        const cls = r.isTotal ? ' class="total-row"' : '';
+        html += '<tr' + cls + '><td>' + r.desc + '</td><td>' + r.account + '</td><td class="mono right green">' + (r.inAmt ? fmtPKR(r.inAmt) : '') + '</td><td class="mono right red">' + (r.outAmt ? fmtPKR(r.outAmt) : '') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    } else {
+      html += '<table><thead><tr><th>Item</th><th class="right">Amount</th></tr></thead><tbody>';
+      rows.forEach(r => {
+        if (r.section) { html += '<tr><td class="section" colspan="2">' + r.section + '</td></tr>'; return; }
+        const cls = r.isTotal ? (r.isNet ? 'total-row net' : 'total-row') : '';
+        const color = r.isNet ? (r.amount >= 0 ? 'green' : 'red') : '';
+        html += '<tr class="' + cls + '"><td>' + r.desc + '</td><td class="mono right bold ' + color + '">' + (r.isNet && r.amount >= 0 ? '+' : '') + fmtPKR(r.amount) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    }
+    html += '</body></html>';
+
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  }
 
   toggleDark = () => {
     const dm = !this.state.darkMode;
@@ -2141,9 +2277,10 @@ export default class App extends React.Component {
   renderDayBook() {
     const h = this.h;
     const accs = this.getAccounts();
+    const selIds = this.getReportAccounts();
     const dateStr = this.state.dayBookDate || new Date().toISOString().slice(0, 10);
     const allTx = this._buildTxList();
-    const dayTx = allTx.filter(tx => tx.date === dateStr);
+    const dayTx = allTx.filter(tx => tx.date === dateStr && selIds.includes(tx.accountId));
 
     let totalIn = 0, totalOut = 0;
     dayTx.forEach(tx => {
@@ -2165,9 +2302,10 @@ export default class App extends React.Component {
     };
     const isToday = dateStr === new Date().toISOString().slice(0, 10);
     const dayLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+    const allSelected = !this.state.reportAccounts;
 
     return h('div', { className: 'screen', style: { maxWidth: 720 } },
-      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8 } },
         h('button', { onClick: () => shiftDay(-1), style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', fontWeight: 700, fontSize: 16, color: '#3a4a3f' } }, '‹'),
         h('div', { style: { textAlign: 'center', flex: 1 } },
           h('div', { style: { fontWeight: 700, fontSize: 15 } }, dayLabel),
@@ -2175,6 +2313,15 @@ export default class App extends React.Component {
         ),
         h('button', { onClick: () => shiftDay(1), style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', fontWeight: 700, fontSize: 16, color: '#3a4a3f' } }, '›'),
         !isToday ? h('button', { onClick: () => this.setState({ dayBookDate: new Date().toISOString().slice(0, 10) }), style: { padding: '8px 12px', borderRadius: 10, background: '#eaf5ee', fontWeight: 600, fontSize: 12, color: '#0f6b4b' } }, 'Today') : null,
+      ),
+      h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' } },
+        h('span', { style: { fontSize: 11, color: '#7a7663', fontWeight: 600 } }, 'Accounts:'),
+        ...accs.map(acc => {
+          const active = selIds.includes(acc.id);
+          return h('button', { key: acc.id, onClick: () => this.toggleReportAccount(acc.id), style: { padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: active ? '#eaf5ee' : '#f4f1e6', color: active ? '#0f6b4b' : '#7a7663', border: '1px solid ' + (active ? '#0f6b4b' : '#ece8dc') } }, acc.emoji + ' ' + acc.name);
+        }),
+        allSelected ? null : h('button', { onClick: () => this.setState({ reportAccounts: null }), style: { padding: '4px 8px', borderRadius: 8, fontSize: 10, fontWeight: 600, background: '#fff', color: '#7a7663', border: '1px solid #ece8dc' } }, '✕ Reset'),
+        h('button', { onClick: () => this.downloadReportPDF('daily'), style: { marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#0f6b4b', color: '#fff', display: 'flex', alignItems: 'center', gap: 4 } }, '⬇ PDF'),
       ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 } },
         h('div', { style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 14, textAlign: 'center' } },
@@ -2210,6 +2357,9 @@ export default class App extends React.Component {
     const h = this.h;
     const now = new Date();
     const selMonth = this.state.pnlMonth || (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+    const accs = this.getAccounts();
+    const selIds = this.getReportAccounts();
+    const allSelected = !this.state.reportAccounts;
 
     const profitOf = (pl) => {
       const financed = Math.max(0, pl.total - pl.down);
@@ -2235,14 +2385,14 @@ export default class App extends React.Component {
         const createdKey = createdDate ? createdDate.getFullYear() + '-' + String(createdDate.getMonth() + 1).padStart(2, '0') : '';
         if (createdKey === mKey) downPayments += (pl.down || 0);
         pl.schedule.forEach(s => {
-          if (s.paid && s.paidDate && s.paidDate.slice(0, 7) === mKey) {
+          if (s.paid && s.paidDate && s.paidDate.slice(0, 7) === mKey && selIds.includes(s.accountId)) {
             instCollected += (s.amountPaid || s.amount);
             instProfit += (s.amountPaid || s.amount) * profitPerRupee;
           }
         });
       });
 
-      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey);
+      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId));
       const ledgerIncome = mLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
       const ledgerExpense = mLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
 
@@ -2269,12 +2419,21 @@ export default class App extends React.Component {
     );
 
     return h('div', { className: 'screen', style: { maxWidth: 720 } },
-      h('div', { style: { display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 16, paddingBottom: 4 } },
+      h('div', { style: { display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10, paddingBottom: 4 } },
         months.map(m => {
           const ml = new Date(m + '-01T00:00:00').toLocaleDateString('en', { month: 'short' });
           const isSel = m === selMonth;
           return h('button', { key: m, onClick: () => this.setState({ pnlMonth: m }), style: { padding: '8px 14px', borderRadius: 10, background: isSel ? '#0f6b4b' : '#f4f1e6', color: isSel ? '#fff' : '#3a4a3f', fontWeight: isSel ? 700 : 500, fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0 } }, ml);
         }),
+      ),
+      h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' } },
+        h('span', { style: { fontSize: 11, color: '#7a7663', fontWeight: 600 } }, 'Accounts:'),
+        ...accs.map(acc => {
+          const active = selIds.includes(acc.id);
+          return h('button', { key: acc.id, onClick: () => this.toggleReportAccount(acc.id), style: { padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: active ? '#eaf5ee' : '#f4f1e6', color: active ? '#0f6b4b' : '#7a7663', border: '1px solid ' + (active ? '#0f6b4b' : '#ece8dc') } }, acc.emoji + ' ' + acc.name);
+        }),
+        allSelected ? null : h('button', { onClick: () => this.setState({ reportAccounts: null }), style: { padding: '4px 8px', borderRadius: 8, fontSize: 10, fontWeight: 600, background: '#fff', color: '#7a7663', border: '1px solid #ece8dc' } }, '✕ Reset'),
+        h('button', { onClick: () => this.downloadReportPDF('monthly'), style: { marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#0f6b4b', color: '#fff', display: 'flex', alignItems: 'center', gap: 4 } }, '⬇ PDF'),
       ),
       h('div', { style: { textAlign: 'center', marginBottom: 16 } },
         h('div', { style: { fontSize: 12, fontWeight: 600, color: '#7a7663', textTransform: 'uppercase' } }, monthLabel),
