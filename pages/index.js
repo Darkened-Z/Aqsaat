@@ -13,7 +13,7 @@ export default class App extends React.Component {
     customers: null,
     products: null,
     plans: null,
-    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 },
+    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' },
     paymentAmount: '',
     menuOpen: false,
     deletePlanModal: { open: false, planId: null, pinInput: '' },
@@ -545,6 +545,7 @@ export default class App extends React.Component {
     const np = this.state.newPlan;
     if (!np.customerId) { alert('Please select a customer'); return; }
     if (!np.productId) { alert('Please select a product'); return; }
+    if (!np.accountId) { alert('Please select an account\nاکاؤنٹ منتخب کریں'); return; }
     const product = this.state.products.find(p => p.id === np.productId);
     const total = parseFloat(np.totalPrice) || product.price;
     const down = parseFloat(np.downPayment) || 0;
@@ -590,8 +591,17 @@ export default class App extends React.Component {
     const monthly = installAmt > 0 ? installAmt : (months > 0 ? Math.round(total2Pay / months) : 0);
     const voucherSeq = (this.state.plans.length + 1).toString().padStart(3, '0');
     const voucherNo = 'VCH-' + new Date().getFullYear() + '-' + voucherSeq;
-    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
-    this.setState({ plans: [plan, ...this.state.plans], newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30 } });
+    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, accountId: np.accountId, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
+    const customer = this.state.customers.find(c => c.id === np.customerId);
+    const custName = customer ? customer.name : '';
+    const prodName = product ? product.name : '';
+    const today = new Date().toISOString().slice(0, 10);
+    const ledger = [...(this.state.ledger || [])];
+    ledger.unshift({ id: 'le_' + Date.now().toString(36), type: 'expense', amount: total, accountId: np.accountId, category: 'Product Cost', note: prodName + ' — ' + custName + ' (' + voucherNo + ')', date: today });
+    if (down > 0) {
+      ledger.unshift({ id: 'le_' + (Date.now() + 1).toString(36), type: 'income', amount: down, accountId: np.accountId, category: 'Down Payment', note: prodName + ' — ' + custName + ' (' + voucherNo + ')', date: today });
+    }
+    this.setState({ plans: [plan, ...this.state.plans], ledger, newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' } });
     this.go('customer', { id: np.customerId });
   };
 
@@ -1457,6 +1467,18 @@ export default class App extends React.Component {
             ),
           ),
           field('Start Date', 'آغاز', h('input', { type: 'date', value: np.startDate, onChange: e => set('startDate', e.target.value), style: inpStyle })),
+          field('Deduct From Account', 'اکاؤنٹ منتخب کریں',
+            (() => { const accs = this.getAccounts(); return accs.length > 0
+              ? h('div', { style: { display: 'grid', gridTemplateColumns: accs.length <= 3 ? 'repeat(' + accs.length + ',1fr)' : 'repeat(2,1fr)', gap: 8 } },
+                  accs.map(acc => { const active = np.accountId === acc.id; return h('button', { type: 'button', key: acc.id, onClick: () => set('accountId', acc.id), style: { padding: '10px 8px', borderRadius: 10, border: '1px solid ' + (active ? '#0f6b4b' : '#ece8dc'), background: active ? '#eaf5ee' : '#fdfcf8', fontSize: 12, fontWeight: 600, color: active ? '#0f6b4b' : '#3a4a3f', textAlign: 'center' } },
+                    h('div', { style: { fontSize: 18, marginBottom: 4 } }, acc.emoji),
+                    h('div', {}, acc.name),
+                    h('div', { className: 'mono', style: { fontSize: 11, color: '#7a7663', marginTop: 2 } }, this.fmtPKR(this.accountBalance(acc.id))),
+                  ); }),
+                )
+              : h('div', { style: { fontSize: 13, color: '#7a7663' } }, 'No accounts configured. Add in Settings.');
+            })(),
+          ),
           isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('input', { value: np.imei, onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isBike ? field('Chassis Number', 'چیسس نمبر', h('input', { value: np.chassisNo, onChange: e => set('chassisNo', e.target.value), placeholder: 'e.g. ABC1234567890', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
         ),
