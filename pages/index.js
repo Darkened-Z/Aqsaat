@@ -1025,7 +1025,8 @@ export default class App extends React.Component {
   // ─── screens ───
   renderDashboard() {
     const h = this.h;
-    const { plans, customers, products } = this.state;
+    const { customers, products } = this.state;
+    const plans = this.activePlans();
     const today = this.today();
     let cashToday = 0, upcomingWeek = 0, overdueTotal = 0, overdueCount = 0;
     let dueTodayList = [], upcomingList = [], overdueList = [], recentPayments = [];
@@ -3243,7 +3244,8 @@ export default class App extends React.Component {
     }
 
     if (this.state.pinLocked) return this.renderPinLock();
-    const { route, plans } = this.state;
+    const { route } = this.state;
+    const plans = this.activePlans();
     const titles = {
       dashboard: ['Dashboard', 'ڈیش بورڈ', 'Overview of your business'],
       customers:  ['Customers', 'گاہک',      'All buyers on installments'],
