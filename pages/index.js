@@ -268,11 +268,12 @@ export default class App extends React.Component {
   }
   activeCustomers() { return (this.state.customers || []).filter(c => !c._deleted); }
   activeProducts() { return (this.state.products || []).filter(p => !p._deleted); }
+  activePlans() { return (this.state.plans || []).filter(p => !p._deleted); }
   getAccounts() { return (this.state.settings.accounts || []).filter(a => !a._deleted); }
   accountBalance(accId) {
     const acc = this.getAccounts().find(a => a.id === accId);
     const base = acc ? (parseFloat(acc.balance) || 0) : 0;
-    const payments = (this.state.plans || []).reduce((sum, pl) => {
+    const payments = this.activePlans().reduce((sum, pl) => {
       return sum + (pl.schedule || []).filter(s => s.paid && s.accountId === accId)
         .reduce((a, s) => a + (s.amountPaid || s.amount || 0), 0);
     }, 0);
@@ -426,7 +427,7 @@ export default class App extends React.Component {
   }
 
   customerStats(cId) {
-    const cPlans = this.state.plans.filter(p => p.customerId === cId).sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+    const cPlans = this.activePlans().filter(p => p.customerId === cId).sort((a, b) => (b.id || '').localeCompare(a.id || ''));
     let total = 0, paid = 0, overdue = 0;
     cPlans.forEach(pl => {
       const st = this.planStats(pl);
@@ -641,7 +642,7 @@ export default class App extends React.Component {
     this.closeEditCustomer();
   };
   deleteCustomer = (id) => {
-    const used = this.state.plans.some(pl => pl.customerId === id && pl.status === 'active');
+    const used = this.activePlans().some(pl => pl.customerId === id && pl.status === 'active');
     if (used) { alert('This customer has active plans and cannot be deleted.\nاس گاہک کے فعال پلانز ہیں اور اسے ڈیلیٹ نہیں کیا جا سکتا۔'); return; }
     if (!confirm('Delete this customer?\nکیا آپ یہ گاہک ڈیلیٹ کرنا چاہتے ہیں؟')) return;
     this.setState({ customers: this.state.customers.map(c => c.id === id ? { ...c, _deleted: true } : c) });
@@ -697,7 +698,7 @@ export default class App extends React.Component {
 
   exportCSV = () => {
     const rows = [['Customer', 'Product', 'Total', 'Down', 'Monthly', 'Paid', 'Remaining', 'Status', 'Start Date']];
-    this.state.plans.forEach(pl => {
+    this.activePlans().forEach(pl => {
       const c = this.state.customers.find(x => x.id === pl.customerId);
       const p = this.state.products.find(x => x.id === pl.productId);
       const st = this.planStats(pl);
@@ -769,7 +770,7 @@ export default class App extends React.Component {
       title = 'Monthly P&L Report / ماہانہ نفع نقصان';
       dateLabel = mLabel;
       let instCollected = 0, instProfit = 0, downPayments = 0;
-      (this.state.plans || []).forEach(pl => {
+      this.activePlans().forEach(pl => {
         const financed = Math.max(0, pl.total - pl.down);
         const pct = Math.min(Math.max(pl.interest || 0, 0), 100);
         const profit = financed * pct / 100;
@@ -878,7 +879,7 @@ export default class App extends React.Component {
   closeDeletePlan = () => this.setState({ deletePlanModal: { open: false, planId: null, pinInput: '' } });
   confirmDeletePlan = () => {
     const { planId } = this.state.deletePlanModal;
-    this.setState({ plans: this.state.plans.filter(p => p.id !== planId), deletePlanModal: { open: false, planId: null, pinInput: '' } });
+    this.setState({ plans: this.state.plans.map(p => p.id === planId ? { ...p, _deleted: true } : p), deletePlanModal: { open: false, planId: null, pinInput: '' } });
   };
 
   updatePlanLateFee = (planId, key, value) => {
@@ -997,7 +998,7 @@ export default class App extends React.Component {
     this.closeEditProduct();
   };
   deleteProduct = (id) => {
-    const used = this.state.plans.some(pl => pl.productId === id && pl.status === 'active');
+    const used = this.activePlans().some(pl => pl.productId === id && pl.status === 'active');
     if (used) { alert('This product is used in active plans and cannot be deleted.\nیہ پروڈکٹ فعال پلانز میں استعمال ہو رہی ہے۔'); return; }
     if (!confirm('Delete this product?\nکیا آپ یہ پروڈکٹ ڈیلیٹ کرنا چاہتے ہیں؟')) return;
     this.setState({ products: this.state.products.map(p => p.id === id ? { ...p, _deleted: true } : p) });
@@ -1353,7 +1354,7 @@ export default class App extends React.Component {
       ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 } },
         this.activeProducts().map(p => {
-          const sold = this.state.plans.filter(pl => pl.productId === p.id).length;
+          const sold = this.activePlans().filter(pl => pl.productId === p.id).length;
           return h('div', { key: p.id, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 16 } },
             h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } },
               h('div', { style: { fontSize: 34, marginBottom: 8 } }, p.emoji),
@@ -1376,11 +1377,11 @@ export default class App extends React.Component {
   renderPlans() {
     const h = this.h;
     const filter = this.state.planFilter || 'all';
-    let plans = this.state.plans.slice().sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+    let plans = this.activePlans().slice().sort((a, b) => (b.id || '').localeCompare(a.id || ''));
     if (filter === 'active') plans = plans.filter(p => p.status === 'active');
     if (filter === 'completed') plans = plans.filter(p => p.status === 'completed');
     if (filter === 'overdue') plans = plans.filter(p => this.planStats(p).overdue.length > 0);
-    const filters = [['all', 'All', this.state.plans.length], ['active', 'Active', this.state.plans.filter(p => p.status === 'active').length], ['overdue', 'Overdue', this.state.plans.filter(p => this.planStats(p).overdue.length > 0).length], ['completed', 'Completed', this.state.plans.filter(p => p.status === 'completed').length]];
+    const filters = [['all', 'All', this.activePlans().length], ['active', 'Active', this.activePlans().filter(p => p.status === 'active').length], ['overdue', 'Overdue', this.activePlans().filter(p => this.planStats(p).overdue.length > 0).length], ['completed', 'Completed', this.activePlans().filter(p => p.status === 'completed').length]];
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 } },
         h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
@@ -1511,16 +1512,16 @@ export default class App extends React.Component {
     const curMonth = now.getMonth();
     const curYear = now.getFullYear();
 
-    const totalReceived = this.state.plans.reduce((a, p) => a + this.planStats(p).paidAmount, 0);
-    const totalOut = this.state.plans.reduce((a, p) => a + this.planStats(p).remaining, 0);
+    const totalReceived = this.activePlans().reduce((a, p) => a + this.planStats(p).paidAmount, 0);
+    const totalOut = this.activePlans().reduce((a, p) => a + this.planStats(p).remaining, 0);
 
     const profitOf = (pl) => {
       const financed = Math.max(0, pl.total - pl.down);
       const pct = Math.min(Math.max(pl.interest || 0, 0), 100);
       return financed * pct / 100;
     };
-    const totalProfit = this.state.plans.reduce((a, pl) => a + profitOf(pl), 0);
-    const earnedProfit = this.state.plans.reduce((a, pl) => {
+    const totalProfit = this.activePlans().reduce((a, pl) => a + profitOf(pl), 0);
+    const earnedProfit = this.activePlans().reduce((a, pl) => {
       const profit = profitOf(pl);
       const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
       const paidTotal = pl.schedule.filter(s => s.paid).reduce((s, x) => s + x.amount, 0);
@@ -1534,7 +1535,7 @@ export default class App extends React.Component {
       const label = d.toLocaleDateString('en', { month: 'short', year: '2-digit' });
       monthlyData[key] = { label, collected: 0, profitEarned: 0, plans: 0, down: 0 };
     }
-    this.state.plans.forEach(pl => {
+    this.activePlans().forEach(pl => {
       const idPart = (pl.id || '').replace(/^pl_/, '');
       const createdMs = parseInt(idPart, 36);
       const createdDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
@@ -1561,7 +1562,7 @@ export default class App extends React.Component {
     const curKey = curYear + '-' + String(curMonth + 1).padStart(2, '0');
 
     const byCat = {};
-    this.state.plans.forEach(pl => { const p = this.state.products.find(x => x.id === pl.productId); if (p) byCat[p.category] = (byCat[p.category] || 0) + this.planStats(pl).total; });
+    this.activePlans().forEach(pl => { const p = this.state.products.find(x => x.id === pl.productId); if (p) byCat[p.category] = (byCat[p.category] || 0) + this.planStats(pl).total; });
     const catEntries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
     const catTotal = catEntries.reduce((a, [, v]) => a + v, 0) || 1;
     const catColors = ['#0f6b4b','#14a374','#3ba777','#a26a10','#d4a94a','#a4362b','#6b4a1a','#0a5138'];
@@ -1655,7 +1656,7 @@ export default class App extends React.Component {
   renderReminders() {
     const h = this.h;
     let overdueList = [];
-    this.state.plans.forEach(pl => {
+    this.activePlans().forEach(pl => {
       const c = this.state.customers.find(x => x.id === pl.customerId);
       const p = this.state.products.find(x => x.id === pl.productId);
       pl.schedule.forEach(s => { const diff = this.dayDiff(s.dueDate); if (!s.paid && diff < 0) overdueList.push({ pl, s, c, p, diff }); });
@@ -1859,7 +1860,7 @@ export default class App extends React.Component {
 
   _buildTxList() {
     const tx = [];
-    (this.state.plans || []).forEach(pl => {
+    this.activePlans().forEach(pl => {
       const c = (this.state.customers || []).find(x => x.id === pl.customerId);
       const p = (this.state.products || []).find(x => x.id === pl.productId);
       (pl.schedule || []).forEach(s => {
@@ -2397,7 +2398,7 @@ export default class App extends React.Component {
 
     const buildMonth = (mKey) => {
       let instCollected = 0, instProfit = 0, downPayments = 0;
-      (this.state.plans || []).forEach(pl => {
+      this.activePlans().forEach(pl => {
         const profit = profitOf(pl);
         const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
         const profitPerRupee = profit / scheduleTotal;
@@ -2886,7 +2887,7 @@ export default class App extends React.Component {
     );
     const categories = ['Mobile', 'Motorcycle', 'Television', 'Refrigerator', 'Appliance', 'Air Conditioner', 'Laptop', 'Other'];
     const emojis = ['📱','🏍️','📺','❄️','🧺','💻','📦','⚡','🔌','🎮','📷','🖨️'];
-    const sold = this.state.plans.filter(pl => pl.productId === ep.id).length;
+    const sold = this.activePlans().filter(pl => pl.productId === ep.id).length;
     return h('div', { onClick: this.closeEditProduct, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)' } },
       h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 480, animation: 'slideIn .2s ease', maxHeight: '90vh', overflowY: 'auto' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 } },
