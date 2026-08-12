@@ -13,7 +13,7 @@ export default class App extends React.Component {
     customers: null,
     products: null,
     plans: null,
-    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' },
+    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: this.todayStr(), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' },
     paymentAmount: '',
     menuOpen: false,
     deletePlanModal: { open: false, planId: null, pinInput: '' },
@@ -49,12 +49,12 @@ export default class App extends React.Component {
     syncError: '',
     ledger: null,
     udpiEntries: null,
-    ledgerModal: { open: false, type: 'expense', amount: '', accountId: '', category: '', note: '', date: new Date().toISOString().slice(0, 10), editId: null },
+    ledgerModal: { open: false, type: 'expense', amount: '', accountId: '', category: '', note: '', date: this.todayStr(), editId: null },
     ledgerFilter: 'all',
     ledgerMonthFilter: '',
     ledgerSearch: '',
     recurringModal: { open: false, editId: null, type: 'expense', amount: '', accountId: '', category: '', note: '', day: 1 },
-    udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: new Date().toISOString().slice(0, 10) },
+    udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: this.todayStr() },
     installmentMenu: null,
     reportAccounts: null,
   };
@@ -257,6 +257,9 @@ export default class App extends React.Component {
   // Local calendar date as 'YYYY-MM-DD' (matches how schedule dueDates are stored).
   todayStr() {
     const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  _localDateStr(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
   // Whole-day difference from today to a 'YYYY-MM-DD' date (negative = overdue, 0 = due today).
@@ -488,7 +491,7 @@ export default class App extends React.Component {
   closePayment = () => this.setState({ paymentModalOpen: false, paymentContext: null });
   confirmPayment = () => {
     const ctx = this.state.paymentContext;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = this.todayStr();
     const amountCollected = parseFloat(this.state.paymentAmount) || 0;
     const accId = this.state.paymentAccountId;
     const plans = this.state.plans.map(pl => {
@@ -573,7 +576,7 @@ export default class App extends React.Component {
         if (np.frequency === 'days') d.setDate(d.getDate() + i * freqDays);
         else d.setMonth(d.getMonth() + i);
         const amt = Math.min(Math.round(remaining), installAmt);
-        schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount: amt, paid: false, paidDate: null });
+        schedule.push({ n: i + 1, dueDate: this._localDateStr(d), amount: amt, paid: false, paidDate: null });
         remaining -= amt;
         i++;
       }
@@ -585,24 +588,24 @@ export default class App extends React.Component {
         else d.setMonth(d.getMonth() + i);
         // Last installment absorbs the rounding remainder so the schedule sums to total2Pay exactly.
         const amount = i === fixedMonths - 1 ? Math.round(total2Pay - equalAmt * (fixedMonths - 1)) : equalAmt;
-        schedule.push({ n: i + 1, dueDate: d.toISOString().slice(0, 10), amount, paid: false, paidDate: null });
+        schedule.push({ n: i + 1, dueDate: this._localDateStr(d), amount, paid: false, paidDate: null });
       }
     }
     const months = schedule.length;
     const monthly = installAmt > 0 ? installAmt : (months > 0 ? Math.round(total2Pay / months) : 0);
     const voucherSeq = (this.state.plans.length + 1).toString().padStart(3, '0');
     const voucherNo = 'VCH-' + new Date().getFullYear() + '-' + voucherSeq;
-    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: start.toISOString().slice(0, 10), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, accountId: np.accountId, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
+    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: this._localDateStr(start), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, frequency: np.frequency, frequencyDays: freqDays, accountId: np.accountId, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
     const customer = this.state.customers.find(c => c.id === np.customerId);
     const custName = customer ? customer.name : '';
     const prodName = product ? product.name : '';
-    const today = new Date().toISOString().slice(0, 10);
+    const today = this.todayStr();
     const ledger = [...(this.state.ledger || [])];
     ledger.unshift({ id: 'le_' + Date.now().toString(36), type: 'expense', amount: total, accountId: np.accountId, category: 'Product Cost', note: prodName + ' — ' + custName + ' (' + voucherNo + ')', date: today });
     if (down > 0) {
       ledger.unshift({ id: 'le_' + (Date.now() + 1).toString(36), type: 'income', amount: down, accountId: np.accountId, category: 'Down Payment', note: prodName + ' — ' + custName + ' (' + voucherNo + ')', date: today });
     }
-    this.setState({ plans: [plan, ...this.state.plans], ledger, newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: new Date().toISOString().slice(0, 10), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' } });
+    this.setState({ plans: [plan, ...this.state.plans], ledger, newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: this.todayStr(), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' } });
     this.go('customer', { id: np.customerId });
   };
 
@@ -622,7 +625,7 @@ export default class App extends React.Component {
     if (!nc.name || !nc.phone) { alert('Please enter name and phone'); return; }
     const initials = nc.name.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase() || 'NC';
     const colors = ['#e7dcc4','#f5d4c0','#cfe4d3','#e0d4f0','#f3dfb8','#d4e6ec','#e7c9c3','#d1dfe7'];
-    const c = { id: 'c' + (this.state.customers.length + 1) + '_' + Date.now().toString(36).slice(-4), name: nc.name, nameUr: nc.nameUr || nc.name, phone: nc.phone, altPhone: nc.altPhone, cnic: nc.cnic, dob: nc.dob, fatherName: nc.fatherName, occupation: nc.occupation, monthlyIncome: nc.monthlyIncome, address: nc.address, city: nc.city, area: nc.area || nc.city, guarantor: { name: nc.guarantorName, phone: nc.guarantorPhone, cnic: nc.guarantorCnic, relation: nc.guarantorRelation }, notes: nc.notes, documents: nc.documents, joined: new Date().toISOString().slice(0, 10), avatar: initials, color: colors[this.state.customers.length % colors.length] };
+    const c = { id: 'c' + (this.state.customers.length + 1) + '_' + Date.now().toString(36).slice(-4), name: nc.name, nameUr: nc.nameUr || nc.name, phone: nc.phone, altPhone: nc.altPhone, cnic: nc.cnic, dob: nc.dob, fatherName: nc.fatherName, occupation: nc.occupation, monthlyIncome: nc.monthlyIncome, address: nc.address, city: nc.city, area: nc.area || nc.city, guarantor: { name: nc.guarantorName, phone: nc.guarantorPhone, cnic: nc.guarantorCnic, relation: nc.guarantorRelation }, notes: nc.notes, documents: nc.documents, joined: this.todayStr(), avatar: initials, color: colors[this.state.customers.length % colors.length] };
     this.setState({ customers: [c, ...this.state.customers], addCustomerOpen: false, newCustomer: { name: '', nameUr: '', phone: '', altPhone: '', cnic: '', dob: '', fatherName: '', occupation: '', monthlyIncome: '', address: '', city: '', area: '', guarantorName: '', guarantorPhone: '', guarantorCnic: '', guarantorRelation: '', notes: '', documents: [] }, addCustomerStep: 1 });
     this.go('customer', { id: c.id });
   };
@@ -673,7 +676,7 @@ export default class App extends React.Component {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `aqsat-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `aqsat-backup-${this.todayStr()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -740,7 +743,7 @@ export default class App extends React.Component {
     let title, dateLabel, rows = [];
 
     if (type === 'daily') {
-      const dateStr = this.state.dayBookDate || new Date().toISOString().slice(0, 10);
+      const dateStr = this.state.dayBookDate || this.todayStr();
       const dayLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
       title = 'Daily Report / روزنامچہ';
       dateLabel = dayLabel;
@@ -916,7 +919,7 @@ export default class App extends React.Component {
       const d = new Date(startBase);
       if (freq === 'days') d.setDate(d.getDate() + idx * freqDays);
       else d.setMonth(d.getMonth() + idx);
-      return d.toISOString().slice(0, 10);
+      return this._localDateStr(d);
     };
     let unpaidAmounts = [];
     if (installAmt > 0 && remain > 0) {
@@ -927,9 +930,10 @@ export default class App extends React.Component {
       unpaidAmounts = oldUnpaid.map((_, i) => i === oldUnpaid.length - 1 ? Math.round(remain - per * (oldUnpaid.length - 1)) : per);
     }
     const schedule = paidList.map((s, i) => ({ ...s, n: i + 1 }));
+    const startChanged = paidList.length === 0 || (oldUnpaid.length > 0 && oldUnpaid[0].dueDate !== stepDate(paidList.length));
     unpaidAmounts.forEach((amt, j) => {
       const globalIdx = paidList.length + j;
-      const dueDate = j < oldUnpaid.length ? oldUnpaid[j].dueDate : stepDate(globalIdx);
+      const dueDate = startChanged ? stepDate(globalIdx) : (j < oldUnpaid.length ? oldUnpaid[j].dueDate : stepDate(globalIdx));
       schedule.push({ n: globalIdx + 1, dueDate, amount: amt, paid: false, paidDate: null });
     });
     return schedule;
@@ -950,7 +954,7 @@ export default class App extends React.Component {
       const installAmt = parseFloat(em.draftInstallmentAmount) || 0;
       const freq = pl.frequency || 'monthly';
       const freqDays = parseInt(pl.frequencyDays) || 30;
-      const startBase = em.draftStartDate || pl.startDate || new Date().toISOString().slice(0, 10);
+      const startBase = em.draftStartDate || pl.startDate || this.todayStr();
       const schedule = this._rebuildSchedule(em.draftSchedule, total2Pay, installAmt, freq, freqDays, startBase);
       const allPaid = schedule.length > 0 && schedule.every(s => s.paid);
       const months = schedule.length;
@@ -1348,13 +1352,15 @@ export default class App extends React.Component {
 
   renderProducts() {
     const h = this.h;
+    const q = this.state.searchQuery.toLowerCase();
+    const products = this.activeProducts().filter(p => !q || p.name.toLowerCase().includes(q) || (p.nameUr || '').includes(q) || (p.category || '').toLowerCase().includes(q));
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 } },
         h('div', { style: { fontSize: 13, color: '#7a7663' } }, this.activeProducts().length + ' products'),
         h('button', { onClick: this.openAddProduct, style: { background: '#0f6b4b', color: 'white', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13 } }, '＋ Add Product'),
       ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 } },
-        this.activeProducts().map(p => {
+        products.map(p => {
           const sold = this.activePlans().filter(pl => pl.productId === p.id).length;
           return h('div', { key: p.id, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 16 } },
             h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } },
@@ -1378,7 +1384,17 @@ export default class App extends React.Component {
   renderPlans() {
     const h = this.h;
     const filter = this.state.planFilter || 'all';
+    const q = this.state.searchQuery.toLowerCase();
     let plans = this.activePlans().slice().sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+    if (q) plans = plans.filter(pl => {
+      const c = (this.state.customers || []).find(x => x.id === pl.customerId);
+      const p = this.activeProducts().find(x => x.id === pl.productId);
+      return (c && (c.name.toLowerCase().includes(q) || c.nameUr.includes(q) || c.phone.includes(q)))
+        || (p && p.name.toLowerCase().includes(q))
+        || (pl.voucherNo || '').toLowerCase().includes(q)
+        || (pl.imei || '').toLowerCase().includes(q)
+        || (pl.chassisNo || '').toLowerCase().includes(q);
+    });
     if (filter === 'active') plans = plans.filter(p => p.status === 'active');
     if (filter === 'completed') plans = plans.filter(p => p.status === 'completed');
     if (filter === 'overdue') plans = plans.filter(p => this.planStats(p).overdue.length > 0);
@@ -2302,7 +2318,7 @@ export default class App extends React.Component {
     const h = this.h;
     const accs = this.getAccounts();
     const selIds = this.getReportAccounts();
-    const dateStr = this.state.dayBookDate || new Date().toISOString().slice(0, 10);
+    const dateStr = this.state.dayBookDate || this.todayStr();
     const allTx = this._buildTxList();
     const dayTx = allTx.filter(tx => tx.date === dateStr && selIds.includes(tx.accountId));
 
@@ -2322,9 +2338,9 @@ export default class App extends React.Component {
     const shiftDay = (offset) => {
       const d = new Date(dateStr + 'T00:00:00');
       d.setDate(d.getDate() + offset);
-      this.setState({ dayBookDate: d.toISOString().slice(0, 10) });
+      this.setState({ dayBookDate: this._localDateStr(d) });
     };
-    const isToday = dateStr === new Date().toISOString().slice(0, 10);
+    const isToday = dateStr === this.todayStr();
     const dayLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
     const allSelected = !this.state.reportAccounts;
 
@@ -2336,7 +2352,7 @@ export default class App extends React.Component {
           h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, isToday ? 'آج' : ''),
         ),
         h('button', { onClick: () => shiftDay(1), style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', fontWeight: 700, fontSize: 16, color: '#3a4a3f' } }, '›'),
-        !isToday ? h('button', { onClick: () => this.setState({ dayBookDate: new Date().toISOString().slice(0, 10) }), style: { padding: '8px 12px', borderRadius: 10, background: '#eaf5ee', fontWeight: 600, fontSize: 12, color: '#0f6b4b' } }, 'Today') : null,
+        !isToday ? h('button', { onClick: () => this.setState({ dayBookDate: this.todayStr() }), style: { padding: '8px 12px', borderRadius: 10, background: '#eaf5ee', fontWeight: 600, fontSize: 12, color: '#0f6b4b' } }, 'Today') : null,
       ),
       h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' } },
         h('span', { style: { fontSize: 11, color: '#7a7663', fontWeight: 600 } }, 'Accounts:'),
@@ -2565,6 +2581,10 @@ export default class App extends React.Component {
                 accExpense > 0 ? h('span', { style: { color: '#b91c1c', fontWeight: 600 } }, '-' + this.fmtPKR(accExpense) + ' exp') : null,
                 accLent > 0 ? h('span', { style: { color: '#b91c1c', fontWeight: 600 } }, '-' + this.fmtPKR(accLent) + ' lent') : null,
                 accBorrowed > 0 ? h('span', { style: { color: '#3b82f6', fontWeight: 600 } }, '+' + this.fmtPKR(accBorrowed) + ' owed') : null,
+              ),
+              h('div', { style: { display: 'flex', gap: 6, marginTop: 8, paddingTop: 8, borderTop: '1px solid #f2eee2' } },
+                h('button', { onClick: (e) => { e.stopPropagation(); this.openLedgerModal(); this.setState({ ledgerModal: { open: true, type: 'income', amount: '', accountId: acc.id, category: '', note: '', date: this.todayStr(), editId: null } }); }, style: { flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#eaf5ee', color: '#0f6b4b', border: '1px solid #d3e9dd' } }, '+ Add Money'),
+                h('button', { onClick: (e) => { e.stopPropagation(); this.openLedgerModal(); this.setState({ ledgerModal: { open: true, type: 'expense', amount: '', accountId: acc.id, category: '', note: '', date: this.todayStr(), editId: null } }); }, style: { flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' } }, '- Withdraw'),
               ),
             ], isSelected ? { border: '2px solid #0f6b4b' } : {}),
           );
