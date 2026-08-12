@@ -747,7 +747,8 @@ export default class App extends React.Component {
       const dayLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
       title = 'Daily Report / روزنامچہ';
       dateLabel = dayLabel;
-      const allTx = this._buildTxList().filter(tx => tx.date === dateStr && selIds.includes(tx.accountId));
+      const allSelAccs = selIds.length === accs.length;
+      const allTx = this._buildTxList().filter(tx => tx.date === dateStr && (selIds.includes(tx.accountId) || (allSelAccs && !tx.accountId)));
       let totalIn = 0, totalOut = 0;
       allTx.forEach(tx => {
         const acc = accs.find(a => a.id === tx.accountId);
@@ -1546,7 +1547,7 @@ export default class App extends React.Component {
     }, 0);
 
     const monthlyData = {};
-    for (let i = 5; i >= 0; i--) {
+    for (let i = 11; i >= 0; i--) {
       const d = new Date(curYear, curMonth - i, 1);
       const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
       const label = d.toLocaleDateString('en', { month: 'short', year: '2-digit' });
@@ -1577,6 +1578,29 @@ export default class App extends React.Component {
     const monthKeys = Object.keys(monthlyData);
     const maxCollected = Math.max(...monthKeys.map(k => monthlyData[k].collected + monthlyData[k].down), 1);
     const curKey = curYear + '-' + String(curMonth + 1).padStart(2, '0');
+
+    const expectedProfitData = {};
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(curYear, curMonth + i, 1);
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      const label = d.toLocaleDateString('en', { month: 'short', year: '2-digit' });
+      expectedProfitData[key] = { label, expected: 0 };
+    }
+    this.activePlans().forEach(pl => {
+      const profit = profitOf(pl);
+      const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
+      const profitPerRupee = profit / scheduleTotal;
+      pl.schedule.forEach(s => {
+        if (!s.paid && s.dueDate) {
+          const mKey = s.dueDate.slice(0, 7);
+          if (expectedProfitData[mKey]) {
+            expectedProfitData[mKey].expected += s.amount * profitPerRupee;
+          }
+        }
+      });
+    });
+    const epKeys = Object.keys(expectedProfitData);
+    const maxExpected = Math.max(...epKeys.map(k => expectedProfitData[k].expected), 1);
 
     const byCat = {};
     this.activePlans().forEach(pl => { const p = this.state.products.find(x => x.id === pl.productId); if (p) byCat[p.category] = (byCat[p.category] || 0) + this.planStats(pl).total; });
@@ -1636,6 +1660,23 @@ export default class App extends React.Component {
           ),
         ]),
       ),
+
+      h('div', { style: { height: 20 } }),
+      this.card([
+        this.sectionHeader('Expected Profit', 'متوقع منافع'),
+        h('div', { style: { display: 'flex', gap: 8, alignItems: 'flex-end', height: 200, paddingTop: 16 } },
+          epKeys.map(k => {
+            const ep = expectedProfitData[k];
+            const isCur = k === curKey;
+            const val = Math.round(ep.expected);
+            return h('div', { key: k, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
+              h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, val >= 1000 ? Math.round(val / 1000) + 'k' : val),
+              h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? 'linear-gradient(180deg,#d4a94a,#a26a10)' : '#e8dcc4', borderRadius: '6px 6px 0 0', height: (val / maxExpected * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
+              h('div', { style: { fontSize: 11, color: isCur ? '#a26a10' : '#7a7663', fontWeight: isCur ? 700 : 500 } }, ep.label),
+            );
+          }),
+        ),
+      ]),
 
       h('div', { style: { height: 20 } }),
       this.card([
@@ -1881,7 +1922,7 @@ export default class App extends React.Component {
       const c = (this.state.customers || []).find(x => x.id === pl.customerId);
       const p = (this.state.products || []).find(x => x.id === pl.productId);
       (pl.schedule || []).forEach(s => {
-        if (s.paid && s.accountId) tx.push({ source: 'plan', accountId: s.accountId, amount: s.amountPaid || s.amount, date: s.paidDate, customer: c, product: p, plan: pl, installment: s });
+        if (s.paid) tx.push({ source: 'plan', accountId: s.accountId || null, amount: s.amountPaid || s.amount, date: s.paidDate, customer: c, product: p, plan: pl, installment: s });
       });
     });
     this.activeLedger().forEach(le => {
@@ -2318,9 +2359,10 @@ export default class App extends React.Component {
     const h = this.h;
     const accs = this.getAccounts();
     const selIds = this.getReportAccounts();
+    const allSelected = !this.state.reportAccounts;
     const dateStr = this.state.dayBookDate || this.todayStr();
     const allTx = this._buildTxList();
-    const dayTx = allTx.filter(tx => tx.date === dateStr && selIds.includes(tx.accountId));
+    const dayTx = allTx.filter(tx => tx.date === dateStr && (selIds.includes(tx.accountId) || (allSelected && !tx.accountId)));
 
     let totalIn = 0, totalOut = 0;
     dayTx.forEach(tx => {
@@ -2342,7 +2384,6 @@ export default class App extends React.Component {
     };
     const isToday = dateStr === this.todayStr();
     const dayLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
-    const allSelected = !this.state.reportAccounts;
 
     return h('div', { className: 'screen', style: { maxWidth: 720 } },
       h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8 } },
@@ -2583,8 +2624,8 @@ export default class App extends React.Component {
                 accBorrowed > 0 ? h('span', { style: { color: '#3b82f6', fontWeight: 600 } }, '+' + this.fmtPKR(accBorrowed) + ' owed') : null,
               ),
               h('div', { style: { display: 'flex', gap: 6, marginTop: 8, paddingTop: 8, borderTop: '1px solid #f2eee2' } },
-                h('button', { onClick: (e) => { e.stopPropagation(); this.openLedgerModal(); this.setState({ ledgerModal: { open: true, type: 'income', amount: '', accountId: acc.id, category: '', note: '', date: this.todayStr(), editId: null } }); }, style: { flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#eaf5ee', color: '#0f6b4b', border: '1px solid #d3e9dd' } }, '+ Add Money'),
-                h('button', { onClick: (e) => { e.stopPropagation(); this.openLedgerModal(); this.setState({ ledgerModal: { open: true, type: 'expense', amount: '', accountId: acc.id, category: '', note: '', date: this.todayStr(), editId: null } }); }, style: { flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' } }, '- Withdraw'),
+                h('button', { onClick: (e) => { e.stopPropagation(); this.setState({ ledgerModal: { open: true, type: 'income', amount: '', accountId: acc.id, category: '', note: '', date: this.todayStr(), editId: null } }); }, style: { flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#eaf5ee', color: '#0f6b4b', border: '1px solid #d3e9dd' } }, '+ Add Money'),
+                h('button', { onClick: (e) => { e.stopPropagation(); this.setState({ ledgerModal: { open: true, type: 'expense', amount: '', accountId: acc.id, category: '', note: '', date: this.todayStr(), editId: null } }); }, style: { flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' } }, '- Withdraw'),
               ),
             ], isSelected ? { border: '2px solid #0f6b4b' } : {}),
           );
@@ -2616,6 +2657,7 @@ export default class App extends React.Component {
       h('div', { style: { textAlign: 'center', padding: '16px 0' } },
         h('button', { type: 'button', onClick: () => this.go('settings'), style: { padding: '10px 20px', borderRadius: 10, background: '#f4f1e6', fontWeight: 600, fontSize: 13, color: '#3a4a3f' } }, '⚙ Manage Accounts in Settings'),
       ),
+      this.renderLedgerModal(),
     );
   }
 
