@@ -1550,7 +1550,7 @@ export default class App extends React.Component {
     for (let i = 0; i < 12; i++) {
       const d = new Date(curYear, i, 1);
       const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-      const label = d.toLocaleDateString('en', { month: 'short', year: '2-digit' });
+      const label = d.toLocaleDateString('en', { month: 'short' });
       monthlyData[key] = { label, collected: 0, profitEarned: 0, plans: 0, down: 0 };
     }
     this.activePlans().forEach(pl => {
@@ -1583,7 +1583,7 @@ export default class App extends React.Component {
     for (let i = 0; i < 12; i++) {
       const d = new Date(curYear, i, 1);
       const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-      const label = d.toLocaleDateString('en', { month: 'short', year: '2-digit' });
+      const label = d.toLocaleDateString('en', { month: 'short' });
       expectedProfitData[key] = { label, expected: 0 };
     }
     this.activePlans().forEach(pl => {
