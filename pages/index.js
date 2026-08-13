@@ -1591,7 +1591,7 @@ export default class App extends React.Component {
       const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
       const profitPerRupee = profit / scheduleTotal;
       pl.schedule.forEach(s => {
-        if (!s.paid && s.dueDate) {
+        if (s.dueDate) {
           const mKey = s.dueDate.slice(0, 7);
           if (expectedProfitData[mKey]) {
             expectedProfitData[mKey].expected += s.amount * profitPerRupee;
