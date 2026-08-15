@@ -748,7 +748,7 @@ export default class App extends React.Component {
       title = 'Daily Report / روزنامچہ';
       dateLabel = dayLabel;
       const allSelAccs = selIds.length === accs.length;
-      const allTx = this._buildTxList().filter(tx => tx.date === dateStr && (selIds.includes(tx.accountId) || (allSelAccs && !tx.accountId)));
+      const allTx = this._buildTxList().filter(tx => tx.date === dateStr && (allSelAccs || selIds.includes(tx.accountId)));
       let totalIn = 0, totalOut = 0;
       allTx.forEach(tx => {
         const acc = accs.find(a => a.id === tx.accountId);
@@ -2398,7 +2398,7 @@ export default class App extends React.Component {
     const allSelected = !this.state.reportAccounts;
     const dateStr = this.state.dayBookDate || this.todayStr();
     const allTx = this._buildTxList();
-    const dayTx = allTx.filter(tx => tx.date === dateStr && (selIds.includes(tx.accountId) || (allSelected && !tx.accountId)));
+    const dayTx = allTx.filter(tx => tx.date === dateStr && (allSelected || selIds.includes(tx.accountId)));
 
     let totalIn = 0, totalOut = 0;
     dayTx.forEach(tx => {
