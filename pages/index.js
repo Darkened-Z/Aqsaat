@@ -1602,6 +1602,25 @@ export default class App extends React.Component {
     const epKeys = Object.keys(expectedProfitData);
     const maxExpected = Math.max(...epKeys.map(k => expectedProfitData[k].expected), 1);
 
+    const planProfitData = {};
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(curYear, i, 1);
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      const label = d.toLocaleDateString('en', { month: 'short' });
+      planProfitData[key] = { label, profit: 0 };
+    }
+    this.activePlans().forEach(pl => {
+      const idPart = (pl.id || '').replace(/^pl_/, '');
+      const createdMs = parseInt(idPart, 36);
+      const createdDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
+      const cKey = createdDate ? createdDate.getFullYear() + '-' + String(createdDate.getMonth() + 1).padStart(2, '0') : '';
+      if (planProfitData[cKey]) {
+        planProfitData[cKey].profit += profitOf(pl);
+      }
+    });
+    const ppKeys = Object.keys(planProfitData);
+    const maxPlanProfit = Math.max(...ppKeys.map(k => planProfitData[k].profit), 1);
+
     const byCat = {};
     this.activePlans().forEach(pl => { const p = this.state.products.find(x => x.id === pl.productId); if (p) byCat[p.category] = (byCat[p.category] || 0) + this.planStats(pl).total; });
     const catEntries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
@@ -1673,6 +1692,23 @@ export default class App extends React.Component {
               h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, val >= 1000 ? Math.round(val / 1000) + 'k' : val),
               h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? 'linear-gradient(180deg,#d4a94a,#a26a10)' : '#e8dcc4', borderRadius: '6px 6px 0 0', height: (val / maxExpected * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
               h('div', { style: { fontSize: 11, color: isCur ? '#a26a10' : '#7a7663', fontWeight: isCur ? 700 : 500 } }, ep.label),
+            );
+          }),
+        ),
+      ]),
+
+      h('div', { style: { height: 20 } }),
+      this.card([
+        this.sectionHeader('Profit by Plans', 'منافع بمطابق پلانز'),
+        h('div', { style: { display: 'flex', gap: 8, alignItems: 'flex-end', height: 200, paddingTop: 16 } },
+          ppKeys.map(k => {
+            const pp = planProfitData[k];
+            const isCur = k === curKey;
+            const val = Math.round(pp.profit);
+            return h('div', { key: k, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
+              h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, val >= 1000 ? Math.round(val / 1000) + 'k' : val),
+              h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? 'linear-gradient(180deg,#4a8fd4,#1a4a8f)' : '#c4d8e8', borderRadius: '6px 6px 0 0', height: (val / maxPlanProfit * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
+              h('div', { style: { fontSize: 11, color: isCur ? '#1a4a8f' : '#7a7663', fontWeight: isCur ? 700 : 500 } }, pp.label),
             );
           }),
         ),
