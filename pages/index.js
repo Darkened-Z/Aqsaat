@@ -2596,74 +2596,115 @@ export default class App extends React.Component {
 
     const parties = this._getUdharParties();
     const q = (this.state.udharSearch || '').toLowerCase();
-    let filtered = q ? parties.filter(p => p.name.toLowerCase().includes(q)) : parties;
     const sort = this.state.udharSort || 'balance';
+    const filter = this.state.udharFilter || 'all';
+    let filtered = q ? parties.filter(p => p.name.toLowerCase().includes(q)) : parties;
+    if (filter === 'receivable') filtered = filtered.filter(p => p.balance > 0);
+    else if (filter === 'payable') filtered = filtered.filter(p => p.balance < 0);
+    else if (filter === 'settled') filtered = filtered.filter(p => p.balance === 0);
     if (sort === 'balance') filtered.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
     else if (sort === 'recent') filtered.sort((a, b) => (b.lastDate || '').localeCompare(a.lastDate || ''));
     else if (sort === 'name') filtered.sort((a, b) => a.name.localeCompare(b.name));
 
     const totalReceivable = parties.reduce((s, p) => s + Math.max(0, p.balance), 0);
     const totalPayable = parties.reduce((s, p) => s + Math.max(0, -p.balance), 0);
-    const net = totalReceivable - totalPayable;
+    const receivableCount = parties.filter(p => p.balance > 0).length;
+    const payableCount = parties.filter(p => p.balance < 0).length;
 
-    const sortBtn = (label, val) => h('button', { key: val, onClick: () => this.setState({ udharSort: val }), style: { padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: sort === val ? '#3b82f6' : '#f4f1e6', color: sort === val ? 'white' : '#3a4a3f', border: sort === val ? '1px solid #3b82f6' : '1px solid #ece8dc' } }, label);
+    const initials = (name) => name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+    const avatarColors = ['#b91c1c','#0f6b4b','#3b82f6','#a26a10','#7c3aed','#0891b2','#c2410c','#4338ca'];
+    const getAvatarColor = (name) => avatarColors[Math.abs(name.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % avatarColors.length];
+
+    const filterTab = (label, ur, val, count) => h('button', { key: val, onClick: () => this.setState({ udharFilter: val }), style: { flex: 1, padding: '10px 4px', borderRadius: 10, fontSize: 12, fontWeight: 700, background: filter === val ? '#1a2b1f' : 'transparent', color: filter === val ? 'white' : '#7a7663', border: 'none', transition: 'all .15s', position: 'relative' } },
+      h('div', {}, label),
+      h('div', { className: 'ur', style: { fontSize: 10, marginTop: 1 } }, ur),
+      count > 0 ? h('span', { style: { position: 'absolute', top: 4, right: 8, background: filter === val ? '#fff' : '#e5e2d6', color: filter === val ? '#1a2b1f' : '#7a7663', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 10 } }, count) : null,
+    );
+
+    const sortBtn = (label, val) => h('button', { key: val, onClick: () => this.setState({ udharSort: val }), style: { padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600, background: sort === val ? '#1a2b1f' : 'transparent', color: sort === val ? 'white' : '#7a7663', border: sort === val ? 'none' : '1px solid #e5e2d6' } }, label);
 
     return h('div', { className: 'screen', style: { maxWidth: 720 } },
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10, marginBottom: 14 } },
-        this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Receivable'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'وصولی'),
-          h('div', { className: 'mono', style: { fontSize: 18, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(totalReceivable)),
-        ]),
-        this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Payable'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'واجب الادا'),
-          h('div', { className: 'mono', style: { fontSize: 18, fontWeight: 800, color: '#3b82f6', marginTop: 4 } }, this.fmtPKR(totalPayable)),
-        ]),
-        this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Net'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'خالص'),
-          h('div', { className: 'mono', style: { fontSize: 18, fontWeight: 800, color: net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (net >= 0 ? '+' : '') + this.fmtPKR(net)),
-        ]),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 } },
+        h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 12px', borderRadius: 14, background: '#b91c1c', color: 'white', fontWeight: 800, fontSize: 15, border: 'none', boxShadow: '0 2px 8px rgba(185,28,28,.25)' } },
+          h('span', { style: { fontSize: 20 } }, '↑'),
+          h('span', {}, 'You Gave'),
+          h('span', { className: 'ur', style: { fontSize: 12, opacity: .85 } }, '/ آپ نے دیا'),
+        ),
+        h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }, style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 12px', borderRadius: 14, background: '#0f6b4b', color: 'white', fontWeight: 800, fontSize: 15, border: 'none', boxShadow: '0 2px 8px rgba(15,107,75,.25)' } },
+          h('span', { style: { fontSize: 20 } }, '↓'),
+          h('span', {}, 'You Got'),
+          h('span', { className: 'ur', style: { fontSize: 12, opacity: .85 } }, '/ آپ کو ملا'),
+        ),
       ),
-      h('div', { style: { display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' } },
-        h('button', { onClick: () => this.openUdpiModal(), style: { padding: '10px 16px', borderRadius: 10, background: '#3b82f6', color: 'white', fontWeight: 700, fontSize: 13 } }, '+ New Entry'),
-        h('div', { style: { flex: 1 } }),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 } },
+        h('div', { style: { background: '#fef2f2', borderRadius: 14, padding: '14px 16px', borderLeft: '4px solid #b91c1c' } },
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.05em' } }, "You'll Get / وصولی"),
+          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(totalReceivable)),
+          h('div', { style: { fontSize: 11, color: '#9a6060', marginTop: 2 } }, receivableCount + (receivableCount === 1 ? ' person' : ' people')),
+        ),
+        h('div', { style: { background: '#f0fdf4', borderRadius: 14, padding: '14px 16px', borderLeft: '4px solid #0f6b4b' } },
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#0f6b4b', textTransform: 'uppercase', letterSpacing: '0.05em' } }, "You'll Give / واجب الادا"),
+          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(totalPayable)),
+          h('div', { style: { fontSize: 11, color: '#5a7a63', marginTop: 2 } }, payableCount + (payableCount === 1 ? ' person' : ' people')),
+        ),
+      ),
+      h('div', { style: { display: 'flex', background: '#f4f1e6', borderRadius: 12, padding: 3, marginBottom: 12, gap: 2 } },
+        filterTab('All', 'سب', 'all', parties.length),
+        filterTab("You'll Get", 'وصولی', 'receivable', receivableCount),
+        filterTab("You'll Give", 'ادائیگی', 'payable', payableCount),
+        filterTab('Settled', 'برابر', 'settled', parties.filter(p => p.balance === 0).length),
+      ),
+      h('div', { style: { display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' } },
+        h('div', { style: { flex: 1, position: 'relative' } },
+          h('span', { style: { position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: '#7a7663', pointerEvents: 'none' } }, '🔍'),
+          h('input', { type: 'text', value: this.state.udharSearch || '', onChange: e => this.setState({ udharSearch: e.target.value }), placeholder: 'Search by name...', style: { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 14px 10px 36px', fontSize: 13, background: '#fdfcf8', outline: 'none' } }),
+        ),
         sortBtn('Balance', 'balance'),
         sortBtn('Recent', 'recent'),
-        sortBtn('Name', 'name'),
+        sortBtn('A-Z', 'name'),
       ),
-      h('input', { type: 'text', value: this.state.udharSearch || '', onChange: e => this.setState({ udharSearch: e.target.value }), placeholder: 'Search person...', style: { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 14px', fontSize: 14, background: '#fdfcf8', outline: 'none', marginBottom: 12 } }),
       filtered.length === 0
-        ? this.card([h('div', { style: { textAlign: 'center', padding: 20, color: '#7a7663' } },
-            h('div', { style: { fontSize: 32, marginBottom: 8 } }, '📒'),
-            h('div', { style: { fontWeight: 600, fontSize: 14 } }, 'No udhar entries yet'),
-            h('div', { className: 'ur', style: { fontSize: 13, marginTop: 4 } }, 'ابھی تک کوئی اُدھار نہیں'),
-            h('div', { style: { fontSize: 12, marginTop: 8 } }, 'Tap "+ New Entry" to record money lent or borrowed'),
-          )])
-        : h('div', {},
+        ? h('div', { style: { textAlign: 'center', padding: '40px 20px', color: '#7a7663' } },
+            parties.length === 0
+              ? h('div', {},
+                  h('div', { style: { fontSize: 48, marginBottom: 12 } }, '🤝'),
+                  h('div', { style: { fontWeight: 800, fontSize: 18, color: '#1a2b1f', marginBottom: 4 } }, 'Your Udhar Book is empty'),
+                  h('div', { className: 'ur', style: { fontSize: 14, marginBottom: 16 } }, 'آپ کی اُدھار بک خالی ہے'),
+                  h('div', { style: { fontSize: 13, lineHeight: 1.6, maxWidth: 300, margin: '0 auto', color: '#7a7663' } }, 'Start by recording money you gave or received. Use the red button to record "Diya" (gave) and green for "Liya" (got).'),
+                )
+              : h('div', {},
+                  h('div', { style: { fontSize: 14, fontWeight: 600 } }, 'No matching records'),
+                  h('div', { className: 'ur', style: { fontSize: 13 } }, 'کوئی ریکارڈ نہیں ملا'),
+                ),
+          )
+        : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
           filtered.map(p => {
             const isReceivable = p.balance > 0;
             const isPayable = p.balance < 0;
             const daysAgo = p.lastDate ? Math.round((new Date(this.todayStr()) - new Date(p.lastDate)) / 86400000) : null;
-            const daysLabel = daysAgo === 0 ? 'today' : daysAgo === 1 ? '1 day ago' : daysAgo !== null ? daysAgo + ' days ago' : '';
-            return this.card([
-              h('div', { onClick: () => this.setState({ udharPerson: p.name }), style: { cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 } },
-                h('div', {},
-                  h('div', { style: { fontWeight: 700, fontSize: 14, color: '#1a2b1f' } }, p.name),
-                  h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } },
-                    (daysLabel ? 'Last: ' + daysLabel + ' · ' : '') + p.entries.length + (p.entries.length === 1 ? ' entry' : ' entries'),
-                  ),
-                ),
-                h('div', { style: { textAlign: 'right' } },
-                  p.balance !== 0
-                    ? h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: isReceivable ? '#b91c1c' : '#3b82f6' } },
-                        this.fmtPKR(Math.abs(p.balance)), isReceivable ? ' ←' : ' →')
-                    : h('div', { style: { fontSize: 12, color: '#0f6b4b', fontWeight: 700 } }, '✓ Settled'),
-                  h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, isReceivable ? 'they owe you' : isPayable ? 'you owe them' : ''),
+            const daysLabel = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : daysAgo !== null ? daysAgo + 'd ago' : '';
+            const ac = getAvatarColor(p.name);
+            return h('div', { key: p.name, onClick: () => this.setState({ udharPerson: p.name }), style: { cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: '#fdfcf8', borderRadius: 14, border: '1px solid #ece8dc', transition: 'transform .1s' } },
+              h('div', { style: { width: 44, height: 44, borderRadius: 12, background: ac + '15', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, flexShrink: 0 } }, initials(p.name)),
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { fontWeight: 700, fontSize: 14, color: '#1a2b1f', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, p.name),
+                h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } },
+                  daysLabel || '',
+                  daysLabel && p.entries.length ? ' · ' : '',
+                  p.entries.length + (p.entries.length === 1 ? ' entry' : ' entries'),
                 ),
               ),
-            ]);
+              h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                p.balance !== 0
+                  ? h('div', {},
+                      h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 15, color: isReceivable ? '#b91c1c' : '#0f6b4b' } }, this.fmtPKR(Math.abs(p.balance))),
+                      h('div', { style: { fontSize: 10, color: isReceivable ? '#b91c1c' : '#0f6b4b', fontWeight: 600, marginTop: 2 } }, isReceivable ? '↑ you gave' : '↓ you got'),
+                    )
+                  : h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, color: '#0f6b4b', fontWeight: 700, fontSize: 12 } },
+                      h('span', {}, '✓'), 'Clear'),
+              ),
+              h('div', { style: { color: '#c4c0b4', fontSize: 16, flexShrink: 0 } }, '›'),
+            );
           }),
         ),
       this.renderUdpiModal(),
@@ -2677,7 +2718,7 @@ export default class App extends React.Component {
     entries.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const accs = this.getAccounts();
 
-    let lent = 0, borrowed = 0;
+    let lent = 0, borrowed = 0, totalEntries = entries.length;
     entries.forEach(u => {
       if (u.direction === 'lent' && !u.returned) lent += u.amount;
       else if (u.direction === 'borrowed' && !u.returned) borrowed += u.amount;
@@ -2698,51 +2739,60 @@ export default class App extends React.Component {
       '\nبراہ کرم جلد ادائیگی کریں۔\nشکریہ 🙏'
     );
 
+    const avatarColors = ['#b91c1c','#0f6b4b','#3b82f6','#a26a10','#7c3aed','#0891b2','#c2410c','#4338ca'];
+    const ac = avatarColors[Math.abs(personName.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % avatarColors.length];
+    const initials = personName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
     let runBal = 0;
 
     return h('div', { className: 'screen', style: { maxWidth: 720 } },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 } },
-        h('button', { onClick: () => this.setState({ udharPerson: null }), style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', fontWeight: 700, fontSize: 16, color: '#3a4a3f' } }, '‹'),
-        h('div', { style: { flex: 1 } },
-          h('div', { style: { fontWeight: 800, fontSize: 18 } }, personName),
-          h('div', { style: { fontSize: 12, color: '#7a7663' } }, entries.length + ' entries'),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 } },
+        h('button', { onClick: () => this.setState({ udharPerson: null }), style: { padding: '8px 12px', borderRadius: 10, background: '#f4f1e6', fontWeight: 700, fontSize: 16, color: '#3a4a3f' } }, '‹'),
+        h('div', { style: { width: 48, height: 48, borderRadius: 14, background: ac + '18', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, flexShrink: 0 } }, initials),
+        h('div', { style: { flex: 1, minWidth: 0 } },
+          h('div', { style: { fontWeight: 800, fontSize: 18, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, personName),
+          h('div', { style: { fontSize: 12, color: '#7a7663' } }, totalEntries + ' entries' + (phone ? ' · ' + phone : '')),
         ),
-        phone ? h('a', { href: 'https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + waMsg, target: '_blank', style: { padding: '8px 14px', borderRadius: 10, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 12, textDecoration: 'none' } }, '💬 Remind') : null,
+        phone ? h('a', { href: 'https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + waMsg, target: '_blank', style: { padding: '10px 16px', borderRadius: 12, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 } }, '💬 Remind') : null,
       ),
-      this.card([
-        h('div', { style: { textAlign: 'center', padding: '8px 0' } },
-          h('div', { style: { fontSize: 11, fontWeight: 600, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Balance / بقایا'),
-          h('div', { className: 'mono', style: { fontSize: 32, fontWeight: 800, color: balance > 0 ? '#b91c1c' : balance < 0 ? '#3b82f6' : '#0f6b4b', marginTop: 4 } }, this.fmtPKR(Math.abs(balance))),
-          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 4 } }, balance > 0 ? 'They owe you / ان کے ذمے' : balance < 0 ? 'You owe them / آپ کے ذمے' : 'Settled / برابر'),
+      h('div', { style: { background: balance > 0 ? '#fef2f2' : balance < 0 ? '#f0fdf4' : '#f4f1e6', borderRadius: 18, padding: '20px', textAlign: 'center', marginBottom: 14, borderLeft: '5px solid ' + (balance > 0 ? '#b91c1c' : balance < 0 ? '#0f6b4b' : '#7a7663') } },
+        h('div', { style: { fontSize: 11, fontWeight: 700, color: balance > 0 ? '#b91c1c' : balance < 0 ? '#0f6b4b' : '#7a7663', textTransform: 'uppercase', letterSpacing: '0.08em' } }, balance > 0 ? 'You will get / آپ کو ملیں گے' : balance < 0 ? 'You will give / آپ نے دینے ہیں' : 'All clear / برابر ✓'),
+        h('div', { className: 'mono', style: { fontSize: 36, fontWeight: 800, color: balance > 0 ? '#b91c1c' : balance < 0 ? '#0f6b4b' : '#0f6b4b', marginTop: 6 } }, this.fmtPKR(Math.abs(balance))),
+        h('div', { style: { display: 'flex', justifyContent: 'center', gap: 20, marginTop: 10, fontSize: 12, color: '#7a7663' } },
+          h('span', {}, '↑ Gave: ', h('strong', { style: { color: '#b91c1c' } }, this.fmtPKR(lent))),
+          h('span', {}, '↓ Got: ', h('strong', { style: { color: '#0f6b4b' } }, this.fmtPKR(borrowed))),
         ),
-      ]),
-      h('div', { style: { display: 'flex', gap: 8, marginTop: 12, marginBottom: 16, flexWrap: 'wrap' } },
-        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { flex: 1, minWidth: 120, padding: '12px', borderRadius: 10, background: '#fef2f2', color: '#b91c1c', fontWeight: 700, fontSize: 13, border: '1.5px solid #f5cac2' } }, '💸 Diya (Gave)'),
-        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }, style: { flex: 1, minWidth: 120, padding: '12px', borderRadius: 10, background: '#eff6ff', color: '#3b82f6', fontWeight: 700, fontSize: 13, border: '1.5px solid #bfdbfe' } }, '📥 Liya (Got)'),
-        h('button', { onClick: () => this.openInvoiceModal(personName), style: { flex: 1, minWidth: 120, padding: '12px', borderRadius: 10, background: '#f0fdf4', color: '#0f6b4b', fontWeight: 700, fontSize: 13, border: '1.5px solid #bbf7d0' } }, '📄 Invoice'),
       ),
-      this.sectionHeader('Transaction History', 'لین دین کی تاریخ'),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 } },
+        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: '#b91c1c', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', boxShadow: '0 2px 6px rgba(185,28,28,.2)' } }, '↑ Gave'),
+        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', boxShadow: '0 2px 6px rgba(15,107,75,.2)' } }, '↓ Got'),
+        h('button', { onClick: () => this.openInvoiceModal(personName), style: { padding: '12px 8px', borderRadius: 12, background: '#1a2b1f', color: 'white', fontWeight: 700, fontSize: 13, border: 'none' } }, '📄 Bill'),
+      ),
+      this.sectionHeader('Transactions', 'لین دین'),
       entries.length === 0
         ? h('div', { style: { textAlign: 'center', padding: 30, color: '#7a7663' } }, 'No entries yet')
-        : h('div', {},
+        : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
           entries.slice().reverse().map((u, idx) => {
             const isLent = u.direction === 'lent';
             if (!u.returned) runBal += isLent ? u.amount : -u.amount;
             const acc = accs.find(a => a.id === u.accountId);
-            return h('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: idx % 2 === 0 ? '#fdfcf8' : '#f9f6ee', borderRadius: 10, marginBottom: 4, borderLeft: '3px solid ' + (isLent ? '#b91c1c' : '#3b82f6') } },
-              h('div', { style: { flex: 1 } },
-                h('div', { style: { fontSize: 11, color: '#7a7663' } }, new Date(u.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' })),
-                h('div', { style: { fontSize: 13, marginTop: 2 } }, u.note || (isLent ? 'Gave / دیا' : 'Received / لیا')),
-                acc ? h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, acc.emoji + ' ' + acc.name) : null,
+            return h('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#fdfcf8', borderRadius: 12, border: '1px solid #ece8dc', borderLeft: '4px solid ' + (isLent ? '#b91c1c' : '#0f6b4b') } },
+              h('div', { style: { width: 32, height: 32, borderRadius: 8, background: isLent ? '#fef2f2' : '#f0fdf4', color: isLent ? '#b91c1c' : '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 } }, isLent ? '↑' : '↓'),
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { fontSize: 13, fontWeight: 600 } }, u.note || (isLent ? 'Gave / دیا' : 'Got / لیا')),
+                h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } },
+                  new Date(u.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }),
+                  acc ? ' · ' + acc.emoji + ' ' + acc.name : '',
+                ),
               ),
-              h('div', { style: { textAlign: 'right' } },
-                h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: isLent ? '#b91c1c' : '#0f6b4b' } }, (isLent ? '- ' : '+ ') + this.fmtPKR(u.amount)),
+              h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: isLent ? '#b91c1c' : '#0f6b4b' } }, (isLent ? '-' : '+') + this.fmtPKR(u.amount)),
                 !u.returned ? h('div', { className: 'mono', style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, 'Bal: ' + this.fmtPKR(runBal)) : h('div', { style: { fontSize: 10, color: '#0f6b4b', fontWeight: 600 } }, '✓ Returned'),
               ),
-              h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
-                !u.returned ? h('button', { onClick: () => this.markUdpiReturned(u.id), title: 'Mark returned', style: { padding: '4px 8px', borderRadius: 6, background: '#eaf5ee', color: '#0f6b4b', fontSize: 10, fontWeight: 700 } }, '✓') : null,
-                h('button', { onClick: () => this.openUdpiModal(u.id), title: 'Edit', style: { padding: '4px 8px', borderRadius: 6, background: '#f4f1e6', color: '#3a4a3f', fontSize: 10, fontWeight: 700 } }, '✎'),
-                h('button', { onClick: () => this.deleteUdpiEntry(u.id), title: 'Delete', style: { padding: '4px 8px', borderRadius: 6, background: '#fdecea', color: '#a4362b', fontSize: 10, fontWeight: 700 } }, '🗑'),
+              h('div', { style: { display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 } },
+                !u.returned ? h('button', { onClick: (e) => { e.stopPropagation(); this.markUdpiReturned(u.id); }, title: 'Mark returned', style: { padding: '4px 7px', borderRadius: 6, background: '#eaf5ee', color: '#0f6b4b', fontSize: 10, fontWeight: 700, border: 'none' } }, '✓') : null,
+                h('button', { onClick: (e) => { e.stopPropagation(); this.openUdpiModal(u.id); }, title: 'Edit', style: { padding: '4px 7px', borderRadius: 6, background: '#f4f1e6', color: '#3a4a3f', fontSize: 10, fontWeight: 700, border: 'none' } }, '✎'),
+                h('button', { onClick: (e) => { e.stopPropagation(); this.deleteUdpiEntry(u.id); }, title: 'Delete', style: { padding: '4px 7px', borderRadius: 6, background: '#fdecea', color: '#a4362b', fontSize: 10, fontWeight: 700, border: 'none' } }, '🗑'),
               ),
             );
           }),
@@ -2751,16 +2801,16 @@ export default class App extends React.Component {
         const personInvoices = (this.state.invoices || []).filter(inv => inv.person.toLowerCase() === personName.toLowerCase());
         if (personInvoices.length === 0) return null;
         return h('div', { style: { marginTop: 16 } },
-          this.sectionHeader('Invoices', 'بلز'),
-          ...personInvoices.map(inv => this.card([
-            h('div', { onClick: () => this.setState({ invoiceView: inv.id }), style: { cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-              h('div', {},
-                h('div', { style: { fontWeight: 700, fontSize: 13 } }, '📄 ' + inv.number),
-                h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } }, new Date(inv.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }) + ' · ' + inv.items.length + ' items'),
-              ),
-              h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#0f6b4b' } }, this.fmtPKR(inv.total)),
+          this.sectionHeader('Invoices / Bills', 'بلز'),
+          ...personInvoices.map(inv => h('div', { key: inv.id, onClick: () => this.setState({ invoiceView: inv.id }), style: { cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#fdfcf8', borderRadius: 12, border: '1px solid #ece8dc', marginBottom: 4 } },
+            h('div', { style: { width: 32, height: 32, borderRadius: 8, background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 } }, '📄'),
+            h('div', { style: { flex: 1 } },
+              h('div', { style: { fontWeight: 700, fontSize: 13 } }, inv.number),
+              h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } }, new Date(inv.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }) + ' · ' + inv.items.length + ' items'),
             ),
-          ])),
+            h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#1a2b1f' } }, this.fmtPKR(inv.total)),
+            h('div', { style: { color: '#c4c0b4', fontSize: 16 } }, '›'),
+          )),
         );
       })(),
       this.renderUdpiModal(),
