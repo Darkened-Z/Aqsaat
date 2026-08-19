@@ -64,6 +64,11 @@ export default class App extends React.Component {
     invoices: [],
     invoiceModal: { open: false, person: '', items: [{ desc: '', qty: 1, price: '' }], note: '', date: this.todayStr() },
     invoiceView: null,
+    staff: [],
+    staffModal: { open: false, editId: null, name: '', phone: '', role: '', salary: '', joinDate: '' },
+    staffView: null,
+    attendanceDate: this.todayStr(),
+    salaryModal: { open: false, staffId: '', month: '', amount: '', advance: '', accountId: '', note: '' },
   };
 
   componentDidMount() {
@@ -90,10 +95,10 @@ export default class App extends React.Component {
 
   componentDidUpdate(_, prev) {
     if (typeof window === 'undefined') return;
-    const { customers, products, plans, settings, ledger, udpiEntries, invoices } = this.state;
+    const { customers, products, plans, settings, ledger, udpiEntries, invoices, staff } = this.state;
     if (!customers) return;
     if (this._fromCloud) { this._fromCloud = false; return; }
-    if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings || ledger !== prev.ledger || udpiEntries !== prev.udpiEntries || invoices !== prev.invoices) {
+    if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings || ledger !== prev.ledger || udpiEntries !== prev.udpiEntries || invoices !== prev.invoices || staff !== prev.staff) {
       clearTimeout(this._syncTimer);
       this._syncTimer = setTimeout(this.pushToSupabase, 1200);
     }
@@ -107,15 +112,15 @@ export default class App extends React.Component {
 
   _applyCloudData = (d) => {
     this._fromCloud = true;
-    const local = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], invoices: this.state.invoices || [] } : null;
-    const merged = local ? this._mergeData(local, d) : { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, ledger: d.ledger || [], udpiEntries: d.udpiEntries || [], invoices: d.invoices || [] };
+    const local = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], invoices: this.state.invoices || [], staff: this.state.staff || [] } : null;
+    const merged = local ? this._mergeData(local, d) : { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, ledger: d.ledger || [], udpiEntries: d.udpiEntries || [], invoices: d.invoices || [], staff: d.staff || [] };
     const settings = merged.settings || this.state.settings;
     if (!settings.accounts || !settings.accounts.length) {
       settings.accounts = [{ id: 'acc_cash', name: 'Cash in Hand', nameUr: 'نقد', emoji: '💵', balance: 0 }, { id: 'acc_ep', name: 'EasyPaisa', nameUr: 'ایزی پیسہ', emoji: '📱', balance: 0 }, { id: 'acc_bank', name: 'Bank', nameUr: 'بینک', emoji: '🏦', balance: 0 }];
     }
     const cloudPin = settings.pin || '';
     if (cloudPin) { localStorage.setItem('aqsat_pin', cloudPin); }
-    const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], syncStatus: 'synced' };
+    const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced' };
     if (cloudPin) payload.savedPin = cloudPin;
     localStorage.setItem('aqsat_data', JSON.stringify(merged));
     this.setState(payload, () => this.processRecurring());
@@ -139,7 +144,7 @@ export default class App extends React.Component {
         const localCount = (localData?.plans?.length || 0) + (localData?.customers?.length || 0);
         if (localCount > 0) {
           // Push local data up to cloud and use it
-          this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], udpiEntries: localData.udpiEntries || [], invoices: localData.invoices || [], syncStatus: 'synced' }, this.pushToSupabase);
+          this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], udpiEntries: localData.udpiEntries || [], invoices: localData.invoices || [], staff: localData.staff || [], syncStatus: 'synced' }, this.pushToSupabase);
         } else {
           this.seed();
           this.setState({ syncStatus: 'synced' });
@@ -148,7 +153,7 @@ export default class App extends React.Component {
     } catch(err) {
       let localData = null;
       try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch(e) {}
-      if (localData?.customers) this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], udpiEntries: localData.udpiEntries || [], invoices: localData.invoices || [] });
+      if (localData?.customers) this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], udpiEntries: localData.udpiEntries || [], invoices: localData.invoices || [], staff: localData.staff || [] });
       else this.seed();
       this.setState({ syncStatus: 'offline', syncError: err.message || '' });
       return;
@@ -195,28 +200,29 @@ export default class App extends React.Component {
       ledger: mergeArr(local.ledger, cloud.ledger),
       udpiEntries: mergeArr(local.udpiEntries, cloud.udpiEntries),
       invoices: mergeArr(local.invoices, cloud.invoices),
+      staff: mergeArr(local.staff, cloud.staff),
     };
   };
 
   pushToSupabase = async () => {
-    const { customers, products, plans, settings, ledger, udpiEntries, invoices } = this.state;
+    const { customers, products, plans, settings, ledger, udpiEntries, invoices, staff } = this.state;
     if (!customers) return;
     this.setState({ syncStatus: 'syncing' });
     try {
       const { data: cloud } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
-      const localData = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], invoices: invoices || [] };
+      const localData = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], invoices: invoices || [], staff: staff || [] };
       const merged = cloud?.data ? this._mergeData(localData, cloud.data) : localData;
       localStorage.setItem('aqsat_data', JSON.stringify(merged));
       const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: merged, updated_at: new Date().toISOString() });
       if (!error && merged !== localData) {
         this._fromCloud = true;
-        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], syncStatus: 'synced' });
+        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced' });
       } else {
         this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
       }
     } catch(e) {
-      localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings, ledger: ledger || [], invoices: invoices || [] }));
-      const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: { customers, products, plans, settings, ledger: ledger || [], invoices: invoices || [] }, updated_at: new Date().toISOString() });
+      localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings, ledger: ledger || [], invoices: invoices || [], staff: staff || [] }));
+      const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: { customers, products, plans, settings, ledger: ledger || [], invoices: invoices || [], staff: staff || [] }, updated_at: new Date().toISOString() });
       this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
     }
   };
@@ -483,9 +489,69 @@ export default class App extends React.Component {
     window.open('https://wa.me/?text=' + msg, '_blank');
   };
 
+  activeStaff() { return (this.state.staff || []).filter(s => !s._deleted); }
+
+  openStaffModal = (editId) => {
+    if (editId) {
+      const s = this.activeStaff().find(x => x.id === editId);
+      if (!s) return;
+      this.requirePin(() => this.setState({ staffModal: { open: true, editId, name: s.name, phone: s.phone || '', role: s.role || '', salary: String(s.salary || ''), joinDate: s.joinDate || '' } }));
+    } else {
+      this.setState({ staffModal: { open: true, editId: null, name: '', phone: '', role: '', salary: '', joinDate: this.todayStr() } });
+    }
+  };
+  closeStaffModal = () => this.setState({ staffModal: { ...this.state.staffModal, open: false } });
+  saveStaff = () => {
+    const m = this.state.staffModal;
+    if (!m.name.trim()) { alert('Enter staff name / نام درج کریں'); return; }
+    if (m.editId) {
+      const staff = (this.state.staff || []).map(s => s.id === m.editId ? { ...s, name: m.name.trim(), phone: m.phone, role: m.role, salary: parseFloat(m.salary) || 0, joinDate: m.joinDate } : s);
+      this.setState({ staff, staffModal: { ...m, open: false } });
+    } else {
+      const s = { id: 'stf_' + Date.now().toString(36), name: m.name.trim(), phone: m.phone, role: m.role, salary: parseFloat(m.salary) || 0, joinDate: m.joinDate, attendance: {}, salaryPayments: [] };
+      this.setState({ staff: [s, ...(this.state.staff || [])], staffModal: { ...m, open: false } });
+    }
+  };
+  deleteStaff = (id) => {
+    if (!confirm('Delete this staff member?\nکیا آپ یہ ملازم ڈیلیٹ کرنا چاہتے ہیں؟')) return;
+    this.setState({ staff: (this.state.staff || []).map(s => s.id === id ? { ...s, _deleted: true } : s), staffModal: { ...this.state.staffModal, open: false } });
+  };
+  markAttendance = (staffId, date, status) => {
+    const staff = (this.state.staff || []).map(s => {
+      if (s.id !== staffId) return s;
+      const att = { ...(s.attendance || {}) };
+      att[date] = status;
+      return { ...s, attendance: att };
+    });
+    this.setState({ staff });
+  };
+  openSalaryModal = (staffId) => {
+    const s = this.activeStaff().find(x => x.id === staffId);
+    if (!s) return;
+    const now = new Date();
+    const month = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const accs = this.getAccounts();
+    this.setState({ salaryModal: { open: true, staffId, month, amount: String(s.salary || ''), advance: '0', accountId: accs.length > 0 ? accs[0].id : '', note: '' } });
+  };
+  closeSalaryModal = () => this.setState({ salaryModal: { ...this.state.salaryModal, open: false } });
+  paySalary = () => {
+    const m = this.state.salaryModal;
+    const amount = parseFloat(m.amount) || 0;
+    const advance = parseFloat(m.advance) || 0;
+    if (amount <= 0) { alert('Enter salary amount'); return; }
+    const net = amount - advance;
+    const s = this.activeStaff().find(x => x.id === m.staffId);
+    if (!s) return;
+    const payment = { id: 'sp_' + Date.now().toString(36), month: m.month, gross: amount, advance, net, date: this.todayStr(), accountId: m.accountId, note: m.note };
+    const staff = (this.state.staff || []).map(st => st.id === m.staffId ? { ...st, salaryPayments: [...(st.salaryPayments || []), payment] } : st);
+    const ledger = [...(this.state.ledger || [])];
+    ledger.unshift({ id: 'le_' + Date.now().toString(36), type: 'expense', amount: net, accountId: m.accountId, category: 'Salary', note: s.name + ' — ' + m.month + (advance > 0 ? ' (advance: ' + this.fmtPKR(advance) + ')' : ''), date: this.todayStr() });
+    this.setState({ staff, ledger, salaryModal: { ...m, open: false } });
+  };
+
   exportAllData = () => {
-    const { customers, products, plans, settings, ledger, udpiEntries, invoices } = this.state;
-    const d = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], invoices: invoices || [], exportedAt: new Date().toISOString(), app: 'Aqsat', v: '2.0' };
+    const { customers, products, plans, settings, ledger, udpiEntries, invoices, staff } = this.state;
+    const d = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], invoices: invoices || [], staff: staff || [], exportedAt: new Date().toISOString(), app: 'Aqsat', v: '2.0' };
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }));
     a.download = 'aqsat-backup-' + this.todayStr() + '.json';
@@ -2817,6 +2883,254 @@ export default class App extends React.Component {
     );
   }
 
+  renderStaff() {
+    const h = this.h;
+    if (this.state.staffView) return this.renderStaffDetail(this.state.staffView);
+    const allStaff = this.activeStaff();
+    const totalSalary = allStaff.reduce((s, st) => s + (st.salary || 0), 0);
+    const today = this.state.attendanceDate || this.todayStr();
+    const present = allStaff.filter(s => (s.attendance || {})[today] === 'present').length;
+    const absent = allStaff.filter(s => (s.attendance || {})[today] === 'absent').length;
+
+    return h('div', { className: 'screen', style: { maxWidth: 720 } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 14 } },
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Total Staff'),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#1a2b1f', marginTop: 2 } }, allStaff.length),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Monthly Payroll'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'ماہانہ تنخواہ'),
+          h('div', { className: 'mono', style: { fontSize: 16, fontWeight: 800, color: '#b91c1c', marginTop: 2 } }, this.fmtPKR(totalSalary)),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#0f6b4b', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Present Today'),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#0f6b4b', marginTop: 2 } }, present + '/' + allStaff.length),
+        ]),
+      ),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#7a7663' } }, 'Attendance Date:'),
+          h('input', { type: 'date', value: today, onChange: e => this.setState({ attendanceDate: e.target.value }), style: { border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, background: '#fdfcf8' } }),
+        ),
+        h('button', { onClick: () => this.openStaffModal(), style: { padding: '10px 16px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, '+ Add Staff'),
+      ),
+      allStaff.length === 0
+        ? this.card([h('div', { style: { textAlign: 'center', padding: 20, color: '#7a7663' } },
+            h('div', { style: { fontSize: 32, marginBottom: 8 } }, '👷'),
+            h('div', { style: { fontWeight: 600, fontSize: 14 } }, 'No staff members yet'),
+            h('div', { className: 'ur', style: { fontSize: 13, marginTop: 4 } }, 'ابھی تک کوئی ملازم نہیں'),
+          )])
+        : h('div', {},
+          allStaff.map(s => {
+            const att = (s.attendance || {})[today];
+            const attColor = att === 'present' ? '#0f6b4b' : att === 'absent' ? '#b91c1c' : att === 'half' ? '#a26a10' : '#7a7663';
+            const attBg = att === 'present' ? '#eaf5ee' : att === 'absent' ? '#fdecea' : att === 'half' ? '#fdf2d9' : '#f4f1e6';
+            const attLabel = att === 'present' ? 'P' : att === 'absent' ? 'A' : att === 'half' ? '½' : '—';
+            const totalPaid = (s.salaryPayments || []).reduce((sum, p) => sum + p.net, 0);
+            return this.card([
+              h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 } },
+                h('div', { onClick: () => this.setState({ staffView: s.id }), style: { cursor: 'pointer', flex: 1 } },
+                  h('div', { style: { fontWeight: 700, fontSize: 14, color: '#1a2b1f' } }, s.name),
+                  h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } },
+                    (s.role || 'Staff') + ' · ' + this.fmtPKR(s.salary || 0) + '/mo',
+                  ),
+                ),
+                h('div', { style: { display: 'flex', gap: 4, alignItems: 'center' } },
+                  ['present', 'half', 'absent'].map(status => {
+                    const label = status === 'present' ? 'P' : status === 'absent' ? 'A' : '½';
+                    const c = status === 'present' ? '#0f6b4b' : status === 'absent' ? '#b91c1c' : '#a26a10';
+                    const bg = status === 'present' ? '#eaf5ee' : status === 'absent' ? '#fdecea' : '#fdf2d9';
+                    return h('button', { key: status, onClick: () => this.markAttendance(s.id, today, att === status ? null : status), style: { width: 32, height: 32, borderRadius: 8, fontWeight: 800, fontSize: 12, color: att === status ? 'white' : c, background: att === status ? c : bg, border: 'none' } }, label);
+                  }),
+                ),
+              ),
+            ]);
+          }),
+        ),
+      this.renderStaffModal(),
+    );
+  }
+
+  renderStaffModal() {
+    const h = this.h;
+    const m = this.state.staffModal;
+    if (!m.open) return null;
+    const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
+    return h('div', { onClick: () => this.closeStaffModal(), style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 440, animation: 'slideIn .2s ease' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
+          h('div', { style: { fontSize: 18, fontWeight: 800 } }, m.editId ? '✎ Edit Staff' : '+ Add Staff'),
+          h('button', { onClick: () => this.closeStaffModal(), style: { width: 34, height: 34, borderRadius: 9, background: '#f4f1e6', fontSize: 16 } }, '✕'),
+        ),
+        h('div', { style: { display: 'grid', gap: 12 } },
+          h('div', {},
+            h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Name / نام *'),
+            h('input', { type: 'text', value: m.name, onChange: e => this.setState({ staffModal: { ...m, name: e.target.value } }), placeholder: 'Staff name', style: inpStyle }),
+          ),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+            h('div', {},
+              h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Phone / فون'),
+              h('input', { type: 'tel', value: m.phone, onChange: e => this.setState({ staffModal: { ...m, phone: e.target.value } }), placeholder: '03xx', style: inpStyle }),
+            ),
+            h('div', {},
+              h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Role / کردار'),
+              h('input', { type: 'text', value: m.role, onChange: e => this.setState({ staffModal: { ...m, role: e.target.value } }), placeholder: 'e.g. Salesman', style: inpStyle }),
+            ),
+          ),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+            h('div', {},
+              h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Salary / تنخواہ (Rs)'),
+              h('input', { type: 'number', value: m.salary, onChange: e => this.setState({ staffModal: { ...m, salary: e.target.value } }), placeholder: '0', style: inpStyle }),
+            ),
+            h('div', {},
+              h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Join Date'),
+              h('input', { type: 'date', value: m.joinDate, onChange: e => this.setState({ staffModal: { ...m, joinDate: e.target.value } }), style: inpStyle }),
+            ),
+          ),
+        ),
+        h('div', { style: { display: 'flex', gap: 10, marginTop: 20 } },
+          m.editId ? h('button', { onClick: () => this.deleteStaff(m.editId), style: { padding: '12px 16px', borderRadius: 10, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 13 } }, '🗑') : null,
+          h('button', { onClick: () => this.closeStaffModal(), style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600 } }, 'Cancel'),
+          h('button', { onClick: () => this.saveStaff(), style: { flex: 2, padding: 12, borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700 } }, m.editId ? '✓ Save' : '+ Add Staff'),
+        ),
+      ),
+    );
+  }
+
+  renderStaffDetail(staffId) {
+    const h = this.h;
+    const s = this.activeStaff().find(x => x.id === staffId);
+    if (!s) return h('div', { style: { textAlign: 'center', padding: 40, color: '#7a7663' } }, 'Staff not found');
+    const payments = (s.salaryPayments || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const totalPaid = payments.reduce((sum, p) => sum + p.net, 0);
+    const totalAdvance = payments.reduce((sum, p) => sum + (p.advance || 0), 0);
+    const accs = this.getAccounts();
+
+    const now = new Date();
+    const curMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const attDays = Object.entries(s.attendance || {}).filter(([d]) => d.startsWith(curMonth));
+    const presentDays = attDays.filter(([,v]) => v === 'present').length;
+    const halfDays = attDays.filter(([,v]) => v === 'half').length;
+    const absentDays = attDays.filter(([,v]) => v === 'absent').length;
+    const workingDays = presentDays + halfDays * 0.5;
+
+    const sm = this.state.salaryModal;
+
+    return h('div', { className: 'screen', style: { maxWidth: 720 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 } },
+        h('button', { onClick: () => this.setState({ staffView: null }), style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', fontWeight: 700, fontSize: 16, color: '#3a4a3f' } }, '‹'),
+        h('div', { style: { flex: 1 } },
+          h('div', { style: { fontWeight: 800, fontSize: 18 } }, s.name),
+          h('div', { style: { fontSize: 12, color: '#7a7663' } }, (s.role || 'Staff') + ' · ' + this.fmtPKR(s.salary || 0) + '/mo'),
+        ),
+        h('button', { onClick: () => this.openStaffModal(s.id), style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', fontWeight: 700, fontSize: 12, color: '#3a4a3f' } }, '✎ Edit'),
+      ),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 14 } },
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, monthNames[now.getMonth()] + ' Attendance'),
+          h('div', { style: { display: 'flex', gap: 8, marginTop: 4, fontSize: 13, fontWeight: 700 } },
+            h('span', { style: { color: '#0f6b4b' } }, presentDays + 'P'),
+            h('span', { style: { color: '#a26a10' } }, halfDays + '½'),
+            h('span', { style: { color: '#b91c1c' } }, absentDays + 'A'),
+          ),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Working Days'),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#1a2b1f', marginTop: 2 } }, workingDays),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Total Paid'),
+          h('div', { className: 'mono', style: { fontSize: 16, fontWeight: 800, color: '#b91c1c', marginTop: 2 } }, this.fmtPKR(totalPaid)),
+        ]),
+      ),
+      h('button', { onClick: () => this.openSalaryModal(s.id), style: { width: '100%', padding: '12px', borderRadius: 10, background: '#3b82f6', color: 'white', fontWeight: 700, fontSize: 13, marginBottom: 16 } }, '💰 Pay Salary / تنخواہ دیں'),
+      this.sectionHeader('Salary History', 'تنخواہ کی تاریخ'),
+      payments.length === 0
+        ? h('div', { style: { textAlign: 'center', padding: 20, color: '#7a7663', fontSize: 13 } }, 'No salary payments yet')
+        : h('div', {},
+          payments.map((p, idx) => {
+            const acc = accs.find(a => a.id === p.accountId);
+            return h('div', { key: p.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: idx % 2 === 0 ? '#fdfcf8' : '#f9f6ee', borderRadius: 10, marginBottom: 4, borderLeft: '3px solid #3b82f6' } },
+              h('div', { style: { flex: 1 } },
+                h('div', { style: { fontSize: 13, fontWeight: 600 } }, p.month + ' salary'),
+                h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } },
+                  new Date(p.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }),
+                  acc ? ' · ' + acc.emoji + ' ' + acc.name : '',
+                ),
+                p.note ? h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, p.note) : null,
+              ),
+              h('div', { style: { textAlign: 'right' } },
+                h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#b91c1c' } }, this.fmtPKR(p.net)),
+                p.advance > 0 ? h('div', { style: { fontSize: 10, color: '#a26a10' } }, 'Adv: -' + this.fmtPKR(p.advance)) : null,
+              ),
+            );
+          }),
+        ),
+      s.phone ? h('div', { style: { marginTop: 16 } },
+        h('div', { style: { fontSize: 11, color: '#7a7663' } }, '📞 ' + s.phone),
+      ) : null,
+      s.joinDate ? h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 4 } }, 'Joined: ' + new Date(s.joinDate + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' })) : null,
+      this.renderStaffModal(),
+      sm.open ? this.renderSalaryModal() : null,
+    );
+  }
+
+  renderSalaryModal() {
+    const h = this.h;
+    const m = this.state.salaryModal;
+    const s = this.activeStaff().find(x => x.id === m.staffId);
+    if (!s) return null;
+    const accs = this.getAccounts();
+    const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
+    const gross = parseFloat(m.amount) || 0;
+    const advance = parseFloat(m.advance) || 0;
+    const net = Math.max(0, gross - advance);
+    return h('div', { onClick: () => this.closeSalaryModal(), style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 } },
+      h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 440, animation: 'slideIn .2s ease' } },
+        h('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 16 } }, '💰 Pay Salary — ' + s.name),
+        h('div', { style: { display: 'grid', gap: 12 } },
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+            h('div', {},
+              h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Month'),
+              h('input', { type: 'month', value: m.month, onChange: e => this.setState({ salaryModal: { ...m, month: e.target.value } }), style: inpStyle }),
+            ),
+            h('div', {},
+              h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Account / اکاؤنٹ'),
+              h('select', { value: m.accountId, onChange: e => this.setState({ salaryModal: { ...m, accountId: e.target.value } }), style: inpStyle },
+                accs.map(a => h('option', { key: a.id, value: a.id }, a.emoji + ' ' + a.name)),
+              ),
+            ),
+          ),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+            h('div', {},
+              h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Gross Salary / کل تنخواہ'),
+              h('input', { type: 'number', value: m.amount, onChange: e => this.setState({ salaryModal: { ...m, amount: e.target.value } }), placeholder: '0', className: 'mono', style: inpStyle }),
+            ),
+            h('div', {},
+              h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Advance Deduct / ایڈوانس'),
+              h('input', { type: 'number', value: m.advance, onChange: e => this.setState({ salaryModal: { ...m, advance: e.target.value } }), placeholder: '0', className: 'mono', style: inpStyle }),
+            ),
+          ),
+          h('div', {},
+            h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Note (optional)'),
+            h('input', { type: 'text', value: m.note, onChange: e => this.setState({ salaryModal: { ...m, note: e.target.value } }), placeholder: 'Any note...', style: inpStyle }),
+          ),
+          h('div', { style: { textAlign: 'right', paddingTop: 8, borderTop: '2px solid #ece8dc' } },
+            advance > 0 ? h('div', { style: { fontSize: 12, color: '#a26a10', marginBottom: 4 } }, 'Gross: ' + this.fmtPKR(gross) + ' − Advance: ' + this.fmtPKR(advance)) : null,
+            h('span', { style: { fontSize: 12, color: '#7a7663' } }, 'Net Pay: '),
+            h('span', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#0f6b4b' } }, this.fmtPKR(net)),
+          ),
+        ),
+        h('div', { style: { display: 'flex', gap: 10, marginTop: 16 } },
+          h('button', { onClick: () => this.closeSalaryModal(), style: { flex: 1, padding: 12, borderRadius: 10, background: '#f4f1e6', fontWeight: 600 } }, 'Cancel'),
+          h('button', { onClick: () => this.paySalary(), style: { flex: 2, padding: 12, borderRadius: 10, background: '#3b82f6', color: 'white', fontWeight: 700 } }, '💰 Pay ' + this.fmtPKR(net)),
+        ),
+      ),
+    );
+  }
+
   renderDayBook() {
     const h = this.h;
     const accs = this.getAccounts();
@@ -3791,6 +4105,7 @@ export default class App extends React.Component {
       pnl:        ['Profit & Loss', 'نفع نقصان', 'Monthly P&L report'],
       accounts:   ['Accounts',  'اکاؤنٹس',  'Payment accounts & balances'],
       udharbook:  ['Udhar Book', 'اُدھار بک', 'Lent & borrowed tracking'],
+      staff:      ['Staff',      'ملازمین',   'Payroll & attendance'],
       settings:   ['Settings',  'ترتیبات',   'Business preferences'],
     };
     const t = titles[route] || titles.dashboard;
@@ -3812,6 +4127,7 @@ export default class App extends React.Component {
       { key: 'pnl',       label: 'P&L',        icon: '📈', go: () => this.go('pnl') },
       { key: 'accounts',  label: 'Accounts',   icon: '💰', go: () => this.go('accounts') },
       { key: 'udharbook', label: 'Udhar Book', icon: '🤝', go: () => this.go('udharbook') },
+      { key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -3908,6 +4224,7 @@ export default class App extends React.Component {
             {route === 'pnl'        && this.renderPnL()}
             {route === 'accounts'   && this.renderAccounts()}
             {route === 'udharbook'  && this.renderUdharBook()}
+            {route === 'staff'      && this.renderStaff()}
             {route === 'settings'   && this.renderSettings()}
           </div>
         </main>
@@ -3948,6 +4265,7 @@ export default class App extends React.Component {
                   { icon: '📈', label: 'P&L',       go: 'pnl' },
                   { icon: '💰', label: 'Accounts',  go: 'accounts' },
                   { icon: '🤝', label: 'Udhar Book', go: 'udharbook' },
+                  { icon: '👷', label: 'Staff',      go: 'staff' },
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
                   <button key={item.go} onClick={() => { this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
