@@ -1317,7 +1317,7 @@ export default class App extends React.Component {
           this.sectionHeader('Upcoming this week', 'اس ہفتے', null),
           upcomingList.length === 0
             ? h('div', { style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'Nothing upcoming.')
-            : upcomingList.slice(0, 6).map((row, i) =>
+            : upcomingList.map((row, i) =>
               h('div', { key: i, style: rowStyle },
                 h('div', { style: { width: 36, height: 36, borderRadius: 8, background: '#fdf2d9', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } },
                   h('div', { style: { fontSize: 13, fontWeight: 800, color: '#a26a10', lineHeight: 1 } }, new Date(row.s.dueDate).getDate()),
@@ -1334,7 +1334,7 @@ export default class App extends React.Component {
           this.sectionHeader('Recent payments', 'حالیہ ادائیگیاں', null),
           recentPayments.length === 0
             ? h('div', { style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No recent payments.')
-            : recentPayments.slice(0, 6).map((row, i) =>
+            : recentPayments.map((row, i) =>
               h('div', { key: i, style: rowStyle },
                 h('div', { style: { width: 28, height: 28, borderRadius: '50%', background: '#eaf5ee', color: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, flexShrink: 0 } }, '✓'),
                 h('div', { style: { flex: 1, minWidth: 0 } },
