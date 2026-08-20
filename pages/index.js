@@ -2702,6 +2702,13 @@ export default class App extends React.Component {
           h('div', { style: { fontSize: 11, color: '#5a7a63', marginTop: 2 } }, payableCount + (payableCount === 1 ? ' person' : ' people')),
         ),
       ),
+      totalReceivable > 0 || totalPayable > 0 ? h('div', { style: { background: totalReceivable >= totalPayable ? '#f0fdf4' : '#fef2f2', borderRadius: 14, padding: '12px 16px', marginBottom: 14, border: '1px solid ' + (totalReceivable >= totalPayable ? '#bbf7d0' : '#fecaca'), textAlign: 'center' } },
+        h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Net Position / خالص'),
+        h('div', { className: 'mono', style: { fontSize: 26, fontWeight: 800, color: totalReceivable >= totalPayable ? '#0f6b4b' : '#b91c1c', marginTop: 4 } },
+          (totalReceivable >= totalPayable ? '+' : '-') + this.fmtPKR(Math.abs(totalReceivable - totalPayable))
+        ),
+        h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } }, totalReceivable >= totalPayable ? 'People owe you / لوگوں پر آپ کا' : 'You owe people / آپ پر لوگوں کا'),
+      ) : null,
       (monthGave > 0 || monthGot > 0 || overdueParties.length > 0) ? h('div', { style: { display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' } },
         monthGave > 0 ? h('div', { style: { flex: 1, minWidth: 100, background: '#fff7ed', borderRadius: 10, padding: '8px 12px', border: '1px solid #fed7aa', fontSize: 11 } },
           h('div', { style: { fontWeight: 700, color: '#c2410c' } }, 'This Month Gave'),
@@ -2711,10 +2718,35 @@ export default class App extends React.Component {
           h('div', { style: { fontWeight: 700, color: '#0f6b4b' } }, 'This Month Got'),
           h('div', { className: 'mono', style: { fontWeight: 800, color: '#0f6b4b', marginTop: 2 } }, this.fmtPKR(monthGot)),
         ) : null,
-        overdueParties.length > 0 ? h('div', { style: { flex: 1, minWidth: 100, background: '#fef2f2', borderRadius: 10, padding: '8px 12px', border: '1px solid #f5cac2', fontSize: 11 } },
+        overdueParties.length > 0 ? h('div', { onClick: () => this.setState({ udharFilter: 'receivable' }), style: { flex: 1, minWidth: 100, background: '#fef2f2', borderRadius: 10, padding: '8px 12px', border: '1px solid #f5cac2', fontSize: 11, cursor: 'pointer' } },
           h('div', { style: { fontWeight: 700, color: '#b91c1c' } }, '⚠ Overdue'),
           h('div', { style: { fontWeight: 800, color: '#b91c1c', marginTop: 2 } }, overdueParties.length + ' ' + (overdueParties.length === 1 ? 'person' : 'people')),
         ) : null,
+      ) : null,
+      overdueParties.length > 0 ? h('div', { style: { background: '#fef2f2', borderRadius: 14, padding: '12px 16px', marginBottom: 14, border: '1px solid #fecaca' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 } },
+          h('div', {},
+            h('div', { style: { fontWeight: 800, fontSize: 13, color: '#b91c1c' } }, '⚠ Overdue Reminders / واجب الادا یاد دہانی'),
+            h('div', { style: { fontSize: 11, color: '#9a6060', marginTop: 2 } }, overdueParties.length + ' ' + (overdueParties.length === 1 ? 'person has' : 'people have') + ' overdue amounts'),
+          ),
+          h('button', { onClick: () => {
+            const msgs = overdueParties.filter(p => p.phone).map(p => ({ phone: p.phone.replace(/[^0-9]/g, ''), name: p.name, amount: p.balance }));
+            if (msgs.length === 0) { alert('No phone numbers found for overdue parties'); return; }
+            const first = msgs[0];
+            const msg = 'Assalam o Alaikum ' + first.name + ', apka baqi hisaab ' + this.fmtPKR(first.amount) + ' hai. Baraye meharbani jaldi ada kar dein. Shukriya!';
+            window.open('https://wa.me/' + first.phone + '?text=' + encodeURIComponent(msg), '_blank');
+            if (msgs.length > 1) alert('Reminder sent to ' + first.name + '. ' + (msgs.length - 1) + ' more to go — click Remind All again for the next person.');
+          }, style: { padding: '6px 14px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 11, border: 'none', flexShrink: 0 } }, '💬 Remind All'),
+        ),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+          overdueParties.slice(0, 5).map(p => h('div', { key: p.name, onClick: () => this.setState({ udharPerson: p.name }), style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: '#fff5f5', borderRadius: 8, cursor: 'pointer', fontSize: 12 } },
+            h('div', { style: { width: 28, height: 28, borderRadius: 7, background: getAvatarColor(p.name) + '15', color: getAvatarColor(p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10, flexShrink: 0 } }, initials(p.name)),
+            h('div', { style: { flex: 1, fontWeight: 600, color: '#1a2b1f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, p.name),
+            h('div', { className: 'mono', style: { fontWeight: 800, color: '#b91c1c', fontSize: 12, flexShrink: 0 } }, this.fmtPKR(p.balance)),
+            h('div', { style: { fontSize: 10, color: '#b91c1c', fontWeight: 600, flexShrink: 0 } }, p.overdueCount + ' overdue'),
+          )),
+          overdueParties.length > 5 ? h('div', { style: { textAlign: 'center', fontSize: 11, color: '#b91c1c', fontWeight: 600, padding: '4px 0' } }, '+ ' + (overdueParties.length - 5) + ' more') : null,
+        ),
       ) : null,
       h('div', { style: { display: 'flex', background: '#f4f1e6', borderRadius: 12, padding: 3, marginBottom: 12, gap: 2 } },
         filterTab('All', 'سب', 'all', parties.length),
