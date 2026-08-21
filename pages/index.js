@@ -63,6 +63,8 @@ export default class App extends React.Component {
     udharTab: 'parties',
     udharDateFrom: '',
     udharDateTo: '',
+    udharReminderQueue: [],
+    udharReminderDismissed: false,
     stockFilter: 'all',
     invoices: [],
     invoiceModal: { open: false, person: '', items: [{ desc: '', qty: 1, price: '' }], note: '', date: this.todayStr() },
@@ -624,6 +626,67 @@ export default class App extends React.Component {
     const reminderDate = today.toISOString().split('T')[0];
     this.setUdharMeta(personName, 'reminderDate', reminderDate);
     alert('Reminder set for ' + reminderDate + '\n' + personName + ' کے لیے یاد دہانی ' + reminderDate + ' کو');
+  };
+  sendWhatsAppAPI = async (phone, message) => {
+    try {
+      const resp = await fetch('/api/whatsapp-send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, message }),
+      });
+      const data = await resp.json();
+      return data;
+    } catch (err) {
+      return { error: err.message };
+    }
+  };
+  sendAutoReminders = async () => {
+    this.setState({ udharAutoSending: true });
+    try {
+      const resp = await fetch('/api/whatsapp-remind', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targets: 'auto' }),
+      });
+      const data = await resp.json();
+      if (data.error) { alert('Error: ' + data.error); }
+      else {
+        const msg = 'Auto Reminders Sent!\n\n' +
+          '✓ Sent: ' + data.sent + '\n' +
+          (data.failed > 0 ? '✕ Failed: ' + data.failed + '\n' : '') +
+          '\nDetails:\n' + (data.results || []).map(r => (r.ok ? '✓ ' : '✕ ') + r.name + (r.error ? ' — ' + r.error : '')).join('\n');
+        alert(msg);
+      }
+    } catch (err) {
+      alert('Network error: ' + err.message);
+    }
+    this.setState({ udharAutoSending: false });
+  };
+  sendSingleReminder = async (personName) => {
+    const entries = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase() && u.direction === 'lent' && !u.returned);
+    if (entries.length === 0) { alert('No pending amounts'); return; }
+    const customer = (this.state.customers || []).find(c => c.name.toLowerCase() === personName.toLowerCase());
+    if (!customer || !customer.phone) { alert('No phone number for ' + personName + '. Add it in customer details.'); return; }
+    const total = entries.reduce((s, u) => s + (u.amount - (u.returnedAmount || 0)), 0);
+    const message = 'Assalam-o-Alaikum ' + personName + ',\n\nYaddhani / Reminder:\nAap per ' + this.fmtPKR(total) + ' baqaya hain.\n\n' +
+      entries.slice(0, 5).map(u => '• ' + (u.note || 'Amount') + ': ' + this.fmtPKR(u.amount - (u.returnedAmount || 0)) + (u.dueDate ? ' (due: ' + u.dueDate + ')' : '')).join('\n') +
+      '\n\nBara-e-karam jaldi ada karen.\nShukriya! 🙏';
+    this.setState({ udharAutoSending: true });
+    const result = await this.sendWhatsAppAPI(customer.phone, message);
+    this.setState({ udharAutoSending: false });
+    if (result.ok) alert('✓ Reminder sent to ' + personName + ' via WhatsApp!');
+    else if (result.error) {
+      if (result.error.includes('not configured')) alert('WhatsApp API not set up yet.\n\nAdd WHATSAPP_TOKEN and WHATSAPP_PHONE_ID to your .env.local file.\n\nGet these from Meta Business Suite → WhatsApp → API Setup.');
+      else alert('Failed: ' + result.error);
+    }
+  };
+  checkWhatsAppConfig = async () => {
+    try {
+      const resp = await fetch('/api/whatsapp-send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: 'test', message: 'test' }),
+      });
+      const data = await resp.json();
+      return !data.error?.includes('not configured');
+    } catch { return false; }
   };
   openInvoiceModal = (person) => {
     const items = [{ desc: '', qty: 1, price: '', productId: '' }];
@@ -3118,7 +3181,8 @@ export default class App extends React.Component {
             const msg = 'Assalam o Alaikum ' + first.name + ', apka baqi hisaab ' + this.fmtPKR(first.amount) + ' hai. Baraye meharbani jaldi ada kar dein. Shukriya!';
             window.open('https://wa.me/' + first.phone + '?text=' + encodeURIComponent(msg), '_blank');
             if (msgs.length > 1) alert('Reminder sent to ' + first.name + '. ' + (msgs.length - 1) + ' more to go — click Remind All again for the next person.');
-          }, style: { padding: '6px 14px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 11, border: 'none', flexShrink: 0 } }, '💬 Remind All'),
+          }, style: { padding: '6px 14px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 11, border: 'none', flexShrink: 0 } }, '💬 Manual'),
+          h('button', { onClick: () => this.sendAutoReminders(), disabled: this.state.udharAutoSending, style: { padding: '6px 14px', borderRadius: 8, background: this.state.udharAutoSending ? '#475569' : 'linear-gradient(135deg, #14b8a6, #0d9488)', color: 'white', fontWeight: 700, fontSize: 11, border: 'none', flexShrink: 0, opacity: this.state.udharAutoSending ? 0.7 : 1 } }, this.state.udharAutoSending ? '⏳ Sending...' : '🤖 Auto Send'),
         ),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
           overdueParties.slice(0, 5).map(p => h('div', { key: p.name, onClick: () => this.setState({ udharPerson: p.name }), style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: '#0f172a', borderRadius: 8, cursor: 'pointer', fontSize: 12 } },
@@ -3307,7 +3371,8 @@ export default class App extends React.Component {
       h('div', { style: { padding: '12px 14px 0' } },
       h('div', { style: { display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' } },
         h('button', { onClick: () => this.toggleUdharPin(personName), style: { padding: '5px 10px', borderRadius: 8, background: isPinned ? '#f59e0b33' : '#334155', color: isPinned ? '#fbbf24' : '#94a3b8', fontSize: 10, fontWeight: 700, border: 'none' } }, isPinned ? '📌 Unpin' : '📌 Pin'),
-        phone ? h('a', { href: 'https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + waMsg, target: '_blank', style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, textDecoration: 'none' } }, '💬 Remind') : h('button', { onClick: () => this.remindViaWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Remind'),
+        phone ? h('a', { href: 'https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + waMsg, target: '_blank', style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, textDecoration: 'none' } }, '💬 Manual') : h('button', { onClick: () => this.remindViaWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Manual'),
+        h('button', { onClick: () => this.sendSingleReminder(personName), disabled: this.state.udharAutoSending, style: { padding: '5px 10px', borderRadius: 8, background: this.state.udharAutoSending ? '#475569' : '#14b8a6', color: this.state.udharAutoSending ? '#94a3b8' : '#0f172a', fontWeight: 700, fontSize: 10, border: 'none' } }, this.state.udharAutoSending ? '⏳...' : '🤖 Auto'),
         h('button', { onClick: () => this.copyStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#334155', color: '#e2e8f0', fontWeight: 700, fontSize: 10, border: 'none' } }, '📋 Statement'),
         h('button', { onClick: () => this.shareStatementWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#14b8a622', color: '#2dd4bf', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Share'),
         h('button', { onClick: () => this.setUdharReminder(personName), style: { padding: '5px 10px', borderRadius: 8, background: meta.reminderDate ? '#f59e0b33' : '#334155', color: meta.reminderDate ? '#fbbf24' : '#94a3b8', fontWeight: 700, fontSize: 10, border: 'none' } }, meta.reminderDate ? '⏰ ' + meta.reminderDate : '⏰ Reminder'),
