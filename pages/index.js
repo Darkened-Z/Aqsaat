@@ -56,6 +56,7 @@ export default class App extends React.Component {
     recurringModal: { open: false, editId: null, type: 'expense', amount: '', accountId: '', category: '', note: '', day: 1 },
     udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: this.todayStr(), dueDate: '', category: '', photo: null },
     udharCategoryFilter: '',
+    installmentAutoSending: false,
     installmentMenu: null,
     reportAccounts: null,
     udharPerson: null,
@@ -1168,6 +1169,62 @@ export default class App extends React.Component {
     return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
   };
 
+  sendInstallmentReminder = async (customer, plan, product, installment) => {
+    if (!customer.phone) { alert('No phone number for ' + customer.name); return; }
+    const biz = this.state.settings.businessName || 'Aqsat';
+    const today = new Date();
+    const due = new Date(installment.dueDate);
+    const daysLeft = Math.round((due - today) / 86400000);
+    const urgency = daysLeft < 0 ? '(' + Math.abs(daysLeft) + ' دن تاخیر ہو چکی ہے)' : daysLeft === 0 ? '(آج آخری دن ہے)' : '(' + daysLeft + ' دن باقی ہیں)';
+    const msg = 'السلام وعلیکم ' + customer.name + '! 🙏\n\n' + biz + ' کی طرف سے یاد دہانی:\n\n📦 ' + (product ? product.name : 'پروڈکٹ') + '\n💳 قسط نمبر: ' + installment.n + ' / ' + plan.months + '\n💰 رقم: ' + this.fmtPKR(installment.amount) + '\n📅 تاریخ: ' + this.fmtDate(installment.dueDate) + ' ' + urgency + '\n🔖 وچر: ' + (plan.voucherNo || '—') + '\n\nبراہ کرم بروقت ادائیگی کریں۔\nشکریہ 🙏';
+    const result = await this.sendWhatsAppAPI(customer.phone, msg);
+    if (result.ok) alert('✓ Reminder sent to ' + customer.name + '!');
+    else if (result.error) {
+      if (result.error.includes('not connected')) { alert('WhatsApp not connected.\nGo to Udhar Book → tap WA button to scan QR.\n\nواٹس ایپ منسلک نہیں۔'); }
+      else alert('Failed: ' + result.error);
+    }
+  };
+  sendAllInstallmentReminders = async () => {
+    let overdueList = [];
+    this.activePlans().forEach(pl => {
+      const c = this.state.customers.find(x => x.id === pl.customerId);
+      const p = this.state.products.find(x => x.id === pl.productId);
+      if (!c || !c.phone) return;
+      pl.schedule.forEach(s => { const diff = this.dayDiff(s.dueDate); if (!s.paid && diff < 0) overdueList.push({ pl, s, c, p, diff }); });
+    });
+    if (overdueList.length === 0) { alert('No overdue installments with phone numbers.'); return; }
+    if (!confirm('Send WhatsApp reminders to ' + overdueList.length + ' overdue installments?\n\n' + overdueList.length + ' واجب المعیاد اقساط کو واٹس ایپ ریمائنڈر بھیجیں؟')) return;
+    this.setState({ installmentAutoSending: true });
+    let sent = 0, failed = 0;
+    for (const r of overdueList) {
+      const result = await this.sendWhatsAppAPI(r.c.phone, 'السلام وعلیکم ' + r.c.name + '! 🙏\n\n' + (this.state.settings.businessName || 'Aqsat') + ' کی طرف سے یاد دہانی:\n\n📦 ' + (r.p ? r.p.name : 'پروڈکٹ') + '\n💳 قسط نمبر: ' + r.s.n + ' / ' + r.pl.months + '\n💰 رقم: ' + this.fmtPKR(r.s.amount) + '\n📅 تاریخ: ' + this.fmtDate(r.s.dueDate) + ' (' + Math.abs(r.diff) + ' دن تاخیر)\n\nبراہ کرم بروقت ادائیگی کریں۔\nشکریہ 🙏');
+      if (result.ok) sent++; else failed++;
+      if (overdueList.indexOf(r) < overdueList.length - 1) await new Promise(res => setTimeout(res, 2000));
+    }
+    this.setState({ installmentAutoSending: false });
+    alert('Auto Reminders Done!\n\n✓ Sent: ' + sent + (failed > 0 ? '\n✕ Failed: ' + failed : '') + '\n\nTotal: ' + overdueList.length);
+  };
+  getPortalLink = (phone) => {
+    const base = typeof window !== 'undefined' ? window.location.origin : '';
+    return base + '/portal?phone=' + (phone || '').replace(/[^0-9]/g, '');
+  };
+  sharePortalLink = async (customer) => {
+    if (!customer.phone) { alert('No phone number for ' + customer.name); return; }
+    const link = this.getPortalLink(customer.phone);
+    const biz = this.state.settings.businessName || 'Aqsat';
+    const msg = 'السلام وعلیکم ' + customer.name + '! 🙏\n\n' + biz + ' کی طرف سے آپ کا کسٹمر پورٹل:\n\n🔗 ' + link + '\n\nاس لنک سے آپ اپنی اقساط کی تفصیلات دیکھ سکتے ہیں:\n• قسطوں کی رقم اور تاریخیں\n• ادائیگی کی حالت\n• باقی رقم\n\nشکریہ 🙏';
+    const result = await this.sendWhatsAppAPI(customer.phone, msg);
+    if (result.ok) alert('✓ Portal link sent to ' + customer.name + '!');
+    else {
+      const waNum = '92' + customer.phone.replace(/\D/g, '').replace(/^0/, '');
+      window.open('https://wa.me/' + waNum + '?text=' + encodeURIComponent(msg), '_blank');
+    }
+  };
+  copyPortalLink = (phone) => {
+    const link = this.getPortalLink(phone);
+    if (navigator.clipboard) { navigator.clipboard.writeText(link).then(() => alert('Portal link copied!\nپورٹل لنک کاپی ہو گیا')); }
+    else { prompt('Copy this link:', link); }
+  };
   exportBackup = () => {
     const data = { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], exportedAt: new Date().toISOString(), version: 2 };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1734,9 +1791,15 @@ export default class App extends React.Component {
           ),
           h('div', { style: { display: 'flex', gap: 8 } },
             h('button', { onClick: () => this.openEditCustomer(c.id), style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '✎ Edit'),
-            nextInst ? h('a', { href: this.waLink(c.phone, c.name, nextInst.amount, nextInst.dueDate), target: '_blank', rel: 'noopener', style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 WhatsApp') : null,
+            nextInst ? h('a', { href: this.waLink(c.phone, c.name, nextInst.amount, nextInst.dueDate), target: '_blank', rel: 'noopener', style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 Manual') : null,
+            nextInst && c.phone ? h('button', { onClick: () => { const pl = st.plans[0]; const pr = this.state.products.find(x => x.id === pl.productId); this.sendInstallmentReminder(c, pl, pr, nextInst); }, style: { background: '#0f6b4b', color: 'white', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '🤖 Auto Send') : null,
             h('button', { onClick: () => this.go('newplan'), style: { background: '#0f6b4b', color: 'white', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '＋ New Plan'),
           ),
+          c.phone ? h('div', { style: { display: 'flex', gap: 8, marginTop: 8 } },
+            h('button', { onClick: () => this.sharePortalLink(c), style: { background: '#25D366', color: 'white', padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, border: 'none' } }, '🔗 Send Portal Link'),
+            h('button', { onClick: () => this.copyPortalLink(c.phone), style: { background: '#f4f1e6', padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, border: 'none' } }, '📋 Copy Portal Link'),
+            h('a', { href: this.getPortalLink(c.phone), target: '_blank', style: { background: '#f4f1e6', padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, textDecoration: 'none', color: '#3a4a3f', display: 'inline-flex', alignItems: 'center' } }, '👁 Preview Portal'),
+          ) : null,
         ),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginTop: 24 } },
           [['Total sold', this.fmtPKR(st.total), '#1a2b1f'], ['Received', this.fmtPKR(st.paid), '#0f6b4b'], ['Outstanding', this.fmtPKR(st.remaining), st.overdue > 0 ? '#a4362b' : '#1a2b1f'], ['Overdue', this.fmtPKR(st.overdue), '#a4362b']].map(([lbl, val, col], i) =>
@@ -2294,8 +2357,16 @@ export default class App extends React.Component {
       pl.schedule.forEach(s => { const diff = this.dayDiff(s.dueDate); if (!s.paid && diff < 0) overdueList.push({ pl, s, c, p, diff }); });
     });
     overdueList.sort((a, b) => a.diff - b.diff);
+    const waConnected = this.state.waStatus === 'ready';
     return h('div', { className: 'screen' },
-      h('div', { style: { fontSize: 14, color: '#7a7663', marginBottom: 16 } }, overdueList.length + ' overdue installments need attention.'),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
+        h('div', { style: { fontSize: 14, color: '#7a7663' } }, overdueList.length + ' overdue installments need attention.'),
+        overdueList.length > 0 ? h('button', { onClick: () => this.sendAllInstallmentReminders(), disabled: this.state.installmentAutoSending, style: { padding: '8px 16px', borderRadius: 10, background: this.state.installmentAutoSending ? '#94a3b8' : 'linear-gradient(135deg, #25D366, #128C7E)', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', opacity: this.state.installmentAutoSending ? 0.7 : 1 } }, this.state.installmentAutoSending ? '⏳ Sending...' : '🤖 Auto Send All') : null,
+      ),
+      !waConnected && overdueList.length > 0 ? h('div', { style: { background: '#f59e0b15', border: '1px solid #f59e0b33', borderRadius: 10, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 } },
+        h('span', { style: { fontSize: 14 } }, '⚠️'),
+        h('div', { style: { flex: 1, color: '#92400e' } }, 'WhatsApp not connected. Go to ', h('strong', {}, 'Udhar Book → WA'), ' button to scan QR for auto-send.'),
+      ) : null,
       this.card([
         overdueList.map((r, i) => h('div', { key: i, style: { display: 'flex', gap: 12, padding: '14px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2', alignItems: 'center', flexWrap: 'wrap' } },
           h('div', { style: { width: 44, height: 44, borderRadius: 12, background: r.c.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#3a2f1a' } }, r.c.avatar),
@@ -2303,8 +2374,10 @@ export default class App extends React.Component {
             h('div', { style: { fontWeight: 700, fontSize: 15 } }, r.c.name + ' — ', h('span', { className: 'ur', style: { fontWeight: 400, fontSize: 13, color: '#7a7663' } }, r.c.nameUr)),
             h('div', { style: { fontSize: 12, color: '#a4362b', fontWeight: 500 } }, Math.abs(r.diff) + ' days late · ' + r.p.name + ' · ' + this.fmtPKR(r.s.amount)),
           ),
-          h('div', { style: { display: 'flex', gap: 6 } },
-            h('a', { href: this.waLink(r.c.phone, r.c.name, r.s.amount, r.s.dueDate), target: '_blank', rel: 'noopener', style: { background: '#25D366', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 WhatsApp'),
+          h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+            h('a', { href: this.waLink(r.c.phone, r.c.name, r.s.amount, r.s.dueDate), target: '_blank', rel: 'noopener', style: { background: '#25D366', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 Manual'),
+            h('button', { onClick: () => this.sendInstallmentReminder(r.c, r.pl, r.p, r.s), disabled: this.state.installmentAutoSending, style: { background: this.state.installmentAutoSending ? '#94a3b8' : '#0f6b4b', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '🤖 Auto'),
+            h('button', { onClick: () => this.sharePortalLink(r.c), style: { background: '#3b82f6', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '🔗 Portal'),
             h('button', { style: { background: '#f4f1e6', color: '#3a4a3f', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '📞 Call'),
             h('button', { onClick: () => this.openPayment(r.pl.id, r.s.n), style: { background: '#0f6b4b', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, 'Collect'),
           ),
