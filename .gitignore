@@ -2,3 +2,5 @@ node_modules/
 .next/
 .env*
 npm-debug.log*
+.wwebjs_auth/
+.wwebjs_cache/

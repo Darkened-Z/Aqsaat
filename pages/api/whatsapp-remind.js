@@ -1,14 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
+const wa = require('../../lib/whatsapp');
 
 const SHOP_ID = 'aqsat-main';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneId = process.env.WHATSAPP_PHONE_ID;
-  if (!token || !phoneId) {
-    return res.status(500).json({ error: 'WhatsApp API not configured' });
+  const status = wa.getStatus();
+  if (status.status !== 'ready') {
+    return res.status(503).json({ error: 'WhatsApp not connected. Open Settings → WhatsApp to scan QR.', status: status.status });
   }
 
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
@@ -38,6 +38,7 @@ export default async function handler(req, res) {
     }
   });
 
+  const fmtPKR = n => 'Rs ' + Math.round(n).toLocaleString('en-PK');
   const results = [];
   const targets = req.body.targets || 'auto';
 
@@ -52,29 +53,13 @@ export default async function handler(req, res) {
       if (hasReminderDue || hasOverdue) {
         const customer = customers.find(c => c.name.toLowerCase() === p.name.toLowerCase());
         if (customer && customer.phone) {
-          toRemind.push({ ...p, phone: customer.phone, balance, meta });
+          toRemind.push({ ...p, phone: customer.phone, balance });
         }
-      }
-    });
-  } else if (Array.isArray(targets)) {
-    targets.forEach(t => {
-      const p = people[t.name];
-      if (p) {
-        const balance = p.lent - p.borrowed;
-        toRemind.push({ ...p, phone: t.phone, balance, meta: udharMeta[t.name] || {} });
       }
     });
   }
 
-  const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const fmtPKR = n => 'Rs ' + Math.round(n).toLocaleString('en-PK');
-
   for (const person of toRemind) {
-    let cleaned = person.phone.replace(/[^0-9]/g, '');
-    if (cleaned.length === 10) cleaned = '92' + cleaned;
-    if (cleaned.startsWith('0')) cleaned = '92' + cleaned.substring(1);
-
     const message = `Assalam-o-Alaikum ${person.name},\n\n` +
       `Yaddhani / Reminder:\n` +
       `Aap per ${fmtPKR(person.balance)} baqaya hain.\n\n` +
@@ -83,20 +68,12 @@ export default async function handler(req, res) {
       ).join('\n') +
       `\n\nBara-e-karam jaldi ada karen.\nShukriya! 🙏`;
 
-    try {
-      const resp = await fetch(url, {
-        method: 'POST', headers,
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: cleaned,
-          type: 'text',
-          text: { body: message },
-        }),
-      });
-      const data = await resp.json();
-      results.push({ name: person.name, phone: cleaned, ok: resp.ok, messageId: data.messages?.[0]?.id, error: data.error?.message });
-    } catch (err) {
-      results.push({ name: person.name, phone: cleaned, ok: false, error: err.message });
+    const result = await wa.sendMessage(person.phone, message);
+    results.push({ name: person.name, phone: person.phone, ...result });
+
+    // 2s delay between messages to avoid spam detection
+    if (toRemind.indexOf(person) < toRemind.length - 1) {
+      await new Promise(r => setTimeout(r, 2000));
     }
   }
 

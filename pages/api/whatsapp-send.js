@@ -1,53 +1,23 @@
+const wa = require('../../lib/whatsapp');
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { phone, message, templateName, templateLang, templateParams } = req.body;
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  const { phone, message } = req.body;
 
-  if (!token || !phoneId) {
-    return res.status(500).json({ error: 'WhatsApp API not configured. Add WHATSAPP_TOKEN and WHATSAPP_PHONE_ID to .env.local' });
+  if (!phone || !message) {
+    return res.status(400).json({ error: 'phone and message required' });
   }
 
-  let cleaned = (phone || '').replace(/[^0-9]/g, '');
-  if (!cleaned || cleaned.length < 10) {
-    return res.status(400).json({ error: 'Invalid phone number' });
+  const status = wa.getStatus();
+  if (status.status !== 'ready') {
+    return res.status(503).json({ error: 'WhatsApp not connected', status: status.status, message: status.message });
   }
-  if (!cleaned.startsWith('92') && cleaned.length === 10) cleaned = '92' + cleaned;
-  if (!cleaned.startsWith('92') && cleaned.startsWith('0')) cleaned = '92' + cleaned.substring(1);
 
-  const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-
-  let body;
-  if (templateName) {
-    body = {
-      messaging_product: 'whatsapp',
-      to: cleaned,
-      type: 'template',
-      template: {
-        name: templateName,
-        language: { code: templateLang || 'en' },
-        components: templateParams ? [{ type: 'body', parameters: templateParams.map(p => ({ type: 'text', text: String(p) })) }] : undefined,
-      },
-    };
+  const result = await wa.sendMessage(phone, message);
+  if (result.ok) {
+    return res.json({ ok: true, messageId: result.messageId });
   } else {
-    body = {
-      messaging_product: 'whatsapp',
-      to: cleaned,
-      type: 'text',
-      text: { body: message || 'Reminder from Udhar Book' },
-    };
-  }
-
-  try {
-    const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-    const data = await resp.json();
-    if (!resp.ok) {
-      return res.status(resp.status).json({ error: data.error?.message || 'WhatsApp API error', details: data });
-    }
-    return res.json({ ok: true, messageId: data.messages?.[0]?.id });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: result.error });
   }
 }
