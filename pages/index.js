@@ -54,7 +54,8 @@ export default class App extends React.Component {
     ledgerMonthFilter: '',
     ledgerSearch: '',
     recurringModal: { open: false, editId: null, type: 'expense', amount: '', accountId: '', category: '', note: '', day: 1 },
-    udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: this.todayStr(), dueDate: '' },
+    udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: this.todayStr(), dueDate: '', category: '', photo: null },
+    udharCategoryFilter: '',
     installmentMenu: null,
     reportAccounts: null,
     udharPerson: null,
@@ -401,9 +402,9 @@ export default class App extends React.Component {
     if (editId) {
       const u = this.activeUdpiEntries().find(x => x.id === editId);
       if (!u) return;
-      this.setState({ udpiModal: { open: true, editId, direction: u.direction, amount: String(u.amount), person: u.person, accountId: u.accountId, note: u.note || '', date: u.date, dueDate: u.dueDate || '' } });
+      this.setState({ udpiModal: { open: true, editId, direction: u.direction, amount: String(u.amount), person: u.person, accountId: u.accountId, note: u.note || '', date: u.date, dueDate: u.dueDate || '', category: u.category || '', photo: u.photo || null } });
     } else {
-      this.setState({ udpiModal: { open: true, editId: null, direction: 'lent', amount: '', person: prefillPerson || '', accountId: accs.length > 0 ? accs[0].id : '', note: '', date: this.todayStr(), dueDate: '' } });
+      this.setState({ udpiModal: { open: true, editId: null, direction: 'lent', amount: '', person: prefillPerson || '', accountId: accs.length > 0 ? accs[0].id : '', note: '', date: this.todayStr(), dueDate: '', category: '', photo: null } });
     }
   };
   closeUdpiModal = () => this.setState({ udpiModal: { ...this.state.udpiModal, open: false } });
@@ -416,9 +417,9 @@ export default class App extends React.Component {
     const udpiEntries = [...(this.state.udpiEntries || [])];
     if (m.editId) {
       const idx = udpiEntries.findIndex(x => x.id === m.editId);
-      if (idx >= 0) udpiEntries[idx] = { ...udpiEntries[idx], direction: m.direction, amount, person: m.person.trim(), accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '' };
+      if (idx >= 0) udpiEntries[idx] = { ...udpiEntries[idx], direction: m.direction, amount, person: m.person.trim(), accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || udpiEntries[idx].photo || null };
     } else {
-      udpiEntries.unshift({ id: 'ud_' + Date.now().toString(36), direction: m.direction, amount, person: m.person.trim(), accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '', returned: false, returnedDate: '', returnedAmount: 0, partialReturns: [] });
+      udpiEntries.unshift({ id: 'ud_' + Date.now().toString(36), direction: m.direction, amount, person: m.person.trim(), accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || null, returned: false, returnedDate: '', returnedAmount: 0, partialReturns: [] });
     }
     this.setState({ udpiEntries, udpiModal: { ...m, open: false } });
   };
@@ -548,6 +549,62 @@ export default class App extends React.Component {
     } else {
       prompt('Copy this report:', text);
     }
+  };
+  printUdharStatement = (personName) => {
+    const entries = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase());
+    entries.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const shopName = (this.state.settings || {}).shopName || 'Aqsat';
+    let lent = 0, borrowed = 0, runBal = 0;
+    entries.forEach(u => { if (u.direction === 'lent' && !u.returned) lent += u.amount - (u.returnedAmount || 0); if (u.direction === 'borrowed' && !u.returned) borrowed += u.amount - (u.returnedAmount || 0); });
+    const balance = lent - borrowed;
+    const rows = entries.map(u => {
+      const amt = u.amount - (u.returnedAmount || 0);
+      if (!u.returned) { if (u.direction === 'lent') runBal += amt; else runBal -= amt; }
+      return '<tr><td>' + u.date + '</td><td>' + (u.note || (u.direction === 'lent' ? 'Gave' : 'Got')) + '</td><td>' + (u.category || '-') + '</td><td style="color:' + (u.direction === 'lent' ? '#dc2626' : '#059669') + ';font-weight:700">' + (u.direction === 'lent' ? '-' : '+') + this.fmtPKR(u.amount) + '</td><td>' + (u.returned ? '✓ Settled' : this.fmtPKR(runBal)) + '</td><td>' + (u.dueDate || '-') + '</td></tr>';
+    }).join('');
+    const html = '<!DOCTYPE html><html><head><title>Statement — ' + personName + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;padding:24px;color:#1e293b;max-width:800px;margin:0 auto}h1{font-size:22px;margin-bottom:4px}h2{font-size:14px;color:#64748b;margin-bottom:20px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:16px;margin-bottom:20px}.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}.summary div{background:#f8fafc;border-radius:8px;padding:12px;text-align:center}.summary .label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:700}.summary .val{font-size:20px;font-weight:800;margin-top:4px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#0f172a;color:white;padding:8px 10px;text-align:left;font-weight:700;font-size:11px}td{padding:8px 10px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f8fafc}.footer{margin-top:20px;padding-top:12px;border-top:2px solid #0f172a;display:flex;justify-content:space-between;font-size:11px;color:#64748b}@media print{body{padding:12px}button{display:none !important}}</style></head><body>' +
+      '<div class="header"><div><h1>' + shopName + '</h1><h2>Udhar Statement — ' + personName + '</h2></div><div style="text-align:right;font-size:12px;color:#64748b"><div>Date: ' + this.todayStr() + '</div><div>Entries: ' + entries.length + '</div></div></div>' +
+      '<div class="summary"><div><div class="label">Total Gave</div><div class="val" style="color:#dc2626">' + this.fmtPKR(entries.filter(u => u.direction === 'lent').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Total Got</div><div class="val" style="color:#059669">' + this.fmtPKR(entries.filter(u => u.direction === 'borrowed').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Balance</div><div class="val" style="color:' + (balance > 0 ? '#dc2626' : '#059669') + '">' + this.fmtPKR(Math.abs(balance)) + '</div><div style="font-size:10px;color:#64748b">' + (balance > 0 ? 'Receivable' : balance < 0 ? 'Payable' : 'Clear') + '</div></div></div>' +
+      '<table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>Balance</th><th>Due Date</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="footer"><span>Generated by ' + shopName + ' · Udhar Book</span><span>Printed on ' + new Date().toLocaleString() + '</span></div>' +
+      '<div style="text-align:center;margin-top:16px"><button onclick="window.print()" style="padding:10px 24px;border-radius:8px;background:#0f172a;color:white;font-weight:700;border:none;cursor:pointer;font-size:13px">🖨 Print / Save PDF</button></div></body></html>';
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+    else alert('Popup blocked. Please allow popups for this site.');
+  };
+  exportUdharCSV = () => {
+    const entries = this.activeUdpiEntries();
+    const parties = this._getUdharParties();
+    let csv = 'Date,Person,Direction,Amount,Returned Amount,Note,Category,Due Date,Settled,Account\n';
+    entries.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const accs = this.getAccounts();
+    entries.forEach(u => {
+      const acc = accs.find(a => a.id === u.accountId);
+      csv += [u.date, '"' + u.person.replace(/"/g, '""') + '"', u.direction, u.amount, u.returnedAmount || 0, '"' + (u.note || '').replace(/"/g, '""') + '"', u.category || '', u.dueDate || '', u.returned ? 'Yes' : 'No', acc ? acc.name : ''].join(',') + '\n';
+    });
+    csv += '\n\nSummary\n';
+    csv += 'Total Parties,' + parties.length + '\n';
+    csv += 'Total Receivable,' + parties.reduce((s, p) => s + Math.max(0, p.balance), 0) + '\n';
+    csv += 'Total Payable,' + parties.reduce((s, p) => s + Math.max(0, -p.balance), 0) + '\n';
+    csv += 'Total Entries,' + entries.length + '\n';
+    csv += 'Generated,' + new Date().toLocaleString() + '\n';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'udhar-book-' + this.todayStr() + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  handleUdharPhoto = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert('Photo too large (max 2MB)\nتصویر بہت بڑی ہے'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.setState({ udpiModal: { ...this.state.udpiModal, photo: reader.result } });
+    };
+    reader.readAsDataURL(file);
   };
   shareUdharBookWhatsApp = () => {
     const parties = this._getUdharParties();
@@ -2871,6 +2928,27 @@ export default class App extends React.Component {
           h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Note ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'نوٹ')),
           h('input', { type: 'text', value: m.note, onChange: e => setM('note', e.target.value), placeholder: 'Optional', style: inpStyle }),
         ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Category ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'زمرہ')),
+          h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+            ...[['', '🏷 None'], ['business', '💼 Business'], ['personal', '👤 Personal'], ['family', '👨‍👩‍👧 Family'], ['emergency', '🚨 Emergency']].map(([val, label]) =>
+              h('button', { key: val, onClick: () => setM('category', val), style: { padding: '6px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: m.category === val ? '#eaf5ee' : '#f4f1e6', color: m.category === val ? '#0f6b4b' : '#7a7663', border: '1.5px solid ' + (m.category === val ? '#0f6b4b' : '#ece8dc') } }, label)
+            ),
+          ),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Receipt / Photo ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'رسید')),
+          h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+            h('label', { style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', border: '1.5px dashed #ece8dc', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#7a7663', display: 'inline-flex', alignItems: 'center', gap: 4 } },
+              '📷 ', m.photo ? 'Change Photo' : 'Add Photo',
+              h('input', { type: 'file', accept: 'image/*', capture: 'environment', onChange: (e) => this.handleUdharPhoto(e), style: { display: 'none' } }),
+            ),
+            m.photo ? h('div', { style: { position: 'relative' } },
+              h('img', { src: m.photo, style: { width: 48, height: 48, borderRadius: 8, objectFit: 'cover', border: '1px solid #ece8dc' } }),
+              h('button', { onClick: () => setM('photo', null), style: { position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: '#b91c1c', color: 'white', fontSize: 10, fontWeight: 800, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' } }, '✕'),
+            ) : null,
+          ),
+        ),
         h('button', { onClick: () => this.submitUdpiEntry(), style: { width: '100%', padding: '14px', borderRadius: 12, background: m.direction === 'lent' ? '#b91c1c' : '#3b82f6', color: 'white', fontSize: 15, fontWeight: 800 } }, m.editId ? 'Save Changes' : (m.direction === 'lent' ? '💸 Record Gave' : '📥 Record Got')),
       ),
     );
@@ -3073,9 +3151,10 @@ export default class App extends React.Component {
         statCard('Total Parties', 'کل فریقین', parties.length, (parties.filter(p => p.balance > 0).length) + ' receivable, ' + (parties.filter(p => p.balance < 0).length) + ' payable', '#fdfcf8', '#3a4a3f'),
         statCard('Active', 'فعال', parties.filter(p => p.balance !== 0).length, parties.filter(p => p.balance === 0).length + ' settled', '#fdfcf8', '#3a4a3f'),
       ),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 14 } },
-        h('button', { onClick: () => this.exportUdharBook(), style: { padding: '12px', borderRadius: 12, background: '#1a2b1f', color: 'white', fontWeight: 700, fontSize: 13, border: 'none' } }, '📋 Copy Report'),
-        h('button', { onClick: () => this.shareUdharBookWhatsApp(), style: { padding: '12px', borderRadius: 12, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 13, border: 'none' } }, '💬 Share WhatsApp'),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 14 } },
+        h('button', { onClick: () => this.exportUdharBook(), style: { padding: '12px', borderRadius: 12, background: '#1a2b1f', color: 'white', fontWeight: 700, fontSize: 12, border: 'none' } }, '📋 Copy'),
+        h('button', { onClick: () => this.exportUdharCSV(), style: { padding: '12px', borderRadius: 12, background: '#334155', color: '#e2e8f0', fontWeight: 700, fontSize: 12, border: 'none' } }, '📊 CSV'),
+        h('button', { onClick: () => this.shareUdharBookWhatsApp(), style: { padding: '12px', borderRadius: 12, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 12, border: 'none' } }, '💬 Share'),
       ),
     );
   }
@@ -3094,6 +3173,8 @@ export default class App extends React.Component {
     if (filter === 'receivable') filtered = filtered.filter(p => p.balance > 0);
     else if (filter === 'payable') filtered = filtered.filter(p => p.balance < 0);
     else if (filter === 'settled') filtered = filtered.filter(p => p.balance === 0);
+    const catFilter = this.state.udharCategoryFilter || '';
+    if (catFilter) filtered = filtered.filter(p => { const m = this.getUdharMeta(p.name); return (m.category || '') === catFilter; });
     if (sort === 'balance') filtered.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
     else if (sort === 'recent') filtered.sort((a, b) => (b.lastDate || '').localeCompare(a.lastDate || ''));
     else if (sort === 'name') filtered.sort((a, b) => a.name.localeCompare(b.name));
@@ -3299,14 +3380,46 @@ export default class App extends React.Component {
         sortBtn('Recent', 'recent'),
         sortBtn('A-Z', 'name'),
       ),
+      h('div', { style: { display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' } },
+        ...['', 'business', 'personal', 'family', 'emergency'].map(cat => {
+          const labels = { '': '🏷 All', business: '💼 Biz', personal: '👤 Per', family: '👨‍👩‍👧 Fam', emergency: '🚨 Urg' };
+          const active = catFilter === cat;
+          return h('button', { key: cat, onClick: () => this.setState({ udharCategoryFilter: cat }), style: { padding: '4px 10px', borderRadius: 8, fontSize: 10, fontWeight: 600, background: active ? '#14b8a622' : 'transparent', color: active ? '#14b8a6' : '#64748b', border: '1px solid ' + (active ? '#14b8a644' : '#334155') } }, labels[cat]);
+        }),
+      ),
       filtered.length === 0
         ? h('div', { style: { textAlign: 'center', padding: '40px 20px', color: '#94a3b8' } },
             parties.length === 0
-              ? h('div', {},
-                  h('div', { style: { fontSize: 48, marginBottom: 12 } }, '🤝'),
-                  h('div', { style: { fontWeight: 800, fontSize: 18, color: '#e2e8f0', marginBottom: 4 } }, 'Your Udhar Book is empty'),
-                  h('div', { className: 'ur', style: { fontSize: 14, marginBottom: 16, color: '#64748b' } }, 'آپ کی اُدھار بک خالی ہے'),
-                  h('div', { style: { fontSize: 13, lineHeight: 1.6, maxWidth: 300, margin: '0 auto', color: '#94a3b8' } }, 'Start by recording money you gave or received. Use the red button to record "Diya" (gave) and green for "Liya" (got).'),
+              ? h('div', { style: { padding: '20px 0' } },
+                  h('div', { style: { width: 100, height: 100, borderRadius: 28, background: 'linear-gradient(135deg, #14b8a622, #f43f5e11)', margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+                    h('div', { style: { fontSize: 48 } }, '📖'),
+                  ),
+                  h('div', { style: { fontWeight: 800, fontSize: 20, color: '#e2e8f0', marginBottom: 6 } }, 'Your Udhar Book'),
+                  h('div', { className: 'ur', style: { fontSize: 16, marginBottom: 16, color: '#64748b' } }, 'آپ کی اُدھار بک'),
+                  h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 280, margin: '0 auto' } },
+                    h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', background: '#1e293b', borderRadius: 12, padding: '12px 14px', border: '1px solid #334155' } },
+                      h('div', { style: { width: 36, height: 36, borderRadius: 10, background: '#f43f5e22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 } }, '↑'),
+                      h('div', {},
+                        h('div', { style: { fontWeight: 700, fontSize: 13, color: '#fb7185' } }, 'Record "Diya" (Gave)'),
+                        h('div', { style: { fontSize: 11, color: '#64748b', marginTop: 1 } }, 'Money you lent to someone'),
+                      ),
+                    ),
+                    h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', background: '#1e293b', borderRadius: 12, padding: '12px 14px', border: '1px solid #334155' } },
+                      h('div', { style: { width: 36, height: 36, borderRadius: 10, background: '#14b8a622', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 } }, '↓'),
+                      h('div', {},
+                        h('div', { style: { fontWeight: 700, fontSize: 13, color: '#2dd4bf' } }, 'Record "Liya" (Got)'),
+                        h('div', { style: { fontSize: 11, color: '#64748b', marginTop: 1 } }, 'Money you borrowed from someone'),
+                      ),
+                    ),
+                    h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', background: '#1e293b', borderRadius: 12, padding: '12px 14px', border: '1px solid #334155' } },
+                      h('div', { style: { width: 36, height: 36, borderRadius: 10, background: '#3b82f622', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 } }, '💬'),
+                      h('div', {},
+                        h('div', { style: { fontWeight: 700, fontSize: 13, color: '#60a5fa' } }, 'Send Reminders'),
+                        h('div', { style: { fontSize: 11, color: '#64748b', marginTop: 1 } }, 'Auto WhatsApp reminders'),
+                      ),
+                    ),
+                  ),
+                  h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { marginTop: 20, padding: '14px 28px', borderRadius: 14, background: 'linear-gradient(135deg, #14b8a6, #0d9488)', color: 'white', fontWeight: 800, fontSize: 15, border: 'none', boxShadow: '0 4px 14px rgba(20,184,166,.3)' } }, '+ Record First Udhar'),
                 )
               : h('div', {},
                   h('div', { style: { fontSize: 14, fontWeight: 600, color: '#e2e8f0' } }, 'No matching records'),
@@ -3445,6 +3558,7 @@ export default class App extends React.Component {
         phone ? h('a', { href: 'https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + waMsg, target: '_blank', style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, textDecoration: 'none' } }, '💬 Manual') : h('button', { onClick: () => this.remindViaWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Manual'),
         h('button', { onClick: () => this.sendSingleReminder(personName), disabled: this.state.udharAutoSending, style: { padding: '5px 10px', borderRadius: 8, background: this.state.udharAutoSending ? '#475569' : '#14b8a6', color: this.state.udharAutoSending ? '#94a3b8' : '#0f172a', fontWeight: 700, fontSize: 10, border: 'none' } }, this.state.udharAutoSending ? '⏳...' : '🤖 Auto'),
         h('button', { onClick: () => this.copyStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#334155', color: '#e2e8f0', fontWeight: 700, fontSize: 10, border: 'none' } }, '📋 Statement'),
+        h('button', { onClick: () => this.printUdharStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#334155', color: '#e2e8f0', fontWeight: 700, fontSize: 10, border: 'none' } }, '🖨 PDF'),
         h('button', { onClick: () => this.shareStatementWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#14b8a622', color: '#2dd4bf', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Share'),
         h('button', { onClick: () => this.setUdharReminder(personName), style: { padding: '5px 10px', borderRadius: 8, background: meta.reminderDate ? '#f59e0b33' : '#334155', color: meta.reminderDate ? '#fbbf24' : '#94a3b8', fontWeight: 700, fontSize: 10, border: 'none' } }, meta.reminderDate ? '⏰ ' + meta.reminderDate : '⏰ Reminder'),
         h('button', { onClick: () => {
@@ -3579,9 +3693,11 @@ export default class App extends React.Component {
                 h('div', { style: { width: 32, height: 32, borderRadius: 8, background: isLent ? '#f43f5e22' : '#14b8a622', color: isLent ? '#fb7185' : '#2dd4bf', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 } }, isLent ? '↑' : '↓'),
                 h('div', { style: { flex: 1, minWidth: 0 } },
                   h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e2e8f0' } }, u.note || (isLent ? 'Gave / دیا' : 'Got / لیا')),
-                  h('div', { style: { fontSize: 11, color: '#64748b', marginTop: 2 } },
+                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#64748b', marginTop: 2, flexWrap: 'wrap' } },
                     new Date(u.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }),
                     acc ? ' · ' + acc.emoji + ' ' + acc.name : '',
+                    u.category ? h('span', { style: { fontSize: 9, fontWeight: 600, color: u.category === 'business' ? '#60a5fa' : u.category === 'family' ? '#a78bfa' : u.category === 'emergency' ? '#fbbf24' : '#22d3ee', background: u.category === 'business' ? '#3b82f622' : u.category === 'family' ? '#7c3aed22' : u.category === 'emergency' ? '#f59e0b22' : '#06b6d422', padding: '1px 5px', borderRadius: 4 } }, u.category === 'business' ? '💼' : u.category === 'family' ? '👨‍👩‍👧' : u.category === 'emergency' ? '🚨' : '👤') : null,
+                    u.photo ? h('span', { style: { fontSize: 9, fontWeight: 600, color: '#94a3b8' } }, '📷') : null,
                   ),
                   u.dueDate ? h('div', { style: { fontSize: 10, marginTop: 3, color: isOverdue ? '#fb7185' : '#64748b', fontWeight: isOverdue ? 700 : 400 } },
                     (isOverdue ? '⚠ OVERDUE · ' : '📅 Due: ') + new Date(u.dueDate + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -3606,6 +3722,9 @@ export default class App extends React.Component {
                   h('span', { style: { color: '#2dd4bf', fontWeight: 600 } }, '↩ ' + this.fmtPKR(pr.amount)),
                   h('span', { style: { color: '#64748b' } }, ' · ' + new Date(pr.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short' })),
                 ))
+              ) : null,
+              u.photo ? h('div', { style: { marginLeft: 46, marginBottom: 4 } },
+                h('img', { src: u.photo, onClick: () => window.open(u.photo, '_blank'), style: { width: 80, height: 60, borderRadius: 8, objectFit: 'cover', border: '1px solid #334155', cursor: 'pointer' } }),
               ) : null,
             );
           }),
