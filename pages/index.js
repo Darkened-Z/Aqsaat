@@ -65,6 +65,10 @@ export default class App extends React.Component {
     udharDateTo: '',
     udharReminderQueue: [],
     udharReminderDismissed: false,
+    waStatus: 'disconnected',
+    waQR: null,
+    waModal: false,
+    waPolling: null,
     stockFilter: 'all',
     invoices: [],
     invoiceModal: { open: false, person: '', items: [{ desc: '', qty: 1, price: '' }], note: '', date: this.todayStr() },
@@ -92,6 +96,7 @@ export default class App extends React.Component {
     this.setState({ darkMode: dm, savedPin: pin, pinLocked: !!pin }, () => {
       this.initSupabaseSync();
     });
+    fetch('/api/whatsapp-status').then(r => r.json()).then(d => this.setState({ waStatus: d.status || 'disconnected' })).catch(() => {});
     this._onVisibility = () => {
       if (document.visibilityState === 'visible') this._refetchCloud();
     };
@@ -674,19 +679,48 @@ export default class App extends React.Component {
     this.setState({ udharAutoSending: false });
     if (result.ok) alert('✓ Reminder sent to ' + personName + ' via WhatsApp!');
     else if (result.error) {
-      if (result.error.includes('not configured')) alert('WhatsApp API not set up yet.\n\nAdd WHATSAPP_TOKEN and WHATSAPP_PHONE_ID to your .env.local file.\n\nGet these from Meta Business Suite → WhatsApp → API Setup.');
+      if (result.error.includes('not connected') || result.error.includes('not configured')) { alert('WhatsApp not connected.\nConnect your WhatsApp from Udhar Book header.\n\nواٹس ایپ منسلک نہیں۔'); this.setState({ waModal: true }); this.startWAPolling(); }
       else alert('Failed: ' + result.error);
     }
   };
   checkWhatsAppConfig = async () => {
     try {
-      const resp = await fetch('/api/whatsapp-send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: 'test', message: 'test' }),
-      });
+      const resp = await fetch('/api/whatsapp-status');
       const data = await resp.json();
-      return !data.error?.includes('not configured');
+      return data.status === 'ready';
     } catch { return false; }
+  };
+  pollWhatsAppStatus = async () => {
+    try {
+      const resp = await fetch('/api/whatsapp-status');
+      const data = await resp.json();
+      this.setState({ waStatus: data.status, waQR: data.qr || null });
+      if (data.status === 'ready') this.stopWAPolling();
+    } catch {}
+  };
+  startWAPolling = () => {
+    this.pollWhatsAppStatus();
+    if (this.state.waPolling) clearInterval(this.state.waPolling);
+    const id = setInterval(() => this.pollWhatsAppStatus(), 3000);
+    this.setState({ waPolling: id });
+  };
+  stopWAPolling = () => {
+    if (this.state.waPolling) { clearInterval(this.state.waPolling); this.setState({ waPolling: null }); }
+  };
+  connectWhatsApp = async () => {
+    try {
+      await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'connect' }) });
+      this.setState({ waModal: true });
+      this.startWAPolling();
+    } catch (err) { alert('Failed to start WhatsApp: ' + err.message); }
+  };
+  disconnectWhatsApp = async () => {
+    if (!confirm('Disconnect WhatsApp?\nواٹس ایپ منقطع کریں؟')) return;
+    try {
+      await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'disconnect' }) });
+      this.setState({ waStatus: 'disconnected', waQR: null, waModal: false });
+      this.stopWAPolling();
+    } catch (err) { alert('Error: ' + err.message); }
   };
   openInvoiceModal = (person) => {
     const items = [{ desc: '', qty: 1, price: '', productId: '' }];
@@ -3100,6 +3134,39 @@ export default class App extends React.Component {
     }
 
     return h('div', { className: 'screen', style: { maxWidth: 720, background: ub.bg, borderRadius: 20, padding: '0 0 16px', margin: '-8px -14px', minHeight: '100vh' } },
+      this.state.waModal ? h('div', { onClick: (e) => { if (e.target === e.currentTarget) { this.setState({ waModal: false }); this.stopWAPolling(); } }, style: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 } },
+        h('div', { style: { background: '#1e293b', borderRadius: 20, padding: 24, maxWidth: 360, width: '100%', textAlign: 'center', border: '1px solid #334155' } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
+            h('div', { style: { fontSize: 16, fontWeight: 800, color: '#e2e8f0' } }, '💬 WhatsApp Connection'),
+            h('button', { onClick: () => { this.setState({ waModal: false }); this.stopWAPolling(); }, style: { background: 'none', border: 'none', color: '#94a3b8', fontSize: 20, cursor: 'pointer', padding: 4 } }, '✕'),
+          ),
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 } },
+            h('div', { style: { width: 10, height: 10, borderRadius: '50%', background: this.state.waStatus === 'ready' ? '#14b8a6' : this.state.waStatus === 'qr' ? '#fbbf24' : this.state.waStatus === 'authenticated' ? '#3b82f6' : '#f43f5e' } }),
+            h('div', { style: { fontSize: 13, fontWeight: 700, color: this.state.waStatus === 'ready' ? '#14b8a6' : '#e2e8f0' } },
+              this.state.waStatus === 'ready' ? 'Connected ✓' : this.state.waStatus === 'qr' ? 'Scan QR Code' : this.state.waStatus === 'authenticated' ? 'Loading chats...' : this.state.waStatus === 'error' ? 'Error' : 'Disconnected'),
+          ),
+          this.state.waStatus === 'qr' && this.state.waQR ? h('div', { style: { marginBottom: 16 } },
+            h('img', { src: this.state.waQR, alt: 'QR Code', style: { width: 220, height: 220, borderRadius: 12, background: 'white', padding: 8 } }),
+            h('div', { style: { fontSize: 11, color: '#94a3b8', marginTop: 8 } }, 'Open WhatsApp → Menu → Linked Devices → Link a Device'),
+            h('div', { className: 'ur', style: { fontSize: 11, color: '#64748b', marginTop: 4 } }, 'واٹس ایپ کھولیں → مینو → لنکڈ ڈیوائسز → لنک'),
+          ) : null,
+          this.state.waStatus === 'qr' && !this.state.waQR ? h('div', { style: { padding: 20, color: '#94a3b8', fontSize: 12 } }, 'Generating QR code...') : null,
+          this.state.waStatus === 'disconnected' ? h('button', { onClick: () => this.connectWhatsApp(), style: { width: '100%', padding: '12px', borderRadius: 12, background: 'linear-gradient(135deg, #25D366, #128C7E)', color: 'white', fontWeight: 800, fontSize: 14, border: 'none', marginTop: 8 } }, '🔗 Connect WhatsApp') : null,
+          this.state.waStatus === 'ready' ? h('div', {},
+            h('div', { style: { padding: 16, background: '#14b8a615', borderRadius: 12, marginBottom: 12 } },
+              h('div', { style: { fontSize: 28, marginBottom: 4 } }, '✓'),
+              h('div', { style: { fontSize: 13, fontWeight: 700, color: '#14b8a6' } }, 'WhatsApp is connected!'),
+              h('div', { style: { fontSize: 11, color: '#94a3b8', marginTop: 4 } }, 'Auto reminders and direct messages are ready.'),
+              h('div', { className: 'ur', style: { fontSize: 11, color: '#64748b', marginTop: 4 } }, 'خودکار یاد دہانی اور براہ راست پیغامات تیار ہیں'),
+            ),
+            h('button', { onClick: () => this.disconnectWhatsApp(), style: { width: '100%', padding: '10px', borderRadius: 10, background: '#f43f5e22', color: '#f43f5e', fontWeight: 700, fontSize: 12, border: '1px solid #f43f5e33' } }, '⚡ Disconnect'),
+          ) : null,
+          this.state.waStatus === 'error' ? h('div', {},
+            h('div', { style: { padding: 12, background: '#f43f5e15', borderRadius: 10, marginBottom: 12, color: '#fb7185', fontSize: 12 } }, 'Connection failed. Try again.'),
+            h('button', { onClick: () => this.connectWhatsApp(), style: { width: '100%', padding: '12px', borderRadius: 12, background: 'linear-gradient(135deg, #25D366, #128C7E)', color: 'white', fontWeight: 800, fontSize: 14, border: 'none' } }, '🔄 Retry'),
+          ) : null,
+        ),
+      ) : null,
       h('div', { style: { background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', borderRadius: '20px 20px 0 0', padding: '20px 18px 16px', marginBottom: 14 } },
         h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
@@ -3110,6 +3177,10 @@ export default class App extends React.Component {
             ),
           ),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+            h('button', { onClick: () => { if (this.state.waStatus === 'ready') this.setState({ waModal: true }); else { this.connectWhatsApp(); } }, style: { display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8, background: this.state.waStatus === 'ready' ? '#14b8a622' : '#f43f5e22', border: 'none', cursor: 'pointer' } },
+              h('div', { style: { width: 7, height: 7, borderRadius: '50%', background: this.state.waStatus === 'ready' ? '#14b8a6' : this.state.waStatus === 'qr' ? '#fbbf24' : '#f43f5e' } }),
+              h('span', { style: { fontSize: 10, fontWeight: 700, color: this.state.waStatus === 'ready' ? '#14b8a6' : '#94a3b8' } }, this.state.waStatus === 'ready' ? 'WA ✓' : 'WA'),
+            ),
             h('div', { style: { fontSize: 10, color: '#64748b', fontWeight: 600 } }, parties.length + ' parties'),
           ),
         ),
