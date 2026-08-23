@@ -95,8 +95,9 @@ export default class App extends React.Component {
 
     const dm  = localStorage.getItem('aqsat_dark') === '1';
     const pin = localStorage.getItem('aqsat_pin') || '';
-    const hashRoute = window.location.hash === '#udharbook' ? 'udharbook' : null;
-    this.setState({ darkMode: dm, savedPin: pin, pinLocked: hashRoute ? false : !!pin, ...(hashRoute ? { route: hashRoute } : {}) }, () => {
+    const isDeployed = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    const forceUdhar = isDeployed || window.location.hash === '#udharbook';
+    this.setState({ darkMode: dm, savedPin: pin, pinLocked: forceUdhar ? false : !!pin, ...(forceUdhar ? { route: 'udharbook' } : {}) }, () => {
       this.initSupabaseSync();
     });
     fetch('/api/whatsapp-status').then(r => r.json()).then(d => this.setState({ waStatus: d.status || 'disconnected' })).catch(() => {});
