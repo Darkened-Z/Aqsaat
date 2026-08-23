@@ -3276,9 +3276,10 @@ export default class App extends React.Component {
 
     const ub = { bg: '#f4f6f3', card: '#fff', cardAlt: '#f8faf7', border: '#e6eae5', borderLight: '#f0f2ee', text: '#16211c', textMid: '#3d4a44', muted: '#8b978f', mutedLight: '#9aa69f', accent: '#0f6b4f', red: '#c0392b', green: '#0f6b4f', sectionBg: '#eef1ec' };
 
-    const filterTab = (label, ur, val, count) => h('button', { key: val, onClick: () => this.setState({ udharFilter: val }), style: { flex: 1, padding: '10px 4px', borderRadius: 10, fontSize: 12, fontWeight: 700, background: filter === val ? '#0f6b4f' : 'transparent', color: filter === val ? '#fff' : '#8b978f', border: 'none', transition: 'all .15s', position: 'relative' } },
+    const filterTab = (label, ur, val, count, totalAmt) => h('button', { key: val, onClick: () => this.setState({ udharFilter: val }), style: { flex: 1, padding: '10px 4px', borderRadius: 10, fontSize: 12, fontWeight: 700, background: filter === val ? '#0f6b4f' : 'transparent', color: filter === val ? '#fff' : '#8b978f', border: 'none', transition: 'all .15s', position: 'relative' } },
       h('div', {}, label),
       h('div', { className: 'ur', style: { fontSize: 10, marginTop: 1 } }, ur),
+      totalAmt > 0 ? h('div', { className: 'mono', style: { fontSize: 10, marginTop: 2, fontWeight: 800, opacity: filter === val ? 1 : 0.7 } }, this.fmtPKR(totalAmt)) : null,
       count > 0 ? h('span', { style: { position: 'absolute', top: 4, right: 8, background: filter === val ? '#fff' : '#eef1ec', color: filter === val ? '#0f6b4f' : '#8b978f', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 10 } }, count) : null,
     );
 
@@ -3322,10 +3323,10 @@ export default class App extends React.Component {
         ),
       ) : null,
       h('div', { style: { display: 'flex', background: '#eef1ec', borderRadius: 12, padding: 3, margin: '0 16px 12px', gap: 2 } },
-        filterTab('All', 'سب', 'all', parties.length),
-        filterTab("You'll Get", 'وصولی', 'receivable', receivableCount),
-        filterTab("You'll Give", 'ادائیگی', 'payable', payableCount),
-        filterTab('Settled', 'برابر', 'settled', parties.filter(p => p.balance === 0).length),
+        filterTab('All', 'سب', 'all', parties.length, 0),
+        filterTab("You'll Get", 'وصولی', 'receivable', receivableCount, totalReceivable),
+        filterTab("You'll Give", 'ادائیگی', 'payable', payableCount, totalPayable),
+        filterTab('Settled', 'برابر', 'settled', parties.filter(p => p.balance === 0).length, 0),
       ),
       h('div', { style: { display: 'flex', gap: 8, margin: '0 16px 12px', alignItems: 'center' } },
         h('div', { style: { flex: 1, position: 'relative' } },
