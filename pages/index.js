@@ -403,9 +403,11 @@ export default class App extends React.Component {
   openUdpiModal = (editId, prefillPerson) => {
     const accs = this.getAccounts();
     if (editId) {
-      const u = this.activeUdpiEntries().find(x => x.id === editId);
-      if (!u) return;
-      this.setState({ udpiModal: { open: true, editId, direction: u.direction, amount: String(u.amount), person: u.person, accountId: u.accountId, note: u.note || '', date: u.date, dueDate: u.dueDate || '', category: u.category || '', photo: u.photo || null } });
+      this.requireResetPin(() => {
+        const u = this.activeUdpiEntries().find(x => x.id === editId);
+        if (!u) return;
+        this.setState({ udpiModal: { open: true, editId, direction: u.direction, amount: String(u.amount), person: u.person, accountId: u.accountId, note: u.note || '', date: u.date, dueDate: u.dueDate || '', category: u.category || '', photo: u.photo || null } });
+      });
     } else {
       this.setState({ udpiModal: { open: true, editId: null, direction: 'lent', amount: '', person: prefillPerson || '', accountId: accs.length > 0 ? accs[0].id : '', note: '', date: this.todayStr(), dueDate: '', category: '', photo: null } });
     }
@@ -427,18 +429,20 @@ export default class App extends React.Component {
     this.setState({ udpiEntries, udpiModal: { ...m, open: false } });
   };
   markUdpiReturned = (id) => {
-    const u = this.activeUdpiEntries().find(x => x.id === id);
-    if (!u) return;
-    const remaining = u.amount - (u.returnedAmount || 0);
-    const input = prompt('Return amount / واپسی رقم\nRemaining: ' + this.fmtPKR(remaining), String(remaining));
-    if (input === null) return;
-    const returnAmt = parseFloat(input);
-    if (!returnAmt || returnAmt <= 0) return;
-    const newReturnedAmount = Math.min((u.returnedAmount || 0) + returnAmt, u.amount);
-    const fullyReturned = newReturnedAmount >= u.amount;
-    const partialReturns = [...(u.partialReturns || []), { amount: returnAmt, date: this.todayStr(), id: 'pr_' + Date.now().toString(36) }];
-    const udpiEntries = (this.state.udpiEntries || []).map(x => x.id === id ? { ...x, returnedAmount: newReturnedAmount, returned: fullyReturned, returnedDate: fullyReturned ? this.todayStr() : '', partialReturns } : x);
-    this.setState({ udpiEntries });
+    this.requireResetPin(() => {
+      const u = this.activeUdpiEntries().find(x => x.id === id);
+      if (!u) return;
+      const remaining = u.amount - (u.returnedAmount || 0);
+      const input = prompt('Return amount / واپسی رقم\nRemaining: ' + this.fmtPKR(remaining), String(remaining));
+      if (input === null) return;
+      const returnAmt = parseFloat(input);
+      if (!returnAmt || returnAmt <= 0) return;
+      const newReturnedAmount = Math.min((u.returnedAmount || 0) + returnAmt, u.amount);
+      const fullyReturned = newReturnedAmount >= u.amount;
+      const partialReturns = [...(u.partialReturns || []), { amount: returnAmt, date: this.todayStr(), id: 'pr_' + Date.now().toString(36) }];
+      const udpiEntries = (this.state.udpiEntries || []).map(x => x.id === id ? { ...x, returnedAmount: newReturnedAmount, returned: fullyReturned, returnedDate: fullyReturned ? this.todayStr() : '', partialReturns } : x);
+      this.setState({ udpiEntries });
+    });
   };
   _getUdharPersonPhone = (personName) => {
     const c = (this.state.customers || []).find(x => x.name.toLowerCase() === personName.toLowerCase());
@@ -468,9 +472,11 @@ export default class App extends React.Component {
     window.open(url, '_blank');
   };
   deleteUdpiEntry = (id) => {
-    if (!confirm('Delete this entry?\nیہ اندراج حذف کریں؟')) return;
-    const udpiEntries = (this.state.udpiEntries || []).map(u => u.id === id ? { ...u, _deleted: true } : u);
-    this.setState({ udpiEntries });
+    this.requireResetPin(() => {
+      if (!confirm('Delete this entry?\nیہ اندراج حذف کریں؟')) return;
+      const udpiEntries = (this.state.udpiEntries || []).map(u => u.id === id ? { ...u, _deleted: true } : u);
+      this.setState({ udpiEntries });
+    });
   };
 
   toggleUdharPin = (name) => {
@@ -5038,6 +5044,7 @@ export default class App extends React.Component {
       const ubParties = this._getUdharParties();
       const ubReceivable = ubParties.reduce((s, p) => s + Math.max(0, p.balance), 0);
       const ubPayable = ubParties.reduce((s, p) => s + Math.max(0, -p.balance), 0);
+      const ubNet = ubReceivable - ubPayable;
       return (
         <div style={{ minHeight: '100vh', background: '#f4f6f3', fontFamily: 'system-ui, -apple-system, sans-serif', display: 'flex', flexDirection: 'column' }}>
           <Head>
@@ -5073,6 +5080,10 @@ export default class App extends React.Component {
                   <div style={{ fontSize: 11.5, fontWeight: 600, opacity: .72, letterSpacing: '.3px' }}>YOU WILL GIVE</div>
                   <div style={{ fontSize: 22, fontWeight: 800, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{this.fmtPKR(ubPayable)}</div>
                 </div>
+              </div>
+              <div style={{ marginTop: 8, background: 'rgba(255,255,255,.18)', borderRadius: 12, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, opacity: .82 }}>NET BALANCE / بقایا</div>
+                <div style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: ubNet >= 0 ? '#4ade80' : '#fca5a5' }}>{ubNet >= 0 ? '+' : '-'} {this.fmtPKR(Math.abs(ubNet))}</div>
               </div>
             </div>
           </div>
