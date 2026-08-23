@@ -80,7 +80,7 @@ export default class Portal extends React.Component {
 
   render() {
     const { phone, loading, error, customer, plans, settings, found, expandedPlan } = this.state;
-    const shopName = settings.shopName || 'Aqsat';
+    const shopName = settings.businessName || settings.shopName || 'Aqsat';
     const today = todayStr();
 
     return React.createElement('div', { style: { minHeight: '100vh', background: 'linear-gradient(180deg, #f0fdf4 0%, #fdfcf8 30%)', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" } },
@@ -133,7 +133,7 @@ export default class Portal extends React.Component {
 
   renderAccount(customer, plans, settings, today, expandedPlan) {
     const h = React.createElement;
-    const shopName = settings.shopName || 'Aqsat';
+    const shopName = settings.businessName || settings.shopName || 'Aqsat';
 
     const activePlans = plans.filter(p => {
       const unpaid = (p.schedule || []).filter(s => !s.paid);
@@ -145,7 +145,7 @@ export default class Portal extends React.Component {
     });
 
     const totalRemaining = plans.reduce((s, p) => s + (p.schedule || []).filter(si => !si.paid).reduce((a, si) => a + si.amount, 0), 0);
-    const totalPaid = plans.reduce((s, p) => s + (p.schedule || []).filter(si => si.paid).reduce((a, si) => a + (si.paidAmount || si.amount), 0), 0);
+    const totalPaid = plans.reduce((s, p) => s + (p.schedule || []).filter(si => si.paid).reduce((a, si) => a + (si.amountPaid || si.amount), 0), 0);
 
     const nextDue = activePlans
       .flatMap(p => (p.schedule || []).filter(s => !s.paid).map(s => ({ ...s, plan: p })))
@@ -227,7 +227,7 @@ export default class Portal extends React.Component {
     const unpaid = schedule.filter(s => !s.paid);
     const overdue = unpaid.filter(s => s.dueDate < today);
     const totalAmt = schedule.reduce((s, si) => s + si.amount, 0);
-    const paidAmt = paid.reduce((s, si) => s + (si.paidAmount || si.amount), 0);
+    const paidAmt = paid.reduce((s, si) => s + (si.amountPaid || si.amount), 0);
     const remainAmt = totalAmt - paidAmt;
     const progress = totalAmt > 0 ? (paidAmt / totalAmt) * 100 : 0;
     const isExpanded = expandedPlan === plan.id;
@@ -263,8 +263,8 @@ export default class Portal extends React.Component {
 
       isExpanded ? h('div', { style: { borderTop: '1px solid #ece8dc', padding: '12px 16px', background: '#fdfcf8' } },
         h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12, fontSize: 11 } },
-          h('div', {}, h('div', { style: { color: '#7a7663', fontWeight: 600 } }, 'Total'), h('div', { style: { fontWeight: 700, fontFamily: 'monospace' } }, fmtPKR(plan.totalPrice || totalAmt))),
-          h('div', {}, h('div', { style: { color: '#7a7663', fontWeight: 600 } }, 'Down Payment'), h('div', { style: { fontWeight: 700, fontFamily: 'monospace' } }, fmtPKR(plan.downPayment || 0))),
+          h('div', {}, h('div', { style: { color: '#7a7663', fontWeight: 600 } }, 'Total'), h('div', { style: { fontWeight: 700, fontFamily: 'monospace' } }, fmtPKR(plan.total || totalAmt))),
+          h('div', {}, h('div', { style: { color: '#7a7663', fontWeight: 600 } }, 'Down Payment'), h('div', { style: { fontWeight: 700, fontFamily: 'monospace' } }, fmtPKR(plan.down || 0))),
           h('div', {}, h('div', { style: { color: '#7a7663', fontWeight: 600 } }, 'Start Date'), h('div', { style: { fontWeight: 700 } }, fmtDate(plan.startDate))),
         ),
         h('div', { style: { fontSize: 12, fontWeight: 700, color: '#1a2b1f', marginBottom: 8 } }, 'Installments / اقساط'),
@@ -279,7 +279,7 @@ export default class Portal extends React.Component {
                 isPaid && s.paidDate ? h('span', { style: { color: '#0f6b4b', marginLeft: 6, fontSize: 10 } }, '(paid ' + fmtDate(s.paidDate) + ')') : null,
                 isOverdue ? h('span', { style: { color: '#b91c1c', marginLeft: 6, fontSize: 10, fontWeight: 700 } }, 'OVERDUE') : null,
               ),
-              h('div', { style: { fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: isPaid ? '#0f6b4b' : isOverdue ? '#b91c1c' : '#1a2b1f' } }, fmtPKR(isPaid ? (s.paidAmount || s.amount) : s.amount)),
+              h('div', { style: { fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: isPaid ? '#0f6b4b' : isOverdue ? '#b91c1c' : '#1a2b1f' } }, fmtPKR(isPaid ? (s.amountPaid || s.amount) : s.amount)),
             );
           }),
         ),
