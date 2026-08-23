@@ -2469,6 +2469,17 @@ export default class App extends React.Component {
       ]),
       h('div', { style: { height: 16 } }),
       this.card([
+        h('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 4 } }, 'Customer Portal'),
+        h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663', marginBottom: 8 } }, 'کسٹمر پورٹل'),
+        h('div', { style: { fontSize: 12, color: '#7a7663', marginBottom: 12 } }, 'Share this link with customers so they can check their installment details, payment status, and remaining balance.'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px', background: '#f4f6f3', borderRadius: 10, border: '1px solid #e6eae5' } },
+          h('div', { style: { flex: 1, fontSize: 12, color: '#3a4a3f', fontFamily: 'monospace', wordBreak: 'break-all' } }, (typeof window !== 'undefined' ? window.location.origin : '') + '/portal?phone=CUSTOMER_PHONE'),
+          h('button', { type: 'button', onClick: () => { const link = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal'; if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => alert('Portal base link copied!\nپورٹل لنک کاپی ہو گیا')); else prompt('Copy this link:', link); }, style: { padding: '8px 14px', borderRadius: 8, background: '#0f6b4b', color: 'white', fontWeight: 600, fontSize: 12, flexShrink: 0, border: 'none', cursor: 'pointer' } }, '📋 Copy'),
+        ),
+        h('div', { style: { fontSize: 11, color: '#8b978f', marginTop: 8 } }, '💡 Each customer gets a unique link with their phone number. You can also share portal links from individual customer profiles.'),
+      ]),
+      h('div', { style: { height: 16 } }),
+      this.card([
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 } },
           h('div', { style: { fontSize: 16, fontWeight: 700 } }, 'Appearance & Security'),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 5 } },
