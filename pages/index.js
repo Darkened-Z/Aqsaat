@@ -2377,7 +2377,7 @@ export default class App extends React.Component {
           h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
             h('a', { href: this.waLink(r.c.phone, r.c.name, r.s.amount, r.s.dueDate), target: '_blank', rel: 'noopener', style: { background: '#25D366', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 Manual'),
             h('button', { onClick: () => this.sendInstallmentReminder(r.c, r.pl, r.p, r.s), disabled: this.state.installmentAutoSending, style: { background: this.state.installmentAutoSending ? '#94a3b8' : '#0f6b4b', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '🤖 Auto'),
-            h('button', { onClick: () => this.sharePortalLink(r.c), style: { background: '#3b82f6', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '🔗 Portal'),
+            h('a', { href: this.getPortalLink(r.c.phone), target: '_blank', rel: 'noopener', style: { background: '#3b82f6', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '🔗 Portal'),
             h('button', { style: { background: '#f4f1e6', color: '#3a4a3f', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '📞 Call'),
             h('button', { onClick: () => this.openPayment(r.pl.id, r.s.n), style: { background: '#0f6b4b', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, 'Collect'),
           ),
@@ -3287,76 +3287,20 @@ export default class App extends React.Component {
       filtered = [...pinned, ...unpinned];
     }
 
-    return h('div', { className: 'screen', style: { maxWidth: 720, background: ub.bg, borderRadius: 20, padding: '0 0 16px', margin: '-8px -14px', minHeight: '100vh' } },
-      this.state.waModal ? h('div', { onClick: (e) => { if (e.target === e.currentTarget) { this.setState({ waModal: false }); this.stopWAPolling(); } }, style: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 } },
-        h('div', { style: { background: '#1e293b', borderRadius: 20, padding: 24, maxWidth: 360, width: '100%', textAlign: 'center', border: '1px solid #334155' } },
-          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
-            h('div', { style: { fontSize: 16, fontWeight: 800, color: '#e2e8f0' } }, '💬 WhatsApp Connection'),
-            h('button', { onClick: () => { this.setState({ waModal: false }); this.stopWAPolling(); }, style: { background: 'none', border: 'none', color: '#94a3b8', fontSize: 20, cursor: 'pointer', padding: 4 } }, '✕'),
-          ),
-          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 } },
-            h('div', { style: { width: 10, height: 10, borderRadius: '50%', background: this.state.waStatus === 'ready' ? '#14b8a6' : this.state.waStatus === 'qr' ? '#fbbf24' : this.state.waStatus === 'authenticated' ? '#3b82f6' : '#f43f5e' } }),
-            h('div', { style: { fontSize: 13, fontWeight: 700, color: this.state.waStatus === 'ready' ? '#14b8a6' : '#e2e8f0' } },
-              this.state.waStatus === 'ready' ? 'Connected ✓' : this.state.waStatus === 'qr' ? 'Scan QR Code' : this.state.waStatus === 'authenticated' ? 'Loading chats...' : this.state.waStatus === 'error' ? 'Error' : 'Disconnected'),
-          ),
-          this.state.waStatus === 'qr' && this.state.waQR ? h('div', { style: { marginBottom: 16 } },
-            h('img', { src: this.state.waQR, alt: 'QR Code', style: { width: 220, height: 220, borderRadius: 12, background: 'white', padding: 8 } }),
-            h('div', { style: { fontSize: 11, color: '#94a3b8', marginTop: 8 } }, 'Open WhatsApp → Menu → Linked Devices → Link a Device'),
-            h('div', { className: 'ur', style: { fontSize: 11, color: '#64748b', marginTop: 4 } }, 'واٹس ایپ کھولیں → مینو → لنکڈ ڈیوائسز → لنک'),
-          ) : null,
-          this.state.waStatus === 'qr' && !this.state.waQR ? h('div', { style: { padding: 20, color: '#94a3b8', fontSize: 12 } }, 'Generating QR code...') : null,
-          this.state.waStatus === 'disconnected' ? h('button', { onClick: () => this.connectWhatsApp(), style: { width: '100%', padding: '12px', borderRadius: 12, background: 'linear-gradient(135deg, #25D366, #128C7E)', color: 'white', fontWeight: 800, fontSize: 14, border: 'none', marginTop: 8 } }, '🔗 Connect WhatsApp') : null,
-          this.state.waStatus === 'ready' ? h('div', {},
-            h('div', { style: { padding: 16, background: '#14b8a615', borderRadius: 12, marginBottom: 12 } },
-              h('div', { style: { fontSize: 28, marginBottom: 4 } }, '✓'),
-              h('div', { style: { fontSize: 13, fontWeight: 700, color: '#14b8a6' } }, 'WhatsApp is connected!'),
-              h('div', { style: { fontSize: 11, color: '#94a3b8', marginTop: 4 } }, 'Auto reminders and direct messages are ready.'),
-              h('div', { className: 'ur', style: { fontSize: 11, color: '#64748b', marginTop: 4 } }, 'خودکار یاد دہانی اور براہ راست پیغامات تیار ہیں'),
-            ),
-            h('button', { onClick: () => this.disconnectWhatsApp(), style: { width: '100%', padding: '10px', borderRadius: 10, background: '#f43f5e22', color: '#f43f5e', fontWeight: 700, fontSize: 12, border: '1px solid #f43f5e33' } }, '⚡ Disconnect'),
-          ) : null,
-          this.state.waStatus === 'error' ? h('div', {},
-            h('div', { style: { padding: 12, background: '#f43f5e15', borderRadius: 10, marginBottom: 12, color: '#fb7185', fontSize: 12 } }, 'Connection failed. Try again.'),
-            h('button', { onClick: () => this.connectWhatsApp(), style: { width: '100%', padding: '12px', borderRadius: 12, background: 'linear-gradient(135deg, #25D366, #128C7E)', color: 'white', fontWeight: 800, fontSize: 14, border: 'none' } }, '🔄 Retry'),
-          ) : null,
+    return h('div', { style: { maxWidth: 720, background: ub.bg, padding: '0 0 16px', minHeight: '100vh' } },
+      h('div', { style: { padding: '14px 14px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+        h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 12px', borderRadius: 14, background: 'linear-gradient(135deg, #f43f5e, #e11d48)', color: 'white', fontWeight: 800, fontSize: 15, border: 'none', boxShadow: '0 4px 14px rgba(244,63,94,.3)' } },
+          h('span', { style: { fontSize: 20 } }, '↑'),
+          h('span', {}, 'You Gave'),
+          h('span', { className: 'ur', style: { fontSize: 12, opacity: .8 } }, '/ دیا'),
         ),
-      ) : null,
-      h('div', { style: { background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', borderRadius: '20px 20px 0 0', padding: '20px 18px 16px', marginBottom: 14 } },
-        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 } },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-            h('div', { style: { width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, #14b8a6, #0d9488)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 } }, '📖'),
-            h('div', {},
-              h('div', { style: { fontSize: 18, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' } }, 'Udhar Book'),
-              h('div', { className: 'ur', style: { fontSize: 12, color: '#64748b' } }, 'اُدھار بک'),
-            ),
-          ),
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
-            h('button', { onClick: () => { if (this.state.waStatus === 'ready') this.setState({ waModal: true }); else { this.connectWhatsApp(); } }, style: { display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8, background: this.state.waStatus === 'ready' ? '#14b8a622' : '#f43f5e22', border: 'none', cursor: 'pointer' } },
-              h('div', { style: { width: 7, height: 7, borderRadius: '50%', background: this.state.waStatus === 'ready' ? '#14b8a6' : this.state.waStatus === 'qr' ? '#fbbf24' : '#f43f5e' } }),
-              h('span', { style: { fontSize: 10, fontWeight: 700, color: this.state.waStatus === 'ready' ? '#14b8a6' : '#94a3b8' } }, this.state.waStatus === 'ready' ? 'WA ✓' : 'WA'),
-            ),
-            h('div', { style: { fontSize: 10, color: '#64748b', fontWeight: 600 } }, parties.length + ' parties'),
-          ),
-        ),
-        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
-          h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 12px', borderRadius: 14, background: 'linear-gradient(135deg, #f43f5e, #e11d48)', color: 'white', fontWeight: 800, fontSize: 15, border: 'none', boxShadow: '0 4px 14px rgba(244,63,94,.3)' } },
-            h('span', { style: { fontSize: 20 } }, '↑'),
-            h('span', {}, 'You Gave'),
-            h('span', { className: 'ur', style: { fontSize: 12, opacity: .8 } }, '/ دیا'),
-          ),
-          h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }, style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 12px', borderRadius: 14, background: 'linear-gradient(135deg, #14b8a6, #0d9488)', color: 'white', fontWeight: 800, fontSize: 15, border: 'none', boxShadow: '0 4px 14px rgba(20,184,166,.3)' } },
-            h('span', { style: { fontSize: 20 } }, '↓'),
-            h('span', {}, 'You Got'),
-            h('span', { className: 'ur', style: { fontSize: 12, opacity: .8 } }, '/ ملا'),
-          ),
+        h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }, style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 12px', borderRadius: 14, background: 'linear-gradient(135deg, #14b8a6, #0d9488)', color: 'white', fontWeight: 800, fontSize: 15, border: 'none', boxShadow: '0 4px 14px rgba(20,184,166,.3)' } },
+          h('span', { style: { fontSize: 20 } }, '↓'),
+          h('span', {}, 'You Got'),
+          h('span', { className: 'ur', style: { fontSize: 12, opacity: .8 } }, '/ ملا'),
         ),
       ),
       h('div', { style: { padding: '0 14px' } },
-      h('div', { style: { display: 'flex', background: '#1e293b', borderRadius: 12, padding: 3, marginBottom: 14, gap: 2 } },
-        tabBtn('Parties', '👥', 'parties'),
-        tabBtn('Activity', '📋', 'activity'),
-        tabBtn('Reports', '📊', 'reports'),
-      ),
       udharTab === 'activity' ? this.renderUdharActivity()
         : udharTab === 'reports' ? this.renderUdharReports()
         : h('div', {},
@@ -3558,8 +3502,6 @@ export default class App extends React.Component {
         ),
       ),
       ),
-      this.renderUdpiModal(),
-      this.renderInvoiceModal(),
     );
   }
 
@@ -3606,8 +3548,8 @@ export default class App extends React.Component {
     const avgAmount = totalEntries > 0 ? Math.round(entries.reduce((s, u) => s + u.amount, 0) / totalEntries) : 0;
     const firstDate = entries.length > 0 ? entries[entries.length - 1].date : null;
 
-    return h('div', { className: 'screen', style: { maxWidth: 720, background: '#0f172a', borderRadius: 20, padding: '0 0 16px', margin: '-8px -14px', minHeight: '100vh' } },
-      h('div', { style: { background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', borderRadius: '20px 20px 0 0', padding: '18px 18px 14px' } },
+    return h('div', { style: { maxWidth: 720, background: '#0f172a', padding: '0 0 16px', minHeight: '100vh' } },
+      h('div', { style: { background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', padding: '18px 18px 14px' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 0 } },
           h('button', { onClick: () => this.setState({ udharPerson: null }), style: { padding: '8px 12px', borderRadius: 10, background: '#334155', fontWeight: 700, fontSize: 16, color: '#e2e8f0' } }, '‹'),
           h('div', { style: { width: 48, height: 48, borderRadius: 14, background: ac + '30', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, flexShrink: 0 } }, initials),
@@ -5198,6 +5140,88 @@ export default class App extends React.Component {
       { key: 'menu',      label: 'Menu',      icon: '☰',  go: () => this.setState({ menuOpen: true }) },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
+    if (route === 'udharbook') {
+      const udharTab = this.state.udharTab || 'parties';
+      return (
+        <div style={{ minHeight: '100vh', background: '#0a0f1e', fontFamily: 'inherit' }}>
+          <Head>
+            <title>Udhar Book — Hisaab Kitaab</title>
+            <meta name="description" content="Digital udhar tracking — lent & borrowed" />
+          </Head>
+
+          {/* Udhar Book Header */}
+          <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1a1f3a 50%, #0f172a 100%)', padding: '16px 18px 14px', borderBottom: '1px solid #1e293b' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 14, overflow: 'hidden', border: '2px solid #14b8a6', flexShrink: 0 }}>
+                  <img src="/pfp.jpeg" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>Udhar Book</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{this.state.settings.businessName || 'Hisaab Kitaab'}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => { if (this.state.waStatus === 'ready') this.setState({ waModal: true }); else this.connectWhatsApp(); }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8, background: this.state.waStatus === 'ready' ? '#14b8a622' : '#f43f5e22', border: 'none', cursor: 'pointer' }}>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: this.state.waStatus === 'ready' ? '#14b8a6' : '#f43f5e' }} />
+                  <span style={{ fontSize: 10, fontWeight: 700, color: this.state.waStatus === 'ready' ? '#14b8a6' : '#94a3b8' }}>{this.state.waStatus === 'ready' ? 'WA' : 'WA'}</span>
+                </button>
+                <button onClick={() => this.go('dashboard')} style={{ padding: '6px 10px', borderRadius: 8, background: '#1e293b', border: '1px solid #334155', color: '#94a3b8', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>Aqsat ←</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Udhar Book Content */}
+          <div style={{ padding: '0', minHeight: 'calc(100vh - 130px)', paddingBottom: 80 }}>
+            {this.renderUdharBook()}
+          </div>
+
+          {/* Udhar Book Bottom Nav */}
+          <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0f172a', borderTop: '1px solid #1e293b', padding: '6px 8px 8px', display: 'flex', zIndex: 30, backdropFilter: 'blur(12px)' }}>
+            {[
+              { key: 'parties',  icon: '👥', label: 'Parties',  ur: 'پارٹیاں' },
+              { key: 'activity', icon: '📋', label: 'Activity', ur: 'سرگرمی' },
+              { key: 'reports',  icon: '📊', label: 'Reports',  ur: 'رپورٹ' },
+            ].map(item => (
+              <button key={item.key} onClick={() => this.setState({ udharTab: item.key })} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 4px', borderRadius: 12, border: 'none', cursor: 'pointer', background: udharTab === item.key ? '#14b8a622' : 'transparent', color: udharTab === item.key ? '#14b8a6' : '#475569', transition: 'all .15s' }}>
+                <span style={{ fontSize: 18 }}>{item.icon}</span>
+                <span style={{ fontSize: 10, fontWeight: 700 }}>{item.label}</span>
+              </button>
+            ))}
+            <button onClick={() => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 4px', borderRadius: 12, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, #14b8a6, #0d9488)', color: '#0f172a' }}>
+              <span style={{ fontSize: 18 }}>＋</span>
+              <span style={{ fontSize: 10, fontWeight: 800 }}>New</span>
+            </button>
+          </nav>
+
+          {/* WA Modal */}
+          {this.state.waModal ? this.h('div', { onClick: (e) => { if (e.target === e.currentTarget) { this.setState({ waModal: false }); this.stopWAPolling(); } }, style: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 } },
+            this.h('div', { style: { background: '#1e293b', borderRadius: 20, padding: 24, maxWidth: 360, width: '100%', textAlign: 'center', border: '1px solid #334155' } },
+              this.h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
+                this.h('div', { style: { fontSize: 16, fontWeight: 800, color: '#e2e8f0' } }, 'WhatsApp Connection'),
+                this.h('button', { onClick: () => { this.setState({ waModal: false }); this.stopWAPolling(); }, style: { background: 'none', border: 'none', color: '#94a3b8', fontSize: 20, cursor: 'pointer', padding: 4 } }, '✕'),
+              ),
+              this.h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 } },
+                this.h('div', { style: { width: 10, height: 10, borderRadius: '50%', background: this.state.waStatus === 'ready' ? '#14b8a6' : this.state.waStatus === 'qr' ? '#fbbf24' : '#f43f5e' } }),
+                this.h('div', { style: { fontSize: 13, fontWeight: 700, color: this.state.waStatus === 'ready' ? '#14b8a6' : '#e2e8f0' } },
+                  this.state.waStatus === 'ready' ? 'Connected' : this.state.waStatus === 'qr' ? 'Scan QR Code' : this.state.waStatus === 'authenticated' ? 'Loading...' : 'Disconnected'),
+              ),
+              this.state.waStatus === 'qr' && this.state.waQR ? this.h('div', { style: { marginBottom: 16 } },
+                this.h('img', { src: this.state.waQR, alt: 'QR Code', style: { width: 220, height: 220, borderRadius: 12, background: 'white', padding: 8 } }),
+                this.h('div', { style: { fontSize: 11, color: '#94a3b8', marginTop: 8 } }, 'WhatsApp → Linked Devices → Link'),
+              ) : null,
+              this.state.waStatus === 'disconnected' ? this.h('button', { onClick: () => this.connectWhatsApp(), style: { width: '100%', padding: '12px', borderRadius: 12, background: 'linear-gradient(135deg, #25D366, #128C7E)', color: 'white', fontWeight: 800, fontSize: 14, border: 'none', marginTop: 8 } }, 'Connect WhatsApp') : null,
+              this.state.waStatus === 'ready' ? this.h('button', { onClick: () => this.disconnectWhatsApp(), style: { width: '100%', padding: '10px', borderRadius: 10, background: '#f43f5e22', color: '#f43f5e', fontWeight: 700, fontSize: 12, border: '1px solid #f43f5e33', marginTop: 8 } }, 'Disconnect') : null,
+            ),
+          ) : null}
+
+          {/* UDPI Modal */}
+          {this.renderUdpiModal()}
+          {this.renderInvoiceModal()}
+        </div>
+      );
+    }
+
     return (
       <div className={this.state.darkMode ? 'app dark' : 'app'} style={{ minHeight: '100vh', display: 'flex', background: '#f7f5ef' }}>
         <Head>
@@ -5280,7 +5304,7 @@ export default class App extends React.Component {
             {route === 'daybook'    && this.renderDayBook()}
             {route === 'pnl'        && this.renderPnL()}
             {route === 'accounts'   && this.renderAccounts()}
-            {route === 'udharbook'  && this.renderUdharBook()}
+
             {route === 'staff'      && this.renderStaff()}
             {route === 'settings'   && this.renderSettings()}
           </div>
