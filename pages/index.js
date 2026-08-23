@@ -95,8 +95,8 @@ export default class App extends React.Component {
 
     const dm  = localStorage.getItem('aqsat_dark') === '1';
     const pin = localStorage.getItem('aqsat_pin') || '';
-    const isDeployed = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-    const forceUdhar = isDeployed || window.location.hash === '#udharbook';
+    const hostname = window.location.hostname;
+    const forceUdhar = hostname.includes('udhar') || hostname.includes('hisaab') || window.location.hash === '#udharbook';
     this.setState({ darkMode: dm, savedPin: pin, pinLocked: forceUdhar ? false : !!pin, ...(forceUdhar ? { route: 'udharbook' } : {}) }, () => {
       this.initSupabaseSync();
     });
@@ -420,13 +420,22 @@ export default class App extends React.Component {
     if (!m.person.trim()) { alert('Enter person name / نام درج کریں'); return; }
     if (!m.accountId) { alert('Select an account'); return; }
     const udpiEntries = [...(this.state.udpiEntries || [])];
+    const ledger = [...(this.state.ledger || [])];
+    const person = m.person.trim();
     if (m.editId) {
       const idx = udpiEntries.findIndex(x => x.id === m.editId);
-      if (idx >= 0) udpiEntries[idx] = { ...udpiEntries[idx], direction: m.direction, amount, person: m.person.trim(), accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || udpiEntries[idx].photo || null };
+      if (idx >= 0) {
+        const old = udpiEntries[idx];
+        udpiEntries[idx] = { ...old, direction: m.direction, amount, person, accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || old.photo || null };
+        const li = ledger.findIndex(l => l.udpiRef === m.editId);
+        if (li >= 0) ledger[li] = { ...ledger[li], type: m.direction === 'lent' ? 'expense' : 'income', amount, accountId: m.accountId, date: m.date, note: (m.direction === 'lent' ? 'Gave' : 'Got') + ' — ' + person + (m.note ? ' (' + m.note + ')' : ''), category: 'Udhar' };
+      }
     } else {
-      udpiEntries.unshift({ id: 'ud_' + Date.now().toString(36), direction: m.direction, amount, person: m.person.trim(), accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || null, returned: false, returnedDate: '', returnedAmount: 0, partialReturns: [] });
+      const udId = 'ud_' + Date.now().toString(36);
+      udpiEntries.unshift({ id: udId, direction: m.direction, amount, person, accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || null, returned: false, returnedDate: '', returnedAmount: 0, partialReturns: [] });
+      ledger.unshift({ id: 'le_' + Date.now().toString(36), type: m.direction === 'lent' ? 'expense' : 'income', amount, accountId: m.accountId, category: 'Udhar', note: (m.direction === 'lent' ? 'Gave' : 'Got') + ' — ' + person + (m.note ? ' (' + m.note + ')' : ''), date: m.date, udpiRef: udId });
     }
-    this.setState({ udpiEntries, udpiModal: { ...m, open: false } });
+    this.setState({ udpiEntries, ledger, udpiModal: { ...m, open: false } });
   };
   markUdpiReturned = (id) => {
     this.requireResetPin(() => {
@@ -441,7 +450,10 @@ export default class App extends React.Component {
       const fullyReturned = newReturnedAmount >= u.amount;
       const partialReturns = [...(u.partialReturns || []), { amount: returnAmt, date: this.todayStr(), id: 'pr_' + Date.now().toString(36) }];
       const udpiEntries = (this.state.udpiEntries || []).map(x => x.id === id ? { ...x, returnedAmount: newReturnedAmount, returned: fullyReturned, returnedDate: fullyReturned ? this.todayStr() : '', partialReturns } : x);
-      this.setState({ udpiEntries });
+      const ledger = [...(this.state.ledger || [])];
+      const returnType = u.direction === 'lent' ? 'income' : 'expense';
+      ledger.unshift({ id: 'le_' + Date.now().toString(36), type: returnType, amount: returnAmt, accountId: u.accountId, category: 'Udhar Return', note: (u.direction === 'lent' ? 'Got back' : 'Paid back') + ' — ' + u.person + (fullyReturned ? ' (settled)' : ''), date: this.todayStr(), udpiRef: id });
+      this.setState({ udpiEntries, ledger });
     });
   };
   _getUdharPersonPhone = (personName) => {
@@ -475,7 +487,8 @@ export default class App extends React.Component {
     this.requireResetPin(() => {
       if (!confirm('Delete this entry?\nیہ اندراج حذف کریں؟')) return;
       const udpiEntries = (this.state.udpiEntries || []).map(u => u.id === id ? { ...u, _deleted: true } : u);
-      this.setState({ udpiEntries });
+      const ledger = (this.state.ledger || []).map(l => l.udpiRef === id ? { ...l, _deleted: true } : l);
+      this.setState({ udpiEntries, ledger });
     });
   };
 
