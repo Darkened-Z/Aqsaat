@@ -52,6 +52,7 @@ export default class App extends React.Component {
     ledgerModal: { open: false, type: 'expense', amount: '', accountId: '', category: '', note: '', date: this.todayStr(), editId: null },
     ledgerFilter: 'all',
     ledgerSection: 'expenses',
+    dayBookSection: 'all',
     ledgerMonthFilter: '',
     ledgerSearch: '',
     recurringModal: { open: false, editId: null, type: 'expense', amount: '', accountId: '', category: '', note: '', day: 1 },
@@ -4167,6 +4168,8 @@ export default class App extends React.Component {
     const dateStr = this.state.dayBookDate || this.todayStr();
     const allTx = this._buildTxList();
     const dayTx = allTx.filter(tx => tx.date === dateStr && (allSelected || selIds.includes(tx.accountId)));
+    const dbs = this.state.dayBookSection || 'all';
+    const filteredDayTx = dbs === 'all' ? dayTx : dbs === 'expenses' ? dayTx.filter(tx => tx.source === 'ledger' && !tx.ledgerEntry.udpiRef && tx.ledgerEntry.category !== 'Udhar' && tx.ledgerEntry.category !== 'Udhar Return' && tx.ledgerEntry.category !== 'Product Cost' && tx.ledgerEntry.category !== 'Down Payment') : dbs === 'plans' ? dayTx.filter(tx => tx.source === 'plan' || (tx.source === 'ledger' && (tx.ledgerEntry.category === 'Product Cost' || tx.ledgerEntry.category === 'Down Payment'))) : dayTx.filter(tx => tx.source === 'udpi' || (tx.source === 'ledger' && (tx.ledgerEntry.udpiRef || tx.ledgerEntry.category === 'Udhar' || tx.ledgerEntry.category === 'Udhar Return')));
 
     let totalIn = 0, totalOut = 0;
     dayTx.forEach(tx => {
@@ -4225,15 +4228,23 @@ export default class App extends React.Component {
           h('div', { className: 'mono', style: { fontSize: 18, fontWeight: 800, color: net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (net >= 0 ? '+' : '-') + this.fmtPKR(Math.abs(net))),
         ),
       ),
+      h('div', { style: { display: 'flex', gap: 4, marginBottom: 14 } },
+        ...[['All', 'سب', 'all', '📊'], ['Expenses', 'اخراجات', 'expenses', '💰'], ['Plans', 'قسطیں', 'plans', '📋'], ['Udhar', 'ادھار', 'udhar', '🤝']].map(([label, ur, val, icon]) =>
+          h('button', { key: val, onClick: () => this.setState({ dayBookSection: val }), style: { flex: 1, padding: '8px 4px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: dbs === val ? '#0f6b4b' : '#fdfcf8', color: dbs === val ? 'white' : '#3a4a3f', border: '1px solid ' + (dbs === val ? '#0f6b4b' : '#ece8dc'), textAlign: 'center' } },
+            h('div', {}, icon + ' ' + label),
+            h('div', { className: 'ur', style: { fontSize: 9, marginTop: 1, opacity: 0.8 } }, ur),
+          ),
+        ),
+      ),
       this.card([
-        this.sectionHeader('Transactions', 'لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, dayTx.length + ' entries')),
-        dayTx.length === 0
+        this.sectionHeader('Transactions', 'لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, filteredDayTx.length + ' entries')),
+        filteredDayTx.length === 0
           ? h('div', { style: { padding: '24px 0', textAlign: 'center', color: '#7a7663', fontSize: 14 } },
               h('div', { style: { fontSize: 32, marginBottom: 8 } }, '📭'),
               h('div', { style: { fontWeight: 600 } }, 'No transactions this day'),
               h('div', { className: 'ur', style: { fontSize: 12, marginTop: 4 } }, 'آج کوئی لین دین نہیں'),
             )
-          : this._renderTxList(dayTx, accs, true),
+          : this._renderTxList(filteredDayTx, accs, true),
       ]),
     );
   }
