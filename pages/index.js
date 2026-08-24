@@ -403,7 +403,7 @@ export default class App extends React.Component {
   openUdpiModal = (editId, prefillPerson) => {
     const accs = this.getAccounts();
     if (editId) {
-      this.requireResetPin(() => {
+      this.requirePin(() => {
         const u = this.activeUdpiEntries().find(x => x.id === editId);
         if (!u) return;
         this.setState({ udpiModal: { open: true, editId, direction: u.direction, amount: String(u.amount), person: u.person, accountId: u.accountId, note: u.note || '', date: u.date, dueDate: u.dueDate || '', category: u.category || '', photo: u.photo || null } });
@@ -438,7 +438,7 @@ export default class App extends React.Component {
     this.setState({ udpiEntries, ledger, udpiModal: { ...m, open: false } });
   };
   markUdpiReturned = (id) => {
-    this.requireResetPin(() => {
+    this.requirePin(() => {
       const u = this.activeUdpiEntries().find(x => x.id === id);
       if (!u) return;
       const remaining = u.amount - (u.returnedAmount || 0);
@@ -484,7 +484,7 @@ export default class App extends React.Component {
     window.open(url, '_blank');
   };
   deleteUdpiEntry = (id) => {
-    this.requireResetPin(() => {
+    this.requirePin(() => {
       if (!confirm('Delete this entry?\nیہ اندراج حذف کریں؟')) return;
       const udpiEntries = (this.state.udpiEntries || []).map(u => u.id === id ? { ...u, _deleted: true } : u);
       const ledger = (this.state.ledger || []).map(l => l.udpiRef === id ? { ...l, _deleted: true } : l);
