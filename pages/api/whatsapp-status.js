@@ -31,7 +31,21 @@ export default async function handler(req, res) {
       return res.json({ ok: true, message: 'Disconnected' });
     }
 
-    return res.status(400).json({ error: 'Unknown action. Use "connect" or "disconnect"' });
+    if (action === 'bot-toggle') {
+      const enabled = wa.setBotEnabled(req.body.enabled !== false);
+      return res.json({ ok: true, botEnabled: enabled });
+    }
+
+    if (action === 'bot-log') {
+      return res.json({ ok: true, log: wa.getBotLog() });
+    }
+
+    if (action === 'send-reminders') {
+      const result = await wa.sendBulkReminders();
+      return res.json(result);
+    }
+
+    return res.status(400).json({ error: 'Unknown action' });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
