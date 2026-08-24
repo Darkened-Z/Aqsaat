@@ -51,6 +51,7 @@ export default class App extends React.Component {
     udpiEntries: null,
     ledgerModal: { open: false, type: 'expense', amount: '', accountId: '', category: '', note: '', date: this.todayStr(), editId: null },
     ledgerFilter: 'all',
+    ledgerSection: 'expenses',
     ledgerMonthFilter: '',
     ledgerSearch: '',
     recurringModal: { open: false, editId: null, type: 'expense', amount: '', accountId: '', category: '', note: '', day: 1 },
@@ -2729,7 +2730,37 @@ export default class App extends React.Component {
     const lentTotal = lentOut.reduce((s, u) => s + u.amount, 0);
     const borrowedTotal = borrowed.reduce((s, u) => s + u.amount, 0);
 
+    const ls = this.state.ledgerSection || 'expenses';
+    const secTab = (label, ur, val, icon) => h('button', { onClick: () => this.setState({ ledgerSection: val }), style: { flex: 1, padding: '10px 6px', borderRadius: 10, fontSize: 12, fontWeight: 700, background: ls === val ? '#0f6b4b' : '#fdfcf8', color: ls === val ? 'white' : '#3a4a3f', border: '1px solid ' + (ls === val ? '#0f6b4b' : '#ece8dc'), textAlign: 'center' } },
+      h('div', {}, icon + ' ' + label),
+      h('div', { className: 'ur', style: { fontSize: 9, marginTop: 1, opacity: 0.8 } }, ur),
+    );
+
+    const expEntries = filtered.filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
+    const planEntries = filtered.filter(le => le.category === 'Product Cost' || le.category === 'Down Payment');
+
+    const allPlans = this.activePlans();
+    const activePlansList = allPlans.filter(p => p.status === 'active');
+    const completedPlansList = allPlans.filter(p => p.status === 'completed');
+    const recentPayments = [];
+    allPlans.forEach(pl => {
+      const c = (this.state.customers || []).find(x => x.id === pl.customerId);
+      const p = (this.state.products || []).find(x => x.id === pl.productId);
+      (pl.schedule || []).forEach(s => {
+        if (s.paid) recentPayments.push({ plan: pl, installment: s, customer: c, product: p });
+      });
+    });
+    recentPayments.sort((a, b) => (b.installment.paidDate || '').localeCompare(a.installment.paidDate || ''));
+    const totalCollected = recentPayments.reduce((s, rp) => s + (rp.installment.amountPaid || rp.installment.amount), 0);
+    const totalPending = allPlans.reduce((s, pl) => s + (pl.schedule || []).filter(si => !si.paid).reduce((ss, si) => ss + si.amount, 0), 0);
+
     return h('div', { className: 'screen', style: { maxWidth: 800 } },
+      h('div', { style: { display: 'flex', gap: 4, marginBottom: 14 } },
+        secTab('Expenses', 'اخراجات', 'expenses', '💰'),
+        secTab('Plans', 'قسطیں', 'plans', '📋'),
+        secTab('Udhar', 'ادھار', 'udhar', '🤝'),
+      ),
+      ...(ls === 'expenses' ? [
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 14 } },
         this.card([
           h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Income'),
@@ -2746,12 +2777,6 @@ export default class App extends React.Component {
           h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'خالص'),
           h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: allTime.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (allTime.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(allTime.net))),
         ]),
-        (lentTotal > 0 || borrowedTotal > 0) ? this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Udhar Outstanding'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'بقایا اُدھار'),
-          lentTotal > 0 ? h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#b91c1c', marginTop: 4 } }, '💸 ' + this.fmtPKR(lentTotal) + ' lent') : null,
-          borrowedTotal > 0 ? h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#3b82f6', marginTop: 2 } }, '📥 ' + this.fmtPKR(borrowedTotal) + ' owed') : null,
-        ]) : null,
       ),
       // Quick-add chips
       topChips.length > 0 ? h('div', { style: { marginBottom: 12 } },
@@ -2780,28 +2805,6 @@ export default class App extends React.Component {
         h('button', { onClick: () => this.setState({ ledgerMonthFilter: '' }), style: { padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: !monthFilter ? '#0f6b4b' : '#f4f1e6', color: !monthFilter ? 'white' : '#7a7663', border: '1px solid ' + (!monthFilter ? '#0f6b4b' : '#ece8dc') } }, 'All'),
         ...months.map(m => h('button', { key: m, onClick: () => this.setState({ ledgerMonthFilter: m }), style: { padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: monthFilter === m ? '#0f6b4b' : '#f4f1e6', color: monthFilter === m ? 'white' : '#7a7663', border: '1px solid ' + (monthFilter === m ? '#0f6b4b' : '#ece8dc') } }, new Date(m + '-01').toLocaleDateString('en-PK', { month: 'short', year: 'numeric' }))),
       ) : null,
-      // Udhar outstanding section
-      (lentOut.length > 0 || borrowed.length > 0) ? this.card([
-        this.sectionHeader('Udhar / اُدھار', '', h('span', { style: { fontSize: 12, color: '#7a7663' } }, (lentOut.length + borrowed.length) + ' outstanding')),
-        ...[...lentOut, ...borrowed].map((u, i) => {
-          const acc = accs.find(a => a.id === u.accountId);
-          const isLent = u.direction === 'lent';
-          return h('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
-            h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, isLent ? '💸' : '📥'),
-            h('div', { style: { flex: 1, minWidth: 0 } },
-              h('div', { style: { fontWeight: 600, fontSize: 13 } }, u.person),
-              h('div', { style: { fontSize: 11, color: '#7a7663' } }, (isLent ? 'Lent' : 'Borrowed') + (u.note ? ' · ' + u.note : '') + (acc ? ' · ' + acc.name : '') + ' · ' + this.fmtDate(u.date)),
-            ),
-            h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isLent ? '#b91c1c' : '#3b82f6', flexShrink: 0 } }, this.fmtPKR(u.amount)),
-            h('div', { style: { display: 'flex', gap: 4, flexShrink: 0 } },
-              h('button', { onClick: () => this.markUdpiReturned(u.id), style: { padding: '4px 8px', borderRadius: 6, background: '#eaf5ee', color: '#0f6b4b', fontSize: 11, fontWeight: 600 } }, '✅'),
-              h('button', { onClick: () => this.openUdpiModal(u.id), style: { padding: '4px 8px', borderRadius: 6, background: '#f4f1e6', fontSize: 11, fontWeight: 600 } }, '✏'),
-              h('button', { onClick: () => this.deleteUdpiEntry(u.id), style: { padding: '4px 8px', borderRadius: 6, background: '#fef2f2', color: '#b91c1c', fontSize: 11, fontWeight: 600 } }, '✕'),
-            ),
-          );
-        }),
-      ]) : null,
-      (lentOut.length > 0 || borrowed.length > 0) ? h('div', { style: { height: 12 } }) : null,
       // Recurring entries section
       recurring.length > 0 ? this.card([
         this.sectionHeader('Recurring / بار بار', '', h('span', { style: { fontSize: 12, color: '#7a7663' } }, recurring.length + ' entries')),
@@ -2845,8 +2848,8 @@ export default class App extends React.Component {
       ]) : null,
       h('div', { style: { height: 12 } }),
       this.card([
-        this.sectionHeader('Transactions', 'لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, filtered.length + ' entries')),
-        ...(filtered.length === 0 ? [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No entries yet. Tap + Entry to start.')] : filtered.map((le, i) => {
+        this.sectionHeader('Transactions', 'لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, expEntries.length + ' entries')),
+        ...(expEntries.length === 0 ? [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No entries yet. Tap + Entry to start.')] : expEntries.map((le, i) => {
           const acc = accs.find(a => a.id === le.accountId);
           const isInc = le.type === 'income';
           return h('div', { key: le.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
@@ -2868,6 +2871,120 @@ export default class App extends React.Component {
           );
         })),
       ]),
+      ] : []),
+
+      // === PLANS SECTION ===
+      ...(ls === 'plans' ? [
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 } },
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase' } }, 'Active Plans'),
+          h('div', { className: 'ur', style: { fontSize: 9, color: '#7a7663' } }, 'فعال پلانز'),
+          h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, activePlansList.length),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase' } }, 'Collected'),
+          h('div', { className: 'ur', style: { fontSize: 9, color: '#7a7663' } }, 'وصول شدہ'),
+          h('div', { className: 'mono', style: { fontSize: 16, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(totalCollected)),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase' } }, 'Pending'),
+          h('div', { className: 'ur', style: { fontSize: 9, color: '#7a7663' } }, 'بقایا'),
+          h('div', { className: 'mono', style: { fontSize: 16, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(totalPending)),
+        ]),
+      ),
+      h('div', { style: { display: 'flex', gap: 8, marginBottom: 14 } },
+        h('button', { onClick: () => this.go('newplan'), style: { flex: 1, padding: '10px 16px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, '＋ New Plan'),
+        h('button', { onClick: () => this.go('plans'), style: { flex: 1, padding: '10px 16px', borderRadius: 10, background: '#f4f1e6', color: '#3a4a3f', fontWeight: 700, fontSize: 13, border: '1px solid #ece8dc' } }, '📋 All Plans'),
+      ),
+      activePlansList.length > 0 ? this.card([
+        this.sectionHeader('Active Plans', 'فعال پلانز'),
+        ...activePlansList.slice(0, 10).map((pl, i) => {
+          const c = (this.state.customers || []).find(x => x.id === pl.customerId);
+          const p = (this.state.products || []).find(x => x.id === pl.productId);
+          const paid = (pl.schedule || []).filter(s => s.paid).length;
+          const total = (pl.schedule || []).length;
+          const collected = (pl.schedule || []).filter(s => s.paid).reduce((ss, s) => ss + (s.amountPaid || s.amount), 0);
+          const pct = total > 0 ? Math.round(paid / total * 100) : 0;
+          return h('div', { key: pl.id, onClick: () => this.go('plan', pl.id), style: { cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+            h('div', { style: { width: 36, height: 36, borderRadius: 10, background: '#eaf5ee', color: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 } }, paid + '/' + total),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, c ? c.name : 'Unknown'),
+              h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } }, (p ? p.name : '') + ' · ' + this.fmtPKR(collected) + ' collected'),
+              h('div', { style: { height: 4, background: '#f2eee2', borderRadius: 2, marginTop: 4 } },
+                h('div', { style: { height: '100%', width: pct + '%', borderRadius: 2, background: '#0f6b4b', transition: 'width .3s' } }),
+              ),
+            ),
+            h('div', { style: { color: '#7a7663', fontSize: 16, flexShrink: 0 } }, '›'),
+          );
+        }),
+      ]) : h('div', { style: { textAlign: 'center', padding: '40px 20px', color: '#7a7663' } },
+        h('div', { style: { fontSize: 48, marginBottom: 12 } }, '📋'),
+        h('div', { style: { fontWeight: 800, fontSize: 16, color: '#3a4a3f' } }, 'No active plans'),
+        h('div', { className: 'ur', style: { fontSize: 13 } }, 'کوئی فعال پلان نہیں'),
+      ),
+      recentPayments.length > 0 ? h('div', { style: { height: 12 } }) : null,
+      recentPayments.length > 0 ? this.card([
+        this.sectionHeader('Recent Payments', 'حالیہ ادائیگیاں'),
+        ...recentPayments.slice(0, 15).map((rp, i) => {
+          const acc = accs.find(a => a.id === rp.installment.accountId);
+          return h('div', { key: 'rp' + i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+            h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, '💰'),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, (rp.customer ? rp.customer.name : 'Unknown') + ' — #' + rp.installment.n),
+              h('div', { style: { fontSize: 11, color: '#7a7663' } }, (rp.product ? rp.product.name : '') + (acc ? ' · ' + acc.emoji + ' ' + acc.name : '') + ' · ' + this.fmtDate(rp.installment.paidDate)),
+            ),
+            h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: '#0f6b4b', flexShrink: 0 } }, '+ ' + this.fmtPKR(rp.installment.amountPaid || rp.installment.amount)),
+          );
+        }),
+      ]) : null,
+      ] : []),
+
+      // === UDHAR SECTION ===
+      ...(ls === 'udhar' ? [
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 } },
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' } }, 'You Will Get'),
+          h('div', { className: 'ur', style: { fontSize: 9, color: '#7a7663' } }, 'آپ کو ملیں گے'),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(lentTotal)),
+          h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, lentOut.length + ' pending'),
+        ]),
+        this.card([
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#0f6b4b', textTransform: 'uppercase' } }, 'You Will Give'),
+          h('div', { className: 'ur', style: { fontSize: 9, color: '#7a7663' } }, 'آپ نے دینے ہیں'),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(borrowedTotal)),
+          h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, borrowed.length + ' pending'),
+        ]),
+      ),
+      h('div', { style: { display: 'flex', gap: 8, marginBottom: 14 } },
+        h('button', { onClick: () => this.openUdpiModal(), style: { flex: 1, padding: '10px 16px', borderRadius: 10, background: '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 13 } }, '＋ New Entry'),
+        h('button', { onClick: () => this.go('udharbook'), style: { flex: 1, padding: '10px 16px', borderRadius: 10, background: '#f4f1e6', color: '#3a4a3f', fontWeight: 700, fontSize: 13, border: '1px solid #ece8dc' } }, '📒 Full Udhar Book'),
+      ),
+      (lentOut.length > 0 || borrowed.length > 0) ? this.card([
+        this.sectionHeader('Outstanding / بقایا', '', h('span', { style: { fontSize: 12, color: '#7a7663' } }, (lentOut.length + borrowed.length) + ' entries')),
+        ...[...lentOut, ...borrowed].slice(0, 20).map((u, i) => {
+          const acc = accs.find(a => a.id === u.accountId);
+          const isLent = u.direction === 'lent';
+          return h('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+            h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, isLent ? '💸' : '📥'),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 600, fontSize: 13 } }, u.person),
+              h('div', { style: { fontSize: 11, color: '#7a7663' } }, (isLent ? 'Lent' : 'Borrowed') + (u.note ? ' · ' + u.note : '') + (acc ? ' · ' + acc.name : '') + ' · ' + this.fmtDate(u.date)),
+            ),
+            h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isLent ? '#b91c1c' : '#3b82f6', flexShrink: 0 } }, this.fmtPKR(u.amount)),
+            h('div', { style: { display: 'flex', gap: 4, flexShrink: 0 } },
+              h('button', { onClick: () => this.markUdpiReturned(u.id), style: { padding: '4px 8px', borderRadius: 6, background: '#eaf5ee', color: '#0f6b4b', fontSize: 11, fontWeight: 600 } }, '✅'),
+              h('button', { onClick: () => this.openUdpiModal(u.id), style: { padding: '4px 8px', borderRadius: 6, background: '#f4f1e6', fontSize: 11, fontWeight: 600 } }, '✏'),
+              h('button', { onClick: () => this.deleteUdpiEntry(u.id), style: { padding: '4px 8px', borderRadius: 6, background: '#fef2f2', color: '#b91c1c', fontSize: 11, fontWeight: 600 } }, '✕'),
+            ),
+          );
+        }),
+      ]) : h('div', { style: { textAlign: 'center', padding: '40px 20px', color: '#7a7663' } },
+        h('div', { style: { fontSize: 48, marginBottom: 12 } }, '🤝'),
+        h('div', { style: { fontWeight: 800, fontSize: 16, color: '#3a4a3f' } }, 'No outstanding entries'),
+        h('div', { className: 'ur', style: { fontSize: 13 } }, 'کوئی بقایا نہیں'),
+      ),
+      ] : []),
+
       this.renderLedgerModal(),
       this.renderRecurringModal(),
       this.renderUdpiModal(),
@@ -3460,44 +3577,44 @@ export default class App extends React.Component {
     const avgAmount = totalEntries > 0 ? Math.round(entries.reduce((s, u) => s + u.amount, 0) / totalEntries) : 0;
     const firstDate = entries.length > 0 ? entries[entries.length - 1].date : null;
 
-    return h('div', { style: { maxWidth: 720, background: '#0f172a', padding: '0 0 16px', minHeight: '100vh' } },
-      h('div', { style: { background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', padding: '18px 18px 14px' } },
+    return h('div', { style: { maxWidth: 720, background: '#f4f6f3', padding: '0 0 16px', minHeight: '100vh' } },
+      h('div', { style: { background: 'linear-gradient(135deg, #eef1ec 0%, #f4f6f3 100%)', padding: '18px 18px 14px', borderBottom: '1px solid #e6eae5' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 0 } },
-          h('button', { onClick: () => this.setState({ udharPerson: null }), style: { padding: '8px 12px', borderRadius: 10, background: '#334155', fontWeight: 700, fontSize: 16, color: '#e2e8f0' } }, '‹'),
-          h('div', { style: { width: 48, height: 48, borderRadius: 14, background: ac + '30', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, flexShrink: 0 } }, initials),
+          h('button', { onClick: () => this.setState({ udharPerson: null }), style: { padding: '8px 12px', borderRadius: 10, background: '#e6eae5', fontWeight: 700, fontSize: 16, color: '#16211c' } }, '‹'),
+          h('div', { style: { width: 48, height: 48, borderRadius: 14, background: ac + '18', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, flexShrink: 0 } }, initials),
           h('div', { style: { flex: 1, minWidth: 0 } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 5 } },
               isPinned ? h('span', { style: { fontSize: 11 } }, '📌') : null,
-              h('span', { style: { fontWeight: 800, fontSize: 17, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, personName),
+              h('span', { style: { fontWeight: 800, fontSize: 17, color: '#16211c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, personName),
             ),
-            h('div', { style: { fontSize: 11, color: '#64748b', marginTop: 1 } }, totalEntries + ' entries' + (phone ? ' · ' + phone : '')),
+            h('div', { style: { fontSize: 11, color: '#8b978f', marginTop: 1 } }, totalEntries + ' entries' + (phone ? ' · ' + phone : '')),
             trust.score > 0 ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 } },
               h('span', { style: { fontSize: 10, color: trust.color, fontWeight: 700 } }, '★'.repeat(Math.min(trust.score, 5))),
               h('span', { style: { fontSize: 10, color: trust.color, fontWeight: 600 } }, ' ' + trust.label),
-              trust.rate !== undefined ? h('span', { style: { fontSize: 9, color: '#64748b' } }, ' · ' + trust.rate + '% settled') : null,
+              trust.rate !== undefined ? h('span', { style: { fontSize: 9, color: '#8b978f' } }, ' · ' + trust.rate + '% settled') : null,
             ) : null,
           ),
         ),
       ),
       h('div', { style: { padding: '12px 14px 0' } },
       h('div', { style: { display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' } },
-        h('button', { onClick: () => this.toggleUdharPin(personName), style: { padding: '5px 10px', borderRadius: 8, background: isPinned ? '#f59e0b33' : '#334155', color: isPinned ? '#fbbf24' : '#94a3b8', fontSize: 10, fontWeight: 700, border: 'none' } }, isPinned ? '📌 Unpin' : '📌 Pin'),
+        h('button', { onClick: () => this.toggleUdharPin(personName), style: { padding: '5px 10px', borderRadius: 8, background: isPinned ? '#fef3c7' : '#e6eae5', color: isPinned ? '#b45309' : '#8b978f', fontSize: 10, fontWeight: 700, border: 'none' } }, isPinned ? '📌 Unpin' : '📌 Pin'),
         phone ? h('a', { href: 'https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + waMsg, target: '_blank', style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, textDecoration: 'none' } }, '💬 Manual') : h('button', { onClick: () => this.remindViaWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Manual'),
-        h('button', { onClick: () => this.sendSingleReminder(personName), disabled: this.state.udharAutoSending, style: { padding: '5px 10px', borderRadius: 8, background: this.state.udharAutoSending ? '#475569' : '#14b8a6', color: this.state.udharAutoSending ? '#94a3b8' : '#0f172a', fontWeight: 700, fontSize: 10, border: 'none' } }, this.state.udharAutoSending ? '⏳...' : '🤖 Auto'),
-        h('button', { onClick: () => this.copyStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#334155', color: '#e2e8f0', fontWeight: 700, fontSize: 10, border: 'none' } }, '📋 Statement'),
-        h('button', { onClick: () => this.printUdharStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#334155', color: '#e2e8f0', fontWeight: 700, fontSize: 10, border: 'none' } }, '🖨 PDF'),
-        h('button', { onClick: () => this.shareStatementWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#14b8a622', color: '#2dd4bf', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Share'),
-        h('button', { onClick: () => this.setUdharReminder(personName), style: { padding: '5px 10px', borderRadius: 8, background: meta.reminderDate ? '#f59e0b33' : '#334155', color: meta.reminderDate ? '#fbbf24' : '#94a3b8', fontWeight: 700, fontSize: 10, border: 'none' } }, meta.reminderDate ? '⏰ ' + meta.reminderDate : '⏰ Reminder'),
+        h('button', { onClick: () => this.sendSingleReminder(personName), disabled: this.state.udharAutoSending, style: { padding: '5px 10px', borderRadius: 8, background: this.state.udharAutoSending ? '#e6eae5' : '#0f6b4f', color: this.state.udharAutoSending ? '#8b978f' : 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, this.state.udharAutoSending ? '⏳...' : '🤖 Auto'),
+        h('button', { onClick: () => this.copyStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none' } }, '📋 Statement'),
+        h('button', { onClick: () => this.printUdharStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none' } }, '🖨 PDF'),
+        h('button', { onClick: () => this.shareStatementWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e8f5e9', color: '#0f6b4f', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Share'),
+        h('button', { onClick: () => this.setUdharReminder(personName), style: { padding: '5px 10px', borderRadius: 8, background: meta.reminderDate ? '#fef3c7' : '#e6eae5', color: meta.reminderDate ? '#b45309' : '#8b978f', fontWeight: 700, fontSize: 10, border: 'none' } }, meta.reminderDate ? '⏰ ' + meta.reminderDate : '⏰ Reminder'),
         h('button', { onClick: () => {
           const cats = ['business', 'personal', 'family'];
           const cur = meta.category || '';
           const next = cats[(cats.indexOf(cur) + 1) % (cats.length + 1)] || '';
           this.setUdharMeta(personName, 'category', next);
-        }, style: { padding: '5px 10px', borderRadius: 8, background: meta.category === 'business' ? '#3b82f622' : meta.category === 'family' ? '#7c3aed22' : meta.category === 'personal' ? '#06b6d422' : '#334155', color: meta.category === 'business' ? '#60a5fa' : meta.category === 'family' ? '#a78bfa' : meta.category === 'personal' ? '#22d3ee' : '#94a3b8', fontSize: 10, fontWeight: 700, border: 'none' } }, meta.category ? (meta.category === 'business' ? '💼 Business' : meta.category === 'family' ? '👨‍👩‍👧 Family' : '👤 Personal') : '🏷 Category'),
+        }, style: { padding: '5px 10px', borderRadius: 8, background: meta.category === 'business' ? '#dbeafe' : meta.category === 'family' ? '#ede9fe' : meta.category === 'personal' ? '#cffafe' : '#e6eae5', color: meta.category === 'business' ? '#2563eb' : meta.category === 'family' ? '#7c3aed' : meta.category === 'personal' ? '#0891b2' : '#8b978f', fontSize: 10, fontWeight: 700, border: 'none' } }, meta.category ? (meta.category === 'business' ? '💼 Business' : meta.category === 'family' ? '👨‍👩‍👧 Family' : '👤 Personal') : '🏷 Category'),
         h('button', { onClick: () => {
           const v = prompt('Set credit limit for ' + personName + '\nCurrent: ' + (creditLimit ? this.fmtPKR(creditLimit) : 'None') + '\n\nEnter amount (0 to remove):');
           if (v !== null) this.setUdharMeta(personName, 'creditLimit', Math.max(0, parseInt(v) || 0));
-        }, style: { padding: '5px 10px', borderRadius: 8, background: overLimit ? '#f59e0b33' : '#334155', color: overLimit ? '#fbbf24' : '#94a3b8', fontSize: 10, fontWeight: 700, border: 'none' } }, creditLimit ? '💳 Limit: ' + this.fmtPKR(creditLimit) : '💳 Set Limit'),
+        }, style: { padding: '5px 10px', borderRadius: 8, background: overLimit ? '#fef3c7' : '#e6eae5', color: overLimit ? '#b45309' : '#8b978f', fontSize: 10, fontWeight: 700, border: 'none' } }, creditLimit ? '💳 Limit: ' + this.fmtPKR(creditLimit) : '💳 Set Limit'),
       ),
       h('div', { style: { background: balance > 0 ? '#fef2f2' : balance < 0 ? '#f0fdf4' : '#f4f1e6', borderRadius: 18, padding: '20px', textAlign: 'center', marginBottom: 14, borderLeft: '5px solid ' + (balance > 0 ? '#b91c1c' : balance < 0 ? '#0f6b4b' : '#7a7663') } },
         h('div', { style: { fontSize: 11, fontWeight: 700, color: balance > 0 ? '#b91c1c' : balance < 0 ? '#0f6b4b' : '#7a7663', textTransform: 'uppercase', letterSpacing: '0.08em' } }, balance > 0 ? 'You will get / آپ کو ملیں گے' : balance < 0 ? 'You will give / آپ نے دینے ہیں' : 'All clear / برابر ✓'),
@@ -3507,59 +3624,59 @@ export default class App extends React.Component {
           h('span', {}, '↓ Got: ', h('strong', { style: { color: '#0f6b4b' } }, this.fmtPKR(borrowed))),
         ),
       ),
-      overLimit ? h('div', { style: { background: '#f59e0b22', borderRadius: 12, padding: '10px 14px', marginBottom: 10, border: '1px solid #f59e0b44', display: 'flex', alignItems: 'center', gap: 8 } },
+      overLimit ? h('div', { style: { background: '#fef3c7', borderRadius: 12, padding: '10px 14px', marginBottom: 10, border: '1px solid #fcd34d', display: 'flex', alignItems: 'center', gap: 8 } },
         h('span', { style: { fontSize: 16 } }, '⚠️'),
         h('div', { style: { flex: 1 } },
-          h('div', { style: { fontWeight: 700, fontSize: 12, color: '#fbbf24' } }, 'Credit limit exceeded!'),
-          h('div', { style: { fontSize: 11, color: '#94a3b8' } }, 'Limit: ' + this.fmtPKR(creditLimit) + ' · Over by ' + this.fmtPKR(balance - creditLimit)),
+          h('div', { style: { fontWeight: 700, fontSize: 12, color: '#b45309' } }, 'Credit limit exceeded!'),
+          h('div', { style: { fontSize: 11, color: '#8b978f' } }, 'Limit: ' + this.fmtPKR(creditLimit) + ' · Over by ' + this.fmtPKR(balance - creditLimit)),
         ),
       ) : null,
       h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 12 } },
-        h('div', { style: { background: '#1e293b', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #334155' } },
-          h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#fb7185' } }, this.fmtPKR(totalGaveAll)),
-          h('div', { style: { fontSize: 8, color: '#64748b', fontWeight: 600, marginTop: 2, textTransform: 'uppercase' } }, 'Total Gave'),
+        h('div', { style: { background: '#fff', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #e6eae5' } },
+          h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#c0392b' } }, this.fmtPKR(totalGaveAll)),
+          h('div', { style: { fontSize: 8, color: '#8b978f', fontWeight: 600, marginTop: 2, textTransform: 'uppercase' } }, 'Total Gave'),
         ),
-        h('div', { style: { background: '#1e293b', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #334155' } },
-          h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#2dd4bf' } }, this.fmtPKR(totalGotAll)),
-          h('div', { style: { fontSize: 8, color: '#64748b', fontWeight: 600, marginTop: 2, textTransform: 'uppercase' } }, 'Total Got'),
+        h('div', { style: { background: '#fff', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #e6eae5' } },
+          h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#0f6b4f' } }, this.fmtPKR(totalGotAll)),
+          h('div', { style: { fontSize: 8, color: '#8b978f', fontWeight: 600, marginTop: 2, textTransform: 'uppercase' } }, 'Total Got'),
         ),
-        h('div', { style: { background: '#1e293b', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #334155' } },
-          h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#e2e8f0' } }, settledCount + '/' + totalEntries),
-          h('div', { style: { fontSize: 8, color: '#64748b', fontWeight: 600, marginTop: 2, textTransform: 'uppercase' } }, 'Settled'),
+        h('div', { style: { background: '#fff', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #e6eae5' } },
+          h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#16211c' } }, settledCount + '/' + totalEntries),
+          h('div', { style: { fontSize: 8, color: '#8b978f', fontWeight: 600, marginTop: 2, textTransform: 'uppercase' } }, 'Settled'),
         ),
-        h('div', { style: { background: '#1e293b', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #334155' } },
-          h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#e2e8f0' } }, this.fmtPKR(avgAmount)),
-          h('div', { style: { fontSize: 8, color: '#64748b', fontWeight: 600, marginTop: 2, textTransform: 'uppercase' } }, 'Avg Txn'),
+        h('div', { style: { background: '#fff', borderRadius: 10, padding: '8px 6px', textAlign: 'center', border: '1px solid #e6eae5' } },
+          h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#16211c' } }, this.fmtPKR(avgAmount)),
+          h('div', { style: { fontSize: 8, color: '#8b978f', fontWeight: 600, marginTop: 2, textTransform: 'uppercase' } }, 'Avg Txn'),
         ),
       ),
-      firstDate ? h('div', { style: { fontSize: 11, color: '#64748b', marginBottom: 12, textAlign: 'center' } },
+      firstDate ? h('div', { style: { fontSize: 11, color: '#8b978f', marginBottom: 12, textAlign: 'center' } },
         'Since ' + new Date(firstDate + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }),
       ) : null,
       h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 } },
-        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: 'linear-gradient(135deg, #f43f5e, #e11d48)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', boxShadow: '0 4px 12px rgba(244,63,94,.3)' } }, '↑ Gave'),
-        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: 'linear-gradient(135deg, #14b8a6, #0d9488)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', boxShadow: '0 4px 12px rgba(20,184,166,.3)' } }, '↓ Got'),
-        h('button', { onClick: () => this.openInvoiceModal(personName), style: { padding: '12px 8px', borderRadius: 12, background: '#334155', color: '#e2e8f0', fontWeight: 700, fontSize: 13, border: 'none' } }, '📄 Bill'),
+        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: 'linear-gradient(135deg, #c0392b, #a93226)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', boxShadow: '0 4px 12px rgba(192,57,43,.25)' } }, '↑ Gave'),
+        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: 'linear-gradient(135deg, #0f6b4f, #0a5a3f)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', boxShadow: '0 4px 12px rgba(15,107,79,.25)' } }, '↓ Got'),
+        h('button', { onClick: () => this.openInvoiceModal(personName), style: { padding: '12px 8px', borderRadius: 12, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 13, border: 'none' } }, '📄 Bill'),
       ),
       h('div', { style: { display: 'flex', gap: 5, marginBottom: 14, flexWrap: 'wrap' } },
-        entries.some(u => !u.returned) ? h('button', { onClick: () => this.bulkSettle(personName), style: { padding: '6px 12px', borderRadius: 8, background: '#14b8a622', color: '#2dd4bf', fontWeight: 700, fontSize: 11, border: '1px solid #14b8a644' } }, '✓ Settle All') : null,
-        balance > 0 ? h('button', { onClick: () => this.calcUdharInterest(personName), style: { padding: '6px 12px', borderRadius: 8, background: '#f59e0b22', color: '#fbbf24', fontWeight: 700, fontSize: 11, border: '1px solid #f59e0b44' } }, '📊 Interest') : null,
+        entries.some(u => !u.returned) ? h('button', { onClick: () => this.bulkSettle(personName), style: { padding: '6px 12px', borderRadius: 8, background: '#e8f5e9', color: '#0f6b4f', fontWeight: 700, fontSize: 11, border: '1px solid #c8e6c9' } }, '✓ Settle All') : null,
+        balance > 0 ? h('button', { onClick: () => this.calcUdharInterest(personName), style: { padding: '6px 12px', borderRadius: 8, background: '#fef3c7', color: '#b45309', fontWeight: 700, fontSize: 11, border: '1px solid #fcd34d' } }, '📊 Interest') : null,
         h('button', { onClick: () => {
           const current = meta.notes || '';
           const v = prompt('Notes for ' + personName + ':\n' + personName + ' کے بارے میں نوٹس:', current);
           if (v !== null) this.setUdharMeta(personName, 'notes', v);
-        }, style: { padding: '6px 12px', borderRadius: 8, background: meta.notes ? '#3b82f622' : '#334155', color: meta.notes ? '#60a5fa' : '#94a3b8', fontWeight: 700, fontSize: 11, border: meta.notes ? '1px solid #3b82f644' : '1px solid #334155' } }, meta.notes ? '📝 Notes ✓' : '📝 Add Note'),
+        }, style: { padding: '6px 12px', borderRadius: 8, background: meta.notes ? '#dbeafe' : '#e6eae5', color: meta.notes ? '#2563eb' : '#8b978f', fontWeight: 700, fontSize: 11, border: meta.notes ? '1px solid #93c5fd' : '1px solid #e6eae5' } }, meta.notes ? '📝 Notes ✓' : '📝 Add Note'),
       ),
-      meta.notes ? h('div', { style: { background: '#3b82f622', borderRadius: 10, padding: '8px 12px', marginBottom: 12, border: '1px solid #3b82f644', fontSize: 12, color: '#93c5fd', lineHeight: 1.5 } },
+      meta.notes ? h('div', { style: { background: '#dbeafe', borderRadius: 10, padding: '8px 12px', marginBottom: 12, border: '1px solid #93c5fd', fontSize: 12, color: '#2563eb', lineHeight: 1.5 } },
         h('span', { style: { fontWeight: 700 } }, '📝 '),
         meta.notes,
       ) : null,
-      meta.reminderDate ? h('div', { style: { background: meta.reminderDate <= this.todayStr() ? '#f43f5e22' : '#f59e0b22', borderRadius: 10, padding: '8px 12px', marginBottom: 10, border: '1px solid ' + (meta.reminderDate <= this.todayStr() ? '#f43f5e44' : '#f59e0b44'), display: 'flex', alignItems: 'center', gap: 8 } },
+      meta.reminderDate ? h('div', { style: { background: meta.reminderDate <= this.todayStr() ? '#fef2f2' : '#fef3c7', borderRadius: 10, padding: '8px 12px', marginBottom: 10, border: '1px solid ' + (meta.reminderDate <= this.todayStr() ? '#fecaca' : '#fcd34d'), display: 'flex', alignItems: 'center', gap: 8 } },
         h('span', { style: { fontSize: 16 } }, meta.reminderDate <= this.todayStr() ? '🔔' : '⏰'),
         h('div', { style: { flex: 1 } },
-          h('div', { style: { fontWeight: 700, fontSize: 11, color: meta.reminderDate <= this.todayStr() ? '#fb7185' : '#fbbf24' } }, meta.reminderDate <= this.todayStr() ? 'Reminder Due Today!' : 'Reminder on ' + meta.reminderDate),
-          h('div', { className: 'ur', style: { fontSize: 10, color: '#64748b' } }, meta.reminderDate <= this.todayStr() ? 'یاد دہانی آج ہے!' : 'یاد دہانی ' + meta.reminderDate + ' کو'),
+          h('div', { style: { fontWeight: 700, fontSize: 11, color: meta.reminderDate <= this.todayStr() ? '#c0392b' : '#b45309' } }, meta.reminderDate <= this.todayStr() ? 'Reminder Due Today!' : 'Reminder on ' + meta.reminderDate),
+          h('div', { className: 'ur', style: { fontSize: 10, color: '#8b978f' } }, meta.reminderDate <= this.todayStr() ? 'یاد دہانی آج ہے!' : 'یاد دہانی ' + meta.reminderDate + ' کو'),
         ),
-        h('button', { onClick: () => { this.setUdharMeta(personName, 'reminderDate', ''); }, style: { padding: '4px 8px', borderRadius: 6, background: '#334155', border: 'none', fontSize: 10, fontWeight: 600, color: '#94a3b8' } }, '✕ Clear'),
+        h('button', { onClick: () => { this.setUdharMeta(personName, 'reminderDate', ''); }, style: { padding: '4px 8px', borderRadius: 6, background: '#e6eae5', border: 'none', fontSize: 10, fontWeight: 600, color: '#8b978f' } }, '✕ Clear'),
       ) : null,
       (() => {
         const sorted = [...entries].sort((a, b) => a.date > b.date ? 1 : -1);
@@ -3576,35 +3693,35 @@ export default class App extends React.Component {
         const mid = h2 / 2;
         const step = w / Math.max(points.length - 1, 1);
         const pts = points.map((p, i) => (i * step).toFixed(1) + ',' + (mid - (p.bal / maxB) * (mid - 4)).toFixed(1));
-        return h('div', { style: { marginBottom: 12, background: '#1e293b', borderRadius: 10, padding: '8px 12px', border: '1px solid #334155' } },
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 4, textTransform: 'uppercase' } }, 'Balance Trend / بقایا رجحان'),
+        return h('div', { style: { marginBottom: 12, background: '#fff', borderRadius: 10, padding: '8px 12px', border: '1px solid #e6eae5' } },
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#8b978f', marginBottom: 4, textTransform: 'uppercase' } }, 'Balance Trend / بقایا رجحان'),
           h('svg', { viewBox: '0 0 ' + w + ' ' + h2, style: { width: '100%', height: 50 }, preserveAspectRatio: 'none' },
-            h('line', { x1: 0, y1: mid, x2: w, y2: mid, stroke: '#334155', strokeWidth: 0.5 }),
-            h('polyline', { fill: 'none', stroke: points[points.length - 1].bal >= 0 ? '#fb7185' : '#2dd4bf', strokeWidth: 1.5, points: pts.join(' ') }),
-            h('circle', { cx: (points.length - 1) * step, cy: mid - (points[points.length - 1].bal / maxB) * (mid - 4), r: 2, fill: points[points.length - 1].bal >= 0 ? '#fb7185' : '#2dd4bf' }),
+            h('line', { x1: 0, y1: mid, x2: w, y2: mid, stroke: '#e6eae5', strokeWidth: 0.5 }),
+            h('polyline', { fill: 'none', stroke: points[points.length - 1].bal >= 0 ? '#c0392b' : '#0f6b4f', strokeWidth: 1.5, points: pts.join(' ') }),
+            h('circle', { cx: (points.length - 1) * step, cy: mid - (points[points.length - 1].bal / maxB) * (mid - 4), r: 2, fill: points[points.length - 1].bal >= 0 ? '#c0392b' : '#0f6b4f' }),
           ),
-          h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#475569', marginTop: 2 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#9aa69f', marginTop: 2 } },
             h('span', null, points[0].date),
             h('span', null, points[points.length - 1].date),
           ),
         );
       })(),
       h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 } },
-        h('div', { style: { fontSize: 15, fontWeight: 700, color: '#e2e8f0' } }, 'Transactions'),
-        h('div', { className: 'ur', style: { fontSize: 12, color: '#64748b' } }, 'لین دین'),
+        h('div', { style: { fontSize: 15, fontWeight: 700, color: '#16211c' } }, 'Transactions'),
+        h('div', { className: 'ur', style: { fontSize: 12, color: '#8b978f' } }, 'لین دین'),
       ),
       h('div', { style: { display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' } },
-        h('input', { type: 'date', value: this.state.udharDateFrom || '', onChange: e => this.setState({ udharDateFrom: e.target.value }), style: { flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid #334155', fontSize: 11, background: '#1e293b', color: '#e2e8f0', outline: 'none' }, placeholder: 'From' }),
-        h('span', { style: { fontSize: 11, color: '#64748b' } }, '→'),
-        h('input', { type: 'date', value: this.state.udharDateTo || '', onChange: e => this.setState({ udharDateTo: e.target.value }), style: { flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid #334155', fontSize: 11, background: '#1e293b', color: '#e2e8f0', outline: 'none' }, placeholder: 'To' }),
-        (this.state.udharDateFrom || this.state.udharDateTo) ? h('button', { onClick: () => this.setState({ udharDateFrom: '', udharDateTo: '' }), style: { padding: '6px 8px', borderRadius: 8, background: '#f43f5e22', color: '#fb7185', fontSize: 10, fontWeight: 700, border: 'none', flexShrink: 0 } }, '✕') : null,
+        h('input', { type: 'date', value: this.state.udharDateFrom || '', onChange: e => this.setState({ udharDateFrom: e.target.value }), style: { flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid #e6eae5', fontSize: 11, background: '#fff', color: '#16211c', outline: 'none' }, placeholder: 'From' }),
+        h('span', { style: { fontSize: 11, color: '#8b978f' } }, '→'),
+        h('input', { type: 'date', value: this.state.udharDateTo || '', onChange: e => this.setState({ udharDateTo: e.target.value }), style: { flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid #e6eae5', fontSize: 11, background: '#fff', color: '#16211c', outline: 'none' }, placeholder: 'To' }),
+        (this.state.udharDateFrom || this.state.udharDateTo) ? h('button', { onClick: () => this.setState({ udharDateFrom: '', udharDateTo: '' }), style: { padding: '6px 8px', borderRadius: 8, background: '#fef2f2', color: '#c0392b', fontSize: 10, fontWeight: 700, border: 'none', flexShrink: 0 } }, '✕') : null,
       ),
       (() => {
         let filteredEntries = entries;
         if (this.state.udharDateFrom) filteredEntries = filteredEntries.filter(u => u.date >= this.state.udharDateFrom);
         if (this.state.udharDateTo) filteredEntries = filteredEntries.filter(u => u.date <= this.state.udharDateTo);
         return filteredEntries.length === 0
-        ? h('div', { style: { textAlign: 'center', padding: 30, color: '#64748b' } }, 'No entries' + ((this.state.udharDateFrom || this.state.udharDateTo) ? ' in this date range' : ' yet'))
+        ? h('div', { style: { textAlign: 'center', padding: 30, color: '#8b978f' } }, 'No entries' + ((this.state.udharDateFrom || this.state.udharDateTo) ? ' in this date range' : ' yet'))
         : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
           filteredEntries.slice().reverse().map((u, idx) => {
             const isLent = u.direction === 'lent';
@@ -3616,42 +3733,42 @@ export default class App extends React.Component {
             const remaining = u.amount - (u.returnedAmount || 0);
             const partials = u.partialReturns || [];
             return h('div', { key: u.id, style: { display: 'flex', flexDirection: 'column', gap: 2 } },
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: isOverdue ? '#f43f5e11' : '#1e293b', borderRadius: 12, border: '1px solid ' + (isOverdue ? '#f43f5e44' : '#334155'), borderLeft: '4px solid ' + (isLent ? '#f43f5e' : '#14b8a6') } },
-                h('div', { style: { width: 32, height: 32, borderRadius: 8, background: isLent ? '#f43f5e22' : '#14b8a622', color: isLent ? '#fb7185' : '#2dd4bf', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 } }, isLent ? '↑' : '↓'),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: isOverdue ? '#fef2f2' : '#fff', borderRadius: 12, border: '1px solid ' + (isOverdue ? '#fecaca' : '#e6eae5'), borderLeft: '4px solid ' + (isLent ? '#c0392b' : '#0f6b4f') } },
+                h('div', { style: { width: 32, height: 32, borderRadius: 8, background: isLent ? '#fef2f2' : '#f0fdf4', color: isLent ? '#c0392b' : '#0f6b4f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 } }, isLent ? '↑' : '↓'),
                 h('div', { style: { flex: 1, minWidth: 0 } },
-                  h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e2e8f0' } }, u.note || (isLent ? 'Gave / دیا' : 'Got / لیا')),
-                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#64748b', marginTop: 2, flexWrap: 'wrap' } },
+                  h('div', { style: { fontSize: 13, fontWeight: 600, color: '#16211c' } }, u.note || (isLent ? 'Gave / دیا' : 'Got / لیا')),
+                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#8b978f', marginTop: 2, flexWrap: 'wrap' } },
                     new Date(u.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }),
                     acc ? ' · ' + acc.emoji + ' ' + acc.name : '',
-                    u.category ? h('span', { style: { fontSize: 9, fontWeight: 600, color: u.category === 'business' ? '#60a5fa' : u.category === 'family' ? '#a78bfa' : u.category === 'emergency' ? '#fbbf24' : '#22d3ee', background: u.category === 'business' ? '#3b82f622' : u.category === 'family' ? '#7c3aed22' : u.category === 'emergency' ? '#f59e0b22' : '#06b6d422', padding: '1px 5px', borderRadius: 4 } }, u.category === 'business' ? '💼' : u.category === 'family' ? '👨‍👩‍👧' : u.category === 'emergency' ? '🚨' : '👤') : null,
-                    u.photo ? h('span', { style: { fontSize: 9, fontWeight: 600, color: '#94a3b8' } }, '📷') : null,
+                    u.category ? h('span', { style: { fontSize: 9, fontWeight: 600, color: u.category === 'business' ? '#2563eb' : u.category === 'family' ? '#7c3aed' : u.category === 'emergency' ? '#b45309' : '#0891b2', background: u.category === 'business' ? '#dbeafe' : u.category === 'family' ? '#ede9fe' : u.category === 'emergency' ? '#fef3c7' : '#cffafe', padding: '1px 5px', borderRadius: 4 } }, u.category === 'business' ? '💼' : u.category === 'family' ? '👨‍👩‍👧' : u.category === 'emergency' ? '🚨' : '👤') : null,
+                    u.photo ? h('span', { style: { fontSize: 9, fontWeight: 600, color: '#8b978f' } }, '📷') : null,
                   ),
-                  u.dueDate ? h('div', { style: { fontSize: 10, marginTop: 3, color: isOverdue ? '#fb7185' : '#64748b', fontWeight: isOverdue ? 700 : 400 } },
+                  u.dueDate ? h('div', { style: { fontSize: 10, marginTop: 3, color: isOverdue ? '#c0392b' : '#8b978f', fontWeight: isOverdue ? 700 : 400 } },
                     (isOverdue ? '⚠ OVERDUE · ' : '📅 Due: ') + new Date(u.dueDate + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' })
                   ) : null,
-                  hasPartial ? h('div', { style: { fontSize: 10, marginTop: 3, color: '#fbbf24', fontWeight: 600 } },
+                  hasPartial ? h('div', { style: { fontSize: 10, marginTop: 3, color: '#b45309', fontWeight: 600 } },
                     '⟳ Settled: ' + this.fmtPKR(u.returnedAmount) + ' of ' + this.fmtPKR(u.amount) + ' · Left: ' + this.fmtPKR(remaining)
                   ) : null,
                 ),
                 h('div', { style: { textAlign: 'right', flexShrink: 0 } },
-                  h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: isLent ? '#fb7185' : '#2dd4bf' } }, (isLent ? '-' : '+') + this.fmtPKR(u.amount)),
-                  u.returned ? h('div', { style: { fontSize: 10, color: '#2dd4bf', fontWeight: 600 } }, '✓ Settled')
-                    : h('div', { className: 'mono', style: { fontSize: 10, color: '#64748b', marginTop: 1 } }, 'Bal: ' + this.fmtPKR(runBal)),
+                  h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: isLent ? '#c0392b' : '#0f6b4f' } }, (isLent ? '-' : '+') + this.fmtPKR(u.amount)),
+                  u.returned ? h('div', { style: { fontSize: 10, color: '#0f6b4f', fontWeight: 600 } }, '✓ Settled')
+                    : h('div', { className: 'mono', style: { fontSize: 10, color: '#8b978f', marginTop: 1 } }, 'Bal: ' + this.fmtPKR(runBal)),
                 ),
                 h('div', { style: { display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 } },
-                  !u.returned ? h('button', { onClick: (e) => { e.stopPropagation(); this.markUdpiReturned(u.id); }, title: 'Settle amount', style: { padding: '4px 7px', borderRadius: 6, background: '#14b8a622', color: '#2dd4bf', fontSize: 10, fontWeight: 700, border: 'none' } }, '₹') : null,
-                  h('button', { onClick: (e) => { e.stopPropagation(); this.openUdpiModal(u.id); }, title: 'Edit', style: { padding: '4px 7px', borderRadius: 6, background: '#334155', color: '#e2e8f0', fontSize: 10, fontWeight: 700, border: 'none' } }, '✎'),
-                  h('button', { onClick: (e) => { e.stopPropagation(); this.deleteUdpiEntry(u.id); }, title: 'Delete', style: { padding: '4px 7px', borderRadius: 6, background: '#f43f5e22', color: '#fb7185', fontSize: 10, fontWeight: 700, border: 'none' } }, '🗑'),
+                  !u.returned ? h('button', { onClick: (e) => { e.stopPropagation(); this.markUdpiReturned(u.id); }, title: 'Settle amount', style: { padding: '4px 7px', borderRadius: 6, background: '#e8f5e9', color: '#0f6b4f', fontSize: 10, fontWeight: 700, border: 'none' } }, '₹') : null,
+                  h('button', { onClick: (e) => { e.stopPropagation(); this.openUdpiModal(u.id); }, title: 'Edit', style: { padding: '4px 7px', borderRadius: 6, background: '#e6eae5', color: '#16211c', fontSize: 10, fontWeight: 700, border: 'none' } }, '✎'),
+                  h('button', { onClick: (e) => { e.stopPropagation(); this.deleteUdpiEntry(u.id); }, title: 'Delete', style: { padding: '4px 7px', borderRadius: 6, background: '#fef2f2', color: '#c0392b', fontSize: 10, fontWeight: 700, border: 'none' } }, '🗑'),
                 ),
               ),
               partials.length > 0 ? h('div', { style: { marginLeft: 46, paddingLeft: 10 } },
-                ...partials.map((pr, pi) => h('div', { key: 'pr' + pi, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', background: '#14b8a615', borderRadius: 8, borderLeft: '3px solid #14b8a6', fontSize: 11, marginBottom: 2 } },
-                  h('span', { style: { color: '#2dd4bf', fontWeight: 600 } }, '↩ ' + this.fmtPKR(pr.amount)),
-                  h('span', { style: { color: '#64748b' } }, ' · ' + new Date(pr.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short' })),
+                ...partials.map((pr, pi) => h('div', { key: 'pr' + pi, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', background: '#f0fdf4', borderRadius: 8, borderLeft: '3px solid #0f6b4f', fontSize: 11, marginBottom: 2 } },
+                  h('span', { style: { color: '#0f6b4f', fontWeight: 600 } }, '↩ ' + this.fmtPKR(pr.amount)),
+                  h('span', { style: { color: '#8b978f' } }, ' · ' + new Date(pr.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short' })),
                 ))
               ) : null,
               u.photo ? h('div', { style: { marginLeft: 46, marginBottom: 4 } },
-                h('img', { src: u.photo, onClick: () => window.open(u.photo, '_blank'), style: { width: 80, height: 60, borderRadius: 8, objectFit: 'cover', border: '1px solid #334155', cursor: 'pointer' } }),
+                h('img', { src: u.photo, onClick: () => window.open(u.photo, '_blank'), style: { width: 80, height: 60, borderRadius: 8, objectFit: 'cover', border: '1px solid #e6eae5', cursor: 'pointer' } }),
               ) : null,
             );
           }),
@@ -3662,14 +3779,14 @@ export default class App extends React.Component {
         if (personInvoices.length === 0) return null;
         return h('div', { style: { marginTop: 16 } },
           this.sectionHeader('Invoices / Bills', 'بلز'),
-          ...personInvoices.map(inv => h('div', { key: inv.id, onClick: () => this.setState({ invoiceView: inv.id }), style: { cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#1e293b', borderRadius: 12, border: '1px solid #334155', marginBottom: 4 } },
-            h('div', { style: { width: 32, height: 32, borderRadius: 8, background: '#3b82f622', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 } }, '📄'),
+          ...personInvoices.map(inv => h('div', { key: inv.id, onClick: () => this.setState({ invoiceView: inv.id }), style: { cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#fff', borderRadius: 12, border: '1px solid #e6eae5', marginBottom: 4 } },
+            h('div', { style: { width: 32, height: 32, borderRadius: 8, background: '#dbeafe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 } }, '📄'),
             h('div', { style: { flex: 1 } },
-              h('div', { style: { fontWeight: 700, fontSize: 13, color: '#e2e8f0' } }, inv.number),
-              h('div', { style: { fontSize: 11, color: '#64748b', marginTop: 2 } }, new Date(inv.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }) + ' · ' + inv.items.length + ' items'),
+              h('div', { style: { fontWeight: 700, fontSize: 13, color: '#16211c' } }, inv.number),
+              h('div', { style: { fontSize: 11, color: '#8b978f', marginTop: 2 } }, new Date(inv.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }) + ' · ' + inv.items.length + ' items'),
             ),
-            h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#e2e8f0' } }, this.fmtPKR(inv.total)),
-            h('div', { style: { color: '#475569', fontSize: 16 } }, '›'),
+            h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#16211c' } }, this.fmtPKR(inv.total)),
+            h('div', { style: { color: '#9aa69f', fontSize: 16 } }, '›'),
           )),
         );
       })(),
