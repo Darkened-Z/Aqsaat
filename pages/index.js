@@ -63,7 +63,7 @@ export default class App extends React.Component {
     reportAccounts: null,
     udharPerson: null,
     udharSearch: '',
-    udharSort: 'balance',
+    udharSort: 'recent',
     udharTab: 'parties',
     udharDateFrom: '',
     udharDateTo: '',
@@ -1754,7 +1754,8 @@ export default class App extends React.Component {
     const customers = this.activeCustomers();
     const rows = customers
       .filter(c => !q || c.name.toLowerCase().includes(q) || c.nameUr.includes(q) || c.phone.includes(q) || (c.area || '').toLowerCase().includes(q))
-      .map(c => ({ c, st: this.customerStats(c.id) }));
+      .map(c => ({ c, st: this.customerStats(c.id) }))
+      .sort((a, b) => (b.c.id || '').localeCompare(a.c.id || ''));
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 } },
         h('div', {}, h('div', { style: { fontSize: 14, color: '#7a7663' } }, customers.length + ' customers')),
@@ -1944,6 +1945,7 @@ export default class App extends React.Component {
     if (stockFilter === 'low') products = products.filter(p => (p.stock || 0) > 0 && (p.stock || 0) <= 5);
     else if (stockFilter === 'out') products = products.filter(p => (p.stock || 0) === 0);
     else if (stockFilter === 'in') products = products.filter(p => (p.stock || 0) > 0);
+    products.sort((a, b) => (b.id || '').localeCompare(a.id || ''));
     const totalStock = all.reduce((s, p) => s + (p.stock || 0), 0);
     const totalValue = all.reduce((s, p) => s + (p.stock || 0) * (p.costPrice || p.price || 0), 0);
     const lowCount = all.filter(p => (p.stock || 0) > 0 && (p.stock || 0) <= 5).length;
@@ -2498,6 +2500,29 @@ export default class App extends React.Component {
           h('button', { type: 'button', onClick: () => { const link = (typeof window !== 'undefined' ? window.location.origin : '') + '/portal'; if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => alert('Portal base link copied!\nپورٹل لنک کاپی ہو گیا')); else prompt('Copy this link:', link); }, style: { padding: '8px 14px', borderRadius: 8, background: '#0f6b4b', color: 'white', fontWeight: 600, fontSize: 12, flexShrink: 0, border: 'none', cursor: 'pointer' } }, '📋 Copy'),
         ),
         h('div', { style: { fontSize: 11, color: '#8b978f', marginTop: 8 } }, '💡 Each customer gets a unique link with their phone number. You can also share portal links from individual customer profiles.'),
+      ]),
+      h('div', { style: { height: 16 } }),
+      this.card([
+        h('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 4 } }, 'Quick Links'),
+        h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663', marginBottom: 12 } }, 'اہم لنکس'),
+        ...[
+          ['Aqsat App (Main)', 'اقساط ایپ', 'https://aqsaat.vercel.app', '📱'],
+          ['Udhar Book Portal', 'ادھار بک', 'https://udharbook-wheat.vercel.app', '📒'],
+          ['Customer Portal', 'کسٹمر پورٹل', (typeof window !== 'undefined' ? window.location.origin : '') + '/portal', '👤'],
+        ].map(([label, ur, url, icon]) =>
+          h('div', { key: label, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderTop: '1px solid #f2eee2' } },
+            h('div', { style: { fontSize: 20, width: 36, textAlign: 'center', flexShrink: 0 } }, icon),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 600, fontSize: 14 } }, label),
+              h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, ur),
+              h('div', { style: { fontSize: 11, color: '#8b978f', fontFamily: 'monospace', wordBreak: 'break-all', marginTop: 2 } }, url),
+            ),
+            h('div', { style: { display: 'flex', gap: 6, flexShrink: 0 } },
+              h('button', { type: 'button', onClick: () => { if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => alert('Link copied!\nلنک کاپی ہو گیا')); else prompt('Copy:', url); }, style: { padding: '6px 10px', borderRadius: 8, background: '#f4f1e6', color: '#3a4a3f', fontWeight: 600, fontSize: 11, border: 'none', cursor: 'pointer' } }, '📋'),
+              h('a', { href: url, target: '_blank', rel: 'noopener', style: { padding: '6px 10px', borderRadius: 8, background: '#eaf5ee', color: '#0f6b4b', fontWeight: 600, fontSize: 11, border: 'none', cursor: 'pointer', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '↗'),
+            ),
+          ),
+        ),
       ]),
       h('div', { style: { height: 16 } }),
       this.card([
@@ -3399,7 +3424,7 @@ export default class App extends React.Component {
 
     const parties = this._getUdharParties();
     const q = (this.state.udharSearch || '').toLowerCase();
-    const sort = this.state.udharSort || 'balance';
+    const sort = this.state.udharSort || 'recent';
     const filter = this.state.udharFilter || 'all';
     let filtered = q ? parties.filter(p => p.name.toLowerCase().includes(q)) : parties;
     if (filter === 'receivable') filtered = filtered.filter(p => p.balance > 0);
@@ -3410,6 +3435,7 @@ export default class App extends React.Component {
     if (sort === 'balance') filtered.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
     else if (sort === 'recent') filtered.sort((a, b) => (b.lastDate || '').localeCompare(a.lastDate || ''));
     else if (sort === 'name') filtered.sort((a, b) => a.name.localeCompare(b.name));
+    else filtered.sort((a, b) => { const rd = (b.lastDate || '').localeCompare(a.lastDate || ''); if (rd !== 0) return rd; return b.entries.length - a.entries.length; });
 
     const totalReceivable = parties.reduce((s, p) => s + Math.max(0, p.balance), 0);
     const totalPayable = parties.reduce((s, p) => s + Math.max(0, -p.balance), 0);
