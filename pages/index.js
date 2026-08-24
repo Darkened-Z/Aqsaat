@@ -494,6 +494,17 @@ export default class App extends React.Component {
     });
   };
 
+  deleteAllUdpiForPerson = (personName) => {
+    this.requirePin(() => {
+      const count = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase()).length;
+      if (!confirm('Delete ALL ' + count + ' entries for ' + personName + '?\nکیا آپ ' + personName + ' کے تمام ' + count + ' اندراجات حذف کرنا چاہتے ہیں؟\n\nThis cannot be undone!')) return;
+      const ids = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase()).map(u => u.id);
+      const udpiEntries = (this.state.udpiEntries || []).map(u => ids.includes(u.id) ? { ...u, _deleted: true } : u);
+      const ledger = (this.state.ledger || []).map(l => l.udpiRef && ids.includes(l.udpiRef) ? { ...l, _deleted: true } : l);
+      this.setState({ udpiEntries, ledger, udharPerson: null });
+    });
+  };
+
   toggleUdharPin = (name) => {
     const s = { ...(this.state.settings || {}) };
     const pins = [...(s.udharPins || [])];
@@ -1370,7 +1381,7 @@ export default class App extends React.Component {
           }
         });
       });
-      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId));
+      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId) && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
       const ledgerIncome = mLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
       const ledgerExpense = mLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
       const totalIncome = instCollected + downPayments + ledgerIncome;
@@ -1659,7 +1670,7 @@ export default class App extends React.Component {
         kpiCard('Outstanding',   'باقی رقم',     this.fmtPKR(totalOutstanding), plans.filter(p => p.status === 'active').length + ' active plans', 'neutral'),
       ),
       (() => {
-        const le = this.activeLedger();
+        const le = this.activeLedger().filter(x => !x.udpiRef && x.category !== 'Udhar' && x.category !== 'Udhar Return');
         const curMonth = this.todayStr().slice(0, 7);
         const mEntries = le.filter(x => x.date.startsWith(curMonth));
         const mInc = mEntries.filter(x => x.type === 'income').reduce((s, x) => s + x.amount, 0);
@@ -2730,8 +2741,9 @@ export default class App extends React.Component {
       list.forEach(le => { if (le.type === 'income') inc += le.amount; else exp += le.amount; });
       return { inc, exp, net: inc - exp };
     };
-    const allTime = totals(entries);
-    const thisMonth = totals(entries.filter(le => le.date.startsWith(curMonth)));
+    const noUdharEntries = entries.filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
+    const allTime = totals(noUdharEntries);
+    const thisMonth = totals(noUdharEntries.filter(le => le.date.startsWith(curMonth)));
 
     const allCats = this.ledgerCategories();
     const catMap = {};
@@ -3640,6 +3652,7 @@ export default class App extends React.Component {
         h('button', { onClick: () => this.copyStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none' } }, '📋 Statement'),
         h('button', { onClick: () => this.printUdharStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none' } }, '🖨 PDF'),
         h('button', { onClick: () => this.shareStatementWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e8f5e9', color: '#0f6b4f', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Share'),
+        h('button', { onClick: () => this.deleteAllUdpiForPerson(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#fef2f2', color: '#c0392b', fontWeight: 700, fontSize: 10, border: 'none' } }, '🗑 Delete All'),
         h('button', { onClick: () => this.setUdharReminder(personName), style: { padding: '5px 10px', borderRadius: 8, background: meta.reminderDate ? '#fef3c7' : '#e6eae5', color: meta.reminderDate ? '#b45309' : '#8b978f', fontWeight: 700, fontSize: 10, border: 'none' } }, meta.reminderDate ? '⏰ ' + meta.reminderDate : '⏰ Reminder'),
         h('button', { onClick: () => {
           const cats = ['business', 'personal', 'family'];
@@ -4203,17 +4216,15 @@ export default class App extends React.Component {
     const dateStr = this.state.dayBookDate || this.todayStr();
     const allTx = this._buildTxList();
     const dayTx = allTx.filter(tx => tx.date === dateStr && (allSelected || selIds.includes(tx.accountId)));
+    const dayTxNoUdhar = dayTx.filter(tx => tx.source !== 'udpi' && !(tx.source === 'ledger' && (tx.ledgerEntry.udpiRef || tx.ledgerEntry.category === 'Udhar' || tx.ledgerEntry.category === 'Udhar Return')));
     const dbs = this.state.dayBookSection || 'all';
-    const filteredDayTx = dbs === 'all' ? dayTx : dbs === 'expenses' ? dayTx.filter(tx => tx.source === 'ledger' && !tx.ledgerEntry.udpiRef && tx.ledgerEntry.category !== 'Udhar' && tx.ledgerEntry.category !== 'Udhar Return' && tx.ledgerEntry.category !== 'Product Cost' && tx.ledgerEntry.category !== 'Down Payment') : dbs === 'plans' ? dayTx.filter(tx => tx.source === 'plan' || (tx.source === 'ledger' && (tx.ledgerEntry.category === 'Product Cost' || tx.ledgerEntry.category === 'Down Payment'))) : dayTx.filter(tx => tx.source === 'udpi' || (tx.source === 'ledger' && (tx.ledgerEntry.udpiRef || tx.ledgerEntry.category === 'Udhar' || tx.ledgerEntry.category === 'Udhar Return')));
+    const filteredDayTx = dbs === 'all' ? dayTxNoUdhar : dbs === 'expenses' ? dayTxNoUdhar.filter(tx => tx.source === 'ledger' && tx.ledgerEntry.category !== 'Product Cost' && tx.ledgerEntry.category !== 'Down Payment') : dayTxNoUdhar.filter(tx => tx.source === 'plan' || (tx.source === 'ledger' && (tx.ledgerEntry.category === 'Product Cost' || tx.ledgerEntry.category === 'Down Payment')));
 
     let totalIn = 0, totalOut = 0;
     filteredDayTx.forEach(tx => {
       if (tx.source === 'plan') { totalIn += tx.amount; }
       else if (tx.source === 'ledger') {
         if (tx.ledgerEntry.type === 'income') totalIn += tx.amount;
-        else totalOut += tx.amount;
-      } else if (tx.source === 'udpi') {
-        if (tx.udpiEntry.direction === 'borrowed') totalIn += tx.amount;
         else totalOut += tx.amount;
       }
     });
@@ -4264,7 +4275,7 @@ export default class App extends React.Component {
         ),
       ),
       h('div', { style: { display: 'flex', gap: 4, marginBottom: 14 } },
-        ...[['All', 'سب', 'all', '📊'], ['Expenses', 'اخراجات', 'expenses', '💰'], ['Plans', 'قسطیں', 'plans', '📋'], ['Udhar', 'ادھار', 'udhar', '🤝']].map(([label, ur, val, icon]) =>
+        ...[['All', 'سب', 'all', '📊'], ['Expenses', 'اخراجات', 'expenses', '💰'], ['Plans', 'قسطیں', 'plans', '📋']].map(([label, ur, val, icon]) =>
           h('button', { key: val, onClick: () => this.setState({ dayBookSection: val }), style: { flex: 1, padding: '8px 4px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: dbs === val ? '#0f6b4b' : '#fdfcf8', color: dbs === val ? 'white' : '#3a4a3f', border: '1px solid ' + (dbs === val ? '#0f6b4b' : '#ece8dc'), textAlign: 'center' } },
             h('div', {}, icon + ' ' + label),
             h('div', { className: 'ur', style: { fontSize: 9, marginTop: 1, opacity: 0.8 } }, ur),
@@ -4323,7 +4334,7 @@ export default class App extends React.Component {
         });
       });
 
-      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId));
+      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId) && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
       const ledgerIncome = mLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
       const ledgerExpense = mLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
 
