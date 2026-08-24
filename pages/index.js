@@ -2616,6 +2616,15 @@ export default class App extends React.Component {
     return tx;
   }
 
+  _idTime(id) {
+    if (!id) return '';
+    const part = id.replace(/^[a-z]+_/, '');
+    const ms = parseInt(part, 36);
+    if (!isFinite(ms) || ms < 1e12) return '';
+    const d = new Date(ms);
+    return d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+
   _renderTxList(txList, accs, showAccount) {
     const h = this.h;
     if (txList.length === 0) return [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No transactions recorded yet.')];
@@ -2638,7 +2647,7 @@ export default class App extends React.Component {
           ),
           h('div', { style: { textAlign: 'right', flexShrink: 0 } },
             h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isInc ? '#0f6b4b' : '#b91c1c' } }, (isInc ? '+ ' : '- ') + this.fmtPKR(le.amount)),
-            h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(le.date)),
+            h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(le.date) + (this._idTime(le.id) ? ' · ' + this._idTime(le.id) : '')),
           ),
         );
       }
@@ -2655,7 +2664,7 @@ export default class App extends React.Component {
           ),
           h('div', { style: { textAlign: 'right', flexShrink: 0 } },
             h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isLent ? '#b91c1c' : '#3b82f6' } }, (isLent ? '- ' : '+ ') + this.fmtPKR(u.amount)),
-            h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(u.date)),
+            h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(u.date) + (this._idTime(u.id) ? ' · ' + this._idTime(u.id) : '')),
           ),
         );
       }
@@ -2669,7 +2678,7 @@ export default class App extends React.Component {
         ),
         h('div', { style: { textAlign: 'right', flexShrink: 0 } },
           h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: '#0f6b4b' } }, '+ ' + this.fmtPKR(tx.amount)),
-          h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(tx.date)),
+          h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(tx.date) + (this._idTime(tx.installment && tx.installment.id || tx.plan.id) ? ' · ' + this._idTime(tx.installment && tx.installment.id || tx.plan.id) : '')),
         ),
       );
     });
@@ -2863,7 +2872,7 @@ export default class App extends React.Component {
             ),
             h('div', { style: { textAlign: 'right', flexShrink: 0 } },
               h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isInc ? '#0f6b4b' : '#b91c1c' } }, (isInc ? '+ ' : '- ') + this.fmtPKR(le.amount)),
-              h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(le.date)),
+              h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(le.date) + (this._idTime(le.id) ? ' · ' + this._idTime(le.id) : '')),
             ),
             h('div', { style: { display: 'flex', gap: 4, flexShrink: 0 } },
               h('button', { onClick: e => { e.stopPropagation(); this.openLedgerModal(le.id); }, style: { padding: '4px 8px', borderRadius: 6, background: '#f4f1e6', fontSize: 11, fontWeight: 600 } }, '✏'),
@@ -3739,7 +3748,7 @@ export default class App extends React.Component {
                 h('div', { style: { flex: 1, minWidth: 0 } },
                   h('div', { style: { fontSize: 13, fontWeight: 600, color: '#16211c' } }, u.note || (isLent ? 'Gave / دیا' : 'Got / لیا')),
                   h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#8b978f', marginTop: 2, flexWrap: 'wrap' } },
-                    new Date(u.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }),
+                    new Date(u.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }) + (this._idTime(u.id) ? ' ' + this._idTime(u.id) : ''),
                     acc ? ' · ' + acc.emoji + ' ' + acc.name : '',
                     u.category ? h('span', { style: { fontSize: 9, fontWeight: 600, color: u.category === 'business' ? '#2563eb' : u.category === 'family' ? '#7c3aed' : u.category === 'emergency' ? '#b45309' : '#0891b2', background: u.category === 'business' ? '#dbeafe' : u.category === 'family' ? '#ede9fe' : u.category === 'emergency' ? '#fef3c7' : '#cffafe', padding: '1px 5px', borderRadius: 4 } }, u.category === 'business' ? '💼' : u.category === 'family' ? '👨‍👩‍👧' : u.category === 'emergency' ? '🚨' : '👤') : null,
                     u.photo ? h('span', { style: { fontSize: 9, fontWeight: 600, color: '#8b978f' } }, '📷') : null,
@@ -4172,7 +4181,7 @@ export default class App extends React.Component {
     const filteredDayTx = dbs === 'all' ? dayTx : dbs === 'expenses' ? dayTx.filter(tx => tx.source === 'ledger' && !tx.ledgerEntry.udpiRef && tx.ledgerEntry.category !== 'Udhar' && tx.ledgerEntry.category !== 'Udhar Return' && tx.ledgerEntry.category !== 'Product Cost' && tx.ledgerEntry.category !== 'Down Payment') : dbs === 'plans' ? dayTx.filter(tx => tx.source === 'plan' || (tx.source === 'ledger' && (tx.ledgerEntry.category === 'Product Cost' || tx.ledgerEntry.category === 'Down Payment'))) : dayTx.filter(tx => tx.source === 'udpi' || (tx.source === 'ledger' && (tx.ledgerEntry.udpiRef || tx.ledgerEntry.category === 'Udhar' || tx.ledgerEntry.category === 'Udhar Return')));
 
     let totalIn = 0, totalOut = 0;
-    dayTx.forEach(tx => {
+    filteredDayTx.forEach(tx => {
       if (tx.source === 'plan') { totalIn += tx.amount; }
       else if (tx.source === 'ledger') {
         if (tx.ledgerEntry.type === 'income') totalIn += tx.amount;
@@ -5295,6 +5304,7 @@ export default class App extends React.Component {
 
           {this.renderUdpiModal()}
           {this.renderInvoiceModal()}
+          {this.state.pinModal.open && this.renderPinModal()}
         </div>
       );
     }
