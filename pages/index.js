@@ -5226,7 +5226,7 @@ export default class App extends React.Component {
                 { key: 'activity', label: 'Activity' },
                 { key: 'reports',  label: 'Reports' },
               ].map(t => (
-                <button key={t.key} onClick={() => this.setState({ udharTab: t.key })} style={{ padding: '6px 13px', borderRadius: 16, fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', background: udharTab === t.key ? '#0f6b4f' : '#fff', color: udharTab === t.key ? '#fff' : '#3d4a44', border: udharTab === t.key ? 'none' : '1px solid #d8ded9', transition: 'all .15s' }}>{t.label}</button>
+                <button key={t.key} onClick={() => this.setState({ udharTab: t.key, udharPerson: null, invoiceView: null })} style={{ padding: '6px 13px', borderRadius: 16, fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', background: udharTab === t.key ? '#0f6b4f' : '#fff', color: udharTab === t.key ? '#fff' : '#3d4a44', border: udharTab === t.key ? 'none' : '1px solid #d8ded9', transition: 'all .15s' }}>{t.label}</button>
               ))}
             </div>
           </div>
@@ -5253,7 +5253,7 @@ export default class App extends React.Component {
                 { key: 'reports',  icon: '📊', label: 'Reports' },
                 { key: 'more',     icon: '⋯',  label: 'More' },
               ].map(item => (
-                <button key={item.key} onClick={() => item.key === 'more' ? this.go('dashboard') : this.setState({ udharTab: item.key })} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, border: 'none', cursor: 'pointer', background: 'transparent', color: udharTab === item.key ? '#0f6b4f' : '#9aa69f', transition: 'all .15s' }}>
+                <button key={item.key} onClick={() => item.key === 'more' ? this.go('dashboard') : this.setState({ udharTab: item.key, udharPerson: null, invoiceView: null })} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, border: 'none', cursor: 'pointer', background: 'transparent', color: udharTab === item.key ? '#0f6b4f' : '#9aa69f', transition: 'all .15s' }}>
                   <span style={{ fontSize: 17, lineHeight: 1 }}>{item.icon}</span>
                   <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1px' }}>{item.label}</span>
                 </button>
