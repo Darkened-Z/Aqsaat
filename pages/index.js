@@ -309,7 +309,7 @@ export default class App extends React.Component {
       return sum + (pl.schedule || []).filter(s => s.paid && s.accountId === accId)
         .reduce((a, s) => a + (s.amountPaid || s.amount || 0), 0);
     }, 0);
-    const ledgerNet = (this.state.ledger || []).filter(le => !le._deleted && le.accountId === accId)
+    const ledgerNet = (this.state.ledger || []).filter(le => !le._deleted && le.accountId === accId && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return')
       .reduce((sum, le) => sum + (le.type === 'income' ? le.amount : -le.amount), 0);
     const udpiNet = this.activeUdpiEntries().filter(u => u.accountId === accId)
       .reduce((sum, u) => {
@@ -2643,6 +2643,7 @@ export default class App extends React.Component {
       });
     });
     this.activeLedger().forEach(le => {
+      if (le.udpiRef || le.category === 'Udhar' || le.category === 'Udhar Return') return;
       tx.push({ source: 'ledger', accountId: le.accountId, amount: le.amount, date: le.date, ledgerEntry: le });
     });
     this.activeUdpiEntries().forEach(u => {
@@ -4456,7 +4457,7 @@ export default class App extends React.Component {
         ...accs.map(acc => {
           const bal = this.accountBalance(acc.id);
           const base = parseFloat(acc.balance) || 0;
-          const accLedger = this.activeLedger().filter(le => le.accountId === acc.id);
+          const accLedger = this.activeLedger().filter(le => le.accountId === acc.id && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
           const accIncome = accLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
           const accExpense = accLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
           const accUdpi = this.activeUdpiEntries().filter(u => u.accountId === acc.id && !u.returned);
