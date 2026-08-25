@@ -73,6 +73,9 @@ export default class App extends React.Component {
     waQR: null,
     waModal: false,
     waPolling: null,
+    waBotEnabled: false,
+    waBotLog: [],
+    waReminding: false,
     stockFilter: 'all',
     invoices: [],
     invoiceModal: { open: false, person: '', items: [{ desc: '', qty: 1, price: '' }], note: '', date: this.todayStr() },
@@ -786,8 +789,7 @@ export default class App extends React.Component {
     try {
       const resp = await fetch('/api/whatsapp-status');
       const data = await resp.json();
-      this.setState({ waStatus: data.status, waQR: data.qr || null });
-      if (data.status === 'ready') this.stopWAPolling();
+      this.setState({ waStatus: data.status, waQR: data.qr || null, waBotEnabled: data.botEnabled || false });
     } catch {}
   };
   startWAPolling = () => {
@@ -813,6 +815,30 @@ export default class App extends React.Component {
       this.setState({ waStatus: 'disconnected', waQR: null, waModal: false });
       this.stopWAPolling();
     } catch (err) { alert('Error: ' + err.message); }
+  };
+  toggleWABot = async () => {
+    try {
+      const resp = await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'bot-toggle', enabled: !this.state.waBotEnabled }) });
+      const data = await resp.json();
+      this.setState({ waBotEnabled: data.botEnabled });
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+  fetchBotLog = async () => {
+    try {
+      const resp = await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'bot-log' }) });
+      const data = await resp.json();
+      this.setState({ waBotLog: data.log || [] });
+    } catch {}
+  };
+  sendWAReminders = async () => {
+    if (!confirm('Send reminders to all overdue customers?\nتمام بقایا گاہکوں کو یاد دہانی بھیجیں؟')) return;
+    this.setState({ waReminding: true });
+    try {
+      const resp = await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send-reminders' }) });
+      const data = await resp.json();
+      alert('Sent: ' + (data.sent || 0) + ' | Failed: ' + (data.failed || 0) + '\nبھیجے: ' + (data.sent || 0) + ' | ناکام: ' + (data.failed || 0));
+    } catch (err) { alert('Error: ' + err.message); }
+    this.setState({ waReminding: false });
   };
   openInvoiceModal = (person) => {
     const items = [{ desc: '', qty: 1, price: '', productId: '' }];
@@ -5336,7 +5362,23 @@ export default class App extends React.Component {
                 this.h('div', { style: { fontSize: 11, color: '#8b978f', marginTop: 8 } }, 'WhatsApp → Linked Devices → Link'),
               ) : null,
               this.state.waStatus === 'disconnected' ? this.h('button', { onClick: () => this.connectWhatsApp(), style: { width: '100%', padding: '12px', borderRadius: 14, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 14, border: 'none', marginTop: 8, cursor: 'pointer' } }, 'Connect WhatsApp') : null,
-              this.state.waStatus === 'ready' ? this.h('button', { onClick: () => this.disconnectWhatsApp(), style: { width: '100%', padding: '10px', borderRadius: 12, background: '#fff', color: '#c0392b', fontWeight: 700, fontSize: 12, border: '1.5px solid #c0392b', marginTop: 8, cursor: 'pointer' } }, 'Disconnect') : null,
+              this.state.waStatus === 'ready' ? this.h('div', { style: { marginTop: 12, borderTop: '1px solid #e6eae5', paddingTop: 12, textAlign: 'left' } },
+                this.h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 } },
+                  this.h('div', {},
+                    this.h('div', { style: { fontSize: 13, fontWeight: 700, color: '#16211c' } }, 'Auto-Reply Bot'),
+                    this.h('div', { style: { fontSize: 11, color: '#8b978f' } }, 'خودکار جواب'),
+                  ),
+                  this.h('button', { onClick: () => this.toggleWABot(), style: { padding: '6px 14px', borderRadius: 8, fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer', background: this.state.waBotEnabled ? '#0f6b4f' : '#f4f6f3', color: this.state.waBotEnabled ? '#fff' : '#8b978f' } }, this.state.waBotEnabled ? 'ON' : 'OFF'),
+                ),
+                this.h('button', { onClick: () => this.sendWAReminders(), disabled: this.state.waReminding, style: { width: '100%', padding: '10px', borderRadius: 10, background: '#eaf5ee', color: '#0f6b4f', fontWeight: 700, fontSize: 13, border: '1px solid #d3e9dd', cursor: 'pointer', marginBottom: 8 } }, this.state.waReminding ? 'Sending...' : '📢 Send Reminders / یاد دہانی'),
+                this.h('button', { onClick: () => this.fetchBotLog(), style: { width: '100%', padding: '8px', borderRadius: 10, background: '#f4f6f3', color: '#3d4a44', fontWeight: 600, fontSize: 12, border: '1px solid #e6eae5', cursor: 'pointer', marginBottom: 8 } }, '📋 View Bot Log'),
+                this.state.waBotLog.length > 0 ? this.h('div', { style: { maxHeight: 150, overflowY: 'auto', fontSize: 11, color: '#3d4a44', background: '#f8faf7', borderRadius: 8, padding: 8, border: '1px solid #e6eae5' } },
+                  this.state.waBotLog.map(function(log, i) { return React.createElement('div', { key: i, style: { padding: '3px 0', borderBottom: i < 10 ? '1px solid #eef1ec' : 'none' } }, log.time + ' · ' + log.from + ' → ' + log.action); }),
+                ) : null,
+                this.h('div', { style: { marginTop: 10 } },
+                  this.h('button', { onClick: () => this.disconnectWhatsApp(), style: { width: '100%', padding: '10px', borderRadius: 12, background: '#fff', color: '#c0392b', fontWeight: 700, fontSize: 12, border: '1.5px solid #c0392b', cursor: 'pointer' } }, 'Disconnect'),
+                ),
+              ) : null,
             ),
           ) : null}
 
