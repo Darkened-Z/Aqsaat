@@ -3669,7 +3669,7 @@ export default class App extends React.Component {
     const avgAmount = totalEntries > 0 ? Math.round(entries.reduce((s, u) => s + u.amount, 0) / totalEntries) : 0;
     const firstDate = entries.length > 0 ? entries[entries.length - 1].date : null;
 
-    return h('div', { style: { width: '100%', background: '#f4f6f3', padding: '0 0 16px', minHeight: '100vh' } },
+    return h('div', { style: { width: '100%', background: '#f4f6f3', padding: '0 0 150px', minHeight: '100vh' } },
       h('div', { style: { background: 'linear-gradient(135deg, #eef1ec 0%, #f4f6f3 100%)', padding: '18px 18px 14px', borderBottom: '1px solid #e6eae5' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 0 } },
           h('button', { onClick: () => this.setState({ udharPerson: null }), style: { padding: '8px 12px', borderRadius: 10, background: '#e6eae5', fontWeight: 700, fontSize: 16, color: '#16211c' } }, '‹'),
