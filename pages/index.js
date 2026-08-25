@@ -1204,12 +1204,20 @@ export default class App extends React.Component {
     this.closeEditCustomer();
   };
   deleteCustomer = (id) => {
-    const used = this.activePlans().some(pl => pl.customerId === id && pl.status === 'active');
-    if (used) { alert('This customer has active plans and cannot be deleted.\nاس گاہک کے فعال پلانز ہیں اور اسے ڈیلیٹ نہیں کیا جا سکتا۔'); return; }
-    if (!confirm('Delete this customer?\nکیا آپ یہ گاہک ڈیلیٹ کرنا چاہتے ہیں؟')) return;
-    this.setState({ customers: this.state.customers.map(c => c.id === id ? { ...c, _deleted: true } : c) });
-    this.closeEditCustomer();
-    this.go('customers');
+    this.requirePin(() => {
+      const c = this.state.customers.find(x => x.id === id);
+      const plans = this.activePlans().filter(pl => pl.customerId === id);
+      const activePlans = plans.filter(pl => pl.status === 'active');
+      const msg = activePlans.length > 0
+        ? 'WARNING: ' + (c ? c.name : 'Customer') + ' has ' + activePlans.length + ' active plan(s)!\nDelete customer AND all their ' + plans.length + ' plan(s)?\n\nخبردار: ' + activePlans.length + ' فعال پلان ہیں!\nگاہک اور تمام ' + plans.length + ' پلان حذف کریں؟'
+        : 'Delete ' + (c ? c.name : 'this customer') + '?\nکیا آپ ' + (c ? c.name : 'یہ گاہک') + ' ڈیلیٹ کرنا چاہتے ہیں؟';
+      if (!confirm(msg)) return;
+      const customers = this.state.customers.map(x => x.id === id ? { ...x, _deleted: true } : x);
+      const updatedPlans = (this.state.plans || []).map(pl => pl.customerId === id ? { ...pl, _deleted: true } : pl);
+      this.setState({ customers, plans: updatedPlans });
+      this.closeEditCustomer();
+      this.go('customers');
+    });
   };
 
   waLink = (phone, name, amount, dueDate) => {
@@ -1618,11 +1626,18 @@ export default class App extends React.Component {
     this.closeEditProduct();
   };
   deleteProduct = (id) => {
-    const used = this.activePlans().some(pl => pl.productId === id && pl.status === 'active');
-    if (used) { alert('This product is used in active plans and cannot be deleted.\nیہ پروڈکٹ فعال پلانز میں استعمال ہو رہی ہے۔'); return; }
-    if (!confirm('Delete this product?\nکیا آپ یہ پروڈکٹ ڈیلیٹ کرنا چاہتے ہیں؟')) return;
-    this.setState({ products: this.state.products.map(p => p.id === id ? { ...p, _deleted: true } : p) });
-    this.closeEditProduct();
+    this.requirePin(() => {
+      const p = this.state.products.find(x => x.id === id);
+      const plans = this.activePlans().filter(pl => pl.productId === id);
+      const msg = plans.length > 0
+        ? 'WARNING: ' + (p ? p.name : 'Product') + ' is used in ' + plans.length + ' plan(s)!\nDelete product AND all plans?\n\nخبردار: ' + plans.length + ' پلان میں استعمال ہو رہی ہے!'
+        : 'Delete ' + (p ? p.name : 'this product') + '?\nکیا آپ ' + (p ? p.name : 'یہ پروڈکٹ') + ' ڈیلیٹ کرنا چاہتے ہیں؟';
+      if (!confirm(msg)) return;
+      const products = this.state.products.map(x => x.id === id ? { ...x, _deleted: true } : x);
+      const updatedPlans = plans.length > 0 ? (this.state.plans || []).map(pl => pl.productId === id ? { ...pl, _deleted: true } : pl) : this.state.plans;
+      this.setState({ products, plans: updatedPlans });
+      this.closeEditProduct();
+    });
   };
 
   // ─── helpers ───
@@ -1850,8 +1865,9 @@ export default class App extends React.Component {
               h('span', {}, '📅 Joined ' + this.fmtDate(c.joined)),
             ),
           ),
-          h('div', { style: { display: 'flex', gap: 8 } },
+          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
             h('button', { onClick: () => this.openEditCustomer(c.id), style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '✎ Edit'),
+            h('button', { onClick: () => this.deleteCustomer(c.id), style: { background: '#fdecea', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#a4362b' } }, '🗑 Delete'),
             nextInst ? h('a', { href: this.waLink(c.phone, c.name, nextInst.amount, nextInst.dueDate), target: '_blank', rel: 'noopener', style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 Manual') : null,
             nextInst && c.phone ? h('button', { onClick: () => { const pl = st.plans[0]; const pr = this.state.products.find(x => x.id === pl.productId); this.sendInstallmentReminder(c, pl, pr, nextInst); }, style: { background: '#0f6b4b', color: 'white', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '🤖 Auto Send') : null,
             h('button', { onClick: () => this.go('newplan'), style: { background: '#0f6b4b', color: 'white', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '＋ New Plan'),
@@ -3593,13 +3609,14 @@ export default class App extends React.Component {
                   daysLabel || (p.entries.length + (p.entries.length === 1 ? ' entry' : ' entries')),
                 ),
               ),
-              h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+              h('div', { style: { textAlign: 'right', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 } },
                 p.balance !== 0
                   ? h('div', {},
                       h('div', { style: { fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: isReceivable ? '#c0392b' : '#0f6b4f' } }, this.fmtPKR(Math.abs(p.balance))),
                       h('div', { style: { fontSize: 11, fontWeight: 600, color: '#9aa69f', marginTop: 2 } }, isReceivable ? 'you gave' : 'you got'),
                     )
                   : h('div', { style: { fontSize: 13, fontWeight: 600, color: '#0f6b4f' } }, '✓ Clear'),
+                h('button', { onClick: (e) => { e.stopPropagation(); this.deleteAllUdpiForPerson(p.name); }, style: { padding: '6px', borderRadius: 8, background: '#fef2f2', color: '#c0392b', border: 'none', cursor: 'pointer', fontSize: 12, lineHeight: 1, flexShrink: 0 } }, '✕'),
               ),
             );
           }),
