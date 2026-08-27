@@ -3,6 +3,99 @@ import Head from 'next/head';
 import { supabase, SHOP_ID } from '../lib/supabase';
 
 export default class App extends React.Component {
+  _isDemo = false;
+
+  _generateDemoData() {
+    const now = Date.now();
+    const id = (prefix, i) => prefix + '_' + (now - i * 86400000).toString(36);
+    const d = (daysAgo) => { const dt = new Date(now - daysAgo * 86400000); return dt.toISOString().split('T')[0]; };
+
+    const customers = [
+      { id: id('c', 0), name: 'Ahmed Khan', nameUr: 'احمد خان', phone: '03001234567', cnic: '33100-1234567-1', address: 'Main Bazaar, Jhang', city: 'Jhang' },
+      { id: id('c', 1), name: 'Bilal Hussain', nameUr: 'بلال حسین', phone: '03019876543', cnic: '33100-7654321-2', address: 'Mohalla Qadirabad', city: 'Chiniot' },
+      { id: id('c', 2), name: 'Farhan Ali', nameUr: 'فرحان علی', phone: '03211112222', cnic: '33100-1112222-3', address: 'Faisalabad Road', city: 'Shorkot' },
+      { id: id('c', 3), name: 'Hamza Tariq', nameUr: 'حمزہ طارق', phone: '03331234000', cnic: '33100-3334444-4', address: 'College Road', city: 'Sargodha' },
+      { id: id('c', 4), name: 'Imran Mazari', nameUr: 'عمران مزاری', phone: '03451112233', cnic: '33100-5556666-5', address: 'GT Road', city: 'Sahiwal' },
+      { id: id('c', 5), name: 'Kashif Sial', nameUr: 'کاشف سیال', phone: '03009991111', cnic: '33100-9991111-6', address: 'Tehsil Bazar', city: 'Jhang' },
+      { id: id('c', 6), name: 'Nasir Bhatti', nameUr: 'ناصر بھٹی', phone: '03167778888', cnic: '33100-7778888-7', address: 'Chowk Bazaar', city: 'Chiniot' },
+      { id: id('c', 7), name: 'Rizwan Chattha', nameUr: 'رضوان چٹھا', phone: '03027773333', cnic: '33100-2224444-8', address: 'Railway Road', city: 'Shorkot' },
+    ];
+
+    const products = [
+      { id: id('p', 0), name: 'Samsung Galaxy A15', nameUr: 'سیمسنگ A15', category: 'Mobile', price: 42000, costPrice: 36000, stock: 5, emoji: '📱' },
+      { id: id('p', 1), name: 'Infinix Hot 50', nameUr: 'انفنکس ہاٹ 50', category: 'Mobile', price: 35000, costPrice: 29000, stock: 8, emoji: '📱' },
+      { id: id('p', 2), name: 'Honda CD 70', nameUr: 'ہونڈا CD 70', category: 'Bike', price: 155000, costPrice: 140000, stock: 3, emoji: '🏍️' },
+      { id: id('p', 3), name: 'Oppo A60', nameUr: 'اوپو A60', category: 'Mobile', price: 48000, costPrice: 41000, stock: 4, emoji: '📱' },
+      { id: id('p', 4), name: 'Dawlance Fridge 9178', nameUr: 'ڈالنس فریج', category: 'Appliance', price: 85000, costPrice: 72000, stock: 2, emoji: '🧊' },
+      { id: id('p', 5), name: 'Vivo Y28', nameUr: 'ویوو Y28', category: 'Mobile', price: 52000, costPrice: 44000, stock: 6, emoji: '📱' },
+      { id: id('p', 6), name: 'United 125cc', nameUr: 'یونائیٹڈ 125', category: 'Bike', price: 195000, costPrice: 175000, stock: 2, emoji: '🏍️' },
+    ];
+
+    const plans = [];
+    const pairings = [
+      [0, 0, 42000, 10000, 6], [1, 1, 38000, 8000, 6], [2, 2, 165000, 40000, 12],
+      [3, 3, 50000, 12000, 6], [4, 4, 95000, 20000, 10], [5, 5, 55000, 15000, 8],
+      [6, 6, 210000, 50000, 12], [7, 0, 42000, 10000, 6],
+    ];
+    pairings.forEach(function(pair, idx) {
+      var ci = pair[0], pi = pair[1], total = pair[2], dp = pair[3], months = pair[4];
+      var remaining = total - dp;
+      var inst = Math.ceil(remaining / months);
+      var schedule = [];
+      for (var m = 1; m <= months; m++) {
+        var due = d(60 - m * 30);
+        var isPaid = m <= Math.floor(months * 0.4 + idx * 0.3);
+        schedule.push({ month: m, dueDate: due, amount: inst, paid: isPaid ? inst : 0, paidDate: isPaid ? due : null, status: isPaid ? 'paid' : (due < d(0) ? 'overdue' : 'upcoming') });
+      }
+      plans.push({
+        id: id('pl', idx), customerId: customers[ci].id, productId: products[pi].id,
+        totalPrice: total, downPayment: dp, months: months, installmentAmount: inst,
+        startDate: d(60), status: 'active', schedule: schedule, accountId: 'acc_cash',
+      });
+    });
+
+    var udpiEntries = [];
+    var udharPeople = ['Usman Lohar', 'Tahir Mazari', 'Sajjad Oil Depot', 'Khalid Electrician', 'Waqas Tailor', 'Amjad Karyana'];
+    var directions = ['lent', 'lent', 'borrowed', 'lent', 'borrowed', 'lent'];
+    var amounts = [15000, 8000, 25000, 12000, 5000, 32000];
+    udharPeople.forEach(function(person, i) {
+      udpiEntries.push({
+        id: id('udpi', i), person: person, direction: directions[i], amount: amounts[i],
+        date: d(i * 3 + 1), accountId: 'acc_cash', note: '', returned: false, returnedAmount: 0,
+      });
+      if (i < 3) {
+        udpiEntries.push({
+          id: id('udpi', 20 + i), person: person, direction: directions[i] === 'lent' ? 'borrowed' : 'lent',
+          amount: Math.floor(amounts[i] * 0.3), date: d(i), accountId: 'acc_cash', note: 'Partial return', returned: false, returnedAmount: 0,
+        });
+      }
+    });
+
+    var ledger = [];
+    var expenses = [
+      ['Shop Rent', 'rent', 25000], ['Electricity Bill', 'utility', 4500], ['Staff Salary', 'salary', 35000],
+      ['Transport', 'transport', 3000], ['Tea & Misc', 'misc', 2000],
+    ];
+    expenses.forEach(function(exp, i) {
+      ledger.push({ id: id('le', i), type: 'expense', amount: exp[2], category: exp[1], accountId: 'acc_cash', date: d(i * 2), note: exp[0] });
+    });
+    ledger.push({ id: id('le', 10), type: 'income', amount: 50000, category: 'sales', accountId: 'acc_cash', date: d(1), note: 'Cash sales' });
+    ledger.push({ id: id('le', 11), type: 'income', amount: 18000, category: 'collection', accountId: 'acc_ep', date: d(0), note: 'EasyPaisa collection' });
+
+    return {
+      customers: customers, products: products, plans: plans, udpiEntries: udpiEntries, ledger: ledger, invoices: [], staff: [],
+      settings: {
+        businessName: 'Sadar Electronics', shopName: 'Sadar Electronics', ownerName: 'Rehan Malik', city: 'Jhang',
+        graceDays: 3, lateFeeFlat: 500, lateFeePerDay: 0, maxLateFee: 2000,
+        accounts: [
+          { id: 'acc_cash', name: 'Cash in Hand', nameUr: 'نقد', emoji: '💵', balance: 50000 },
+          { id: 'acc_ep', name: 'EasyPaisa', nameUr: 'ایزی پیسہ', emoji: '📱', balance: 18000 },
+          { id: 'acc_bank', name: 'Bank', nameUr: 'بینک', emoji: '🏦', balance: 0 },
+        ],
+      },
+    };
+  }
+
   state = {
     route: 'dashboard',
     routeParams: {},
@@ -89,6 +182,15 @@ export default class App extends React.Component {
 
   componentDidMount() {
     if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('demo') === 'true') {
+      this._isDemo = true;
+      const demo = this._generateDemoData();
+      this.setState({ ...demo, pinLocked: false, syncStatus: 'synced', route: 'dashboard' });
+      return;
+    }
+
     // Wipe old demo seed data
     try {
       const old = localStorage.getItem('aqsat_data');
@@ -113,7 +215,7 @@ export default class App extends React.Component {
   }
 
   componentDidUpdate(_, prev) {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || this._isDemo) return;
     const { customers, products, plans, settings, ledger, udpiEntries, invoices, staff } = this.state;
     if (!customers) return;
     if (this._fromCloud) { this._fromCloud = false; return; }
@@ -5284,16 +5386,20 @@ export default class App extends React.Component {
             <meta name="theme-color" content="#0f6b4f" />
           </Head>
 
+          {this._isDemo && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: 'linear-gradient(90deg, #0f6b4f, #14a374)', color: '#fff', textAlign: 'center', padding: '6px 12px', fontSize: 12, fontWeight: 700, letterSpacing: '.5px' }}>
+            DEMO MODE — Sample data · <a href="https://wa.me/923001234567?text=I%20want%20Udhar%20Book" style={{ color: '#fef3c7', textDecoration: 'underline' }}>Get Started →</a>
+          </div>}
+
           {/* Green Header */}
           <div style={{ background: '#0f6b4f', color: '#fff', position: 'sticky', top: 0, zIndex: 40 }}>
-            <div style={{ maxWidth: 900, margin: '0 auto', padding: '14px 16px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 11, overflow: 'hidden', background: 'rgba(255,255,255,.16)', flexShrink: 0 }}>
+            <div style={{ maxWidth: 900, margin: '0 auto', padding: '10px 14px 12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.16)', flexShrink: 0 }}>
                   <img src="/pfp.jpeg" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 16.5, fontWeight: 700, letterSpacing: '-0.2px' }}>{this.state.settings.businessName || 'Udhar Book'}</div>
-                  <div style={{ fontSize: 12, opacity: .72, fontWeight: 500 }}>Hisaab Kitaab</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.2px' }}>{this.state.settings.businessName || 'Udhar Book'}</div>
+                  <div style={{ fontSize: 10.5, opacity: .72, fontWeight: 500 }}>Hisaab Kitaab</div>
                 </div>
                 <button onClick={() => { if (this.state.waStatus === 'ready') this.setState({ waModal: true }); else this.connectWhatsApp(); }} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 16, background: 'rgba(255,255,255,.16)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 12, fontWeight: 600 }}>
                   <div style={{ width: 7, height: 7, borderRadius: '50%', background: this.state.waStatus === 'ready' ? '#4ade80' : '#fbbf24' }} />
@@ -5301,52 +5407,52 @@ export default class App extends React.Component {
                 </button>
                 <button onClick={() => this.go('dashboard')} style={{ padding: '6px 12px', borderRadius: 16, background: 'rgba(255,255,255,.16)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 12, fontWeight: 600 }}>← Aqsat</button>
               </div>
-              <div style={{ display: 'flex', marginTop: 16, background: 'rgba(255,255,255,.12)', borderRadius: 14, overflow: 'hidden' }}>
-                <div style={{ flex: 1, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, opacity: .72, letterSpacing: '.3px' }}>YOU WILL GET</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{this.fmtPKR(ubReceivable)}</div>
+              <div style={{ display: 'flex', marginTop: 10, background: 'rgba(255,255,255,.12)', borderRadius: 11, overflow: 'hidden' }}>
+                <div style={{ flex: 1, padding: '8px 12px' }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 600, opacity: .72, letterSpacing: '.3px' }}>YOU WILL GET</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{this.fmtPKR(ubReceivable)}</div>
                 </div>
                 <div style={{ width: 1, background: 'rgba(255,255,255,.18)' }} />
-                <div style={{ flex: 1, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, opacity: .72, letterSpacing: '.3px' }}>YOU WILL GIVE</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{this.fmtPKR(ubPayable)}</div>
+                <div style={{ flex: 1, padding: '8px 12px' }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 600, opacity: .72, letterSpacing: '.3px' }}>YOU WILL GIVE</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{this.fmtPKR(ubPayable)}</div>
                 </div>
               </div>
-              <div style={{ marginTop: 8, background: 'rgba(255,255,255,.18)', borderRadius: 12, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 12, fontWeight: 600, opacity: .82 }}>NET BALANCE / بقایا</div>
-                <div style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: ubNet >= 0 ? '#4ade80' : '#fca5a5' }}>{ubNet >= 0 ? '+' : '-'} {this.fmtPKR(Math.abs(ubNet))}</div>
+              <div style={{ marginTop: 6, background: 'rgba(255,255,255,.18)', borderRadius: 10, padding: '7px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, opacity: .82 }}>NET BALANCE / بقایا</div>
+                <div style={{ fontSize: 16, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: ubNet >= 0 ? '#4ade80' : '#fca5a5' }}>{ubNet >= 0 ? '+' : '-'} {this.fmtPKR(Math.abs(ubNet))}</div>
               </div>
             </div>
           </div>
 
           {/* Tab Chips */}
-          <div style={{ display: 'flex', gap: 8, padding: '12px 16px 10px', background: '#fff', borderBottom: '1px solid #e6eae5', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6, padding: '8px 14px 7px', background: '#fff', borderBottom: '1px solid #e6eae5', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', display: 'flex', gap: 6 }}>
               {[
                 { key: 'parties',  label: 'Khata' },
                 { key: 'activity', label: 'Activity' },
                 { key: 'reports',  label: 'Reports' },
               ].map(t => (
-                <button key={t.key} onClick={() => this.setState({ udharTab: t.key, udharPerson: null, invoiceView: null })} style={{ padding: '6px 13px', borderRadius: 16, fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', background: udharTab === t.key ? '#0f6b4f' : '#fff', color: udharTab === t.key ? '#fff' : '#3d4a44', border: udharTab === t.key ? 'none' : '1px solid #d8ded9', transition: 'all .15s' }}>{t.label}</button>
+                <button key={t.key} onClick={() => this.setState({ udharTab: t.key, udharPerson: null, invoiceView: null })} style={{ padding: '5px 11px', borderRadius: 14, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', background: udharTab === t.key ? '#0f6b4f' : '#fff', color: udharTab === t.key ? '#fff' : '#3d4a44', border: udharTab === t.key ? 'none' : '1px solid #d8ded9', transition: 'all .15s' }}>{t.label}</button>
               ))}
             </div>
           </div>
 
           {/* Main Content */}
-          <div style={{ flex: 1, maxWidth: 900, margin: '0 auto', width: '100%', background: '#fff' }}>
+          <div style={{ flex: 1, maxWidth: 900, margin: '0 auto', width: '100%', background: '#fff', zoom: 0.82 }}>
             {this.renderUdharBook()}
           </div>
 
           {/* Floating Action Buttons */}
-          <div style={{ position: 'fixed', bottom: 66, left: 0, right: 0, zIndex: 25, background: 'linear-gradient(180deg, rgba(255,255,255,0), #fff 40%)' }}>
-            <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', gap: 10, padding: '12px 16px' }}>
-              <button onClick={() => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }} style={{ flex: 1, height: 50, borderRadius: 14, background: '#c0392b', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 6px 16px rgba(192,57,43,.28)' }}>＋ Udhaar</button>
-              <button onClick={() => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }} style={{ flex: 1, height: 50, borderRadius: 14, background: '#0f6b4f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 6px 16px rgba(15,107,79,.28)' }}>＋ Payment</button>
+          <div style={{ position: 'fixed', bottom: 52, left: 0, right: 0, zIndex: 25, background: 'linear-gradient(180deg, rgba(255,255,255,0), #fff 40%)' }}>
+            <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', gap: 8, padding: '8px 14px' }}>
+              <button onClick={() => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }} style={{ flex: 1, height: 40, borderRadius: 11, background: '#c0392b', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(192,57,43,.28)' }}>＋ Udhaar</button>
+              <button onClick={() => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }} style={{ flex: 1, height: 40, borderRadius: 11, background: '#0f6b4f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(15,107,79,.28)' }}>＋ Payment</button>
             </div>
           </div>
 
           {/* Bottom Tab Bar */}
-          <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 66, background: '#fff', borderTop: '1px solid #e6eae5', display: 'flex', alignItems: 'stretch', paddingBottom: 6, zIndex: 30 }}>
+          <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 52, background: '#fff', borderTop: '1px solid #e6eae5', display: 'flex', alignItems: 'stretch', paddingBottom: 4, zIndex: 30 }}>
             <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', display: 'flex', alignItems: 'stretch' }}>
               {[
                 { key: 'parties',  icon: '📒', label: 'Khata' },
@@ -5354,9 +5460,9 @@ export default class App extends React.Component {
                 { key: 'reports',  icon: '📊', label: 'Reports' },
                 { key: 'more',     icon: '⋯',  label: 'More' },
               ].map(item => (
-                <button key={item.key} onClick={() => item.key === 'more' ? this.go('dashboard') : this.setState({ udharTab: item.key, udharPerson: null, invoiceView: null })} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, border: 'none', cursor: 'pointer', background: 'transparent', color: udharTab === item.key ? '#0f6b4f' : '#9aa69f', transition: 'all .15s' }}>
-                  <span style={{ fontSize: 17, lineHeight: 1 }}>{item.icon}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1px' }}>{item.label}</span>
+                <button key={item.key} onClick={() => item.key === 'more' ? this.go('dashboard') : this.setState({ udharTab: item.key, udharPerson: null, invoiceView: null })} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, border: 'none', cursor: 'pointer', background: 'transparent', color: udharTab === item.key ? '#0f6b4f' : '#9aa69f', transition: 'all .15s' }}>
+                  <span style={{ fontSize: 14, lineHeight: 1 }}>{item.icon}</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.1px' }}>{item.label}</span>
                 </button>
               ))}
             </div>
@@ -5412,6 +5518,10 @@ export default class App extends React.Component {
           <title>Aqsat — Installment Manager</title>
           <meta name="description" content="Installment management for electronics & appliance shops" />
         </Head>
+
+        {this._isDemo && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: 'linear-gradient(90deg, #0f6b4f, #14a374)', color: '#fff', textAlign: 'center', padding: '6px 12px', fontSize: 12, fontWeight: 700, letterSpacing: '.5px' }}>
+          DEMO MODE — Sample data shown · <a href="https://wa.me/923001234567?text=I%20want%20Aqsat%20Manager" style={{ color: '#fef3c7', textDecoration: 'underline' }}>Get Started →</a>
+        </div>}
 
         {/* Sidebar desktop */}
         <aside className="desktop-only" style={{ width: 244, flexShrink: 0, background: '#ffffff', borderRight: '1px solid #ece8dc', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 4, position: 'sticky', top: 0, height: '100vh', overflowY: 'auto' }}>
