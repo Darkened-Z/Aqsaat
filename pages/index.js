@@ -202,7 +202,6 @@ export default class App extends React.Component {
 
     const dm  = localStorage.getItem('aqsat_dark') === '1';
     const pin = localStorage.getItem('aqsat_pin') || '';
-    const hostname = window.location.hostname;
     const forceUdhar = hostname.includes('udhar') || hostname.includes('hisaab') || window.location.hash === '#udharbook';
     this.setState({ darkMode: dm, savedPin: pin, pinLocked: forceUdhar ? false : !!pin, ...(forceUdhar ? { route: 'udharbook' } : {}) }, () => {
       this.initSupabaseSync();
