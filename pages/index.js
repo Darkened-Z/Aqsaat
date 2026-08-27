@@ -183,8 +183,8 @@ export default class App extends React.Component {
   componentDidMount() {
     if (typeof window === 'undefined') return;
 
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('demo') === 'true') {
+    const hostname = window.location.hostname;
+    if (hostname.includes('demo')) {
       this._isDemo = true;
       const demo = this._generateDemoData();
       this.setState({ ...demo, pinLocked: false, syncStatus: 'synced', route: 'dashboard' });
