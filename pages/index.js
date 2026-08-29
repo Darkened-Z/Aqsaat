@@ -407,20 +407,26 @@ export default class App extends React.Component {
   activePlans() { return (this.state.plans || []).filter(p => !p._deleted); }
   getAccounts() { return (this.state.settings.accounts || []).filter(a => !a._deleted); }
   accountBalance(accId) {
+    return this.accExpenseBal(accId) + this.accPlanBal(accId) + this.accUdharBal(accId);
+  }
+  accExpenseBal(accId) {
     const acc = this.getAccounts().find(a => a.id === accId);
     const base = acc ? (parseFloat(acc.balance) || 0) : 0;
-    const payments = this.activePlans().reduce((sum, pl) => {
+    return base + (this.state.ledger || []).filter(le => !le._deleted && le.accountId === accId && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return')
+      .reduce((sum, le) => sum + (le.type === 'income' ? le.amount : -le.amount), 0);
+  }
+  accPlanBal(accId) {
+    return this.activePlans().reduce((sum, pl) => {
       return sum + (pl.schedule || []).filter(s => s.paid && s.accountId === accId)
         .reduce((a, s) => a + (s.amountPaid || s.amount || 0), 0);
     }, 0);
-    const ledgerNet = (this.state.ledger || []).filter(le => !le._deleted && le.accountId === accId && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return')
-      .reduce((sum, le) => sum + (le.type === 'income' ? le.amount : -le.amount), 0);
-    const udpiNet = this.activeUdpiEntries().filter(u => u.accountId === accId)
+  }
+  accUdharBal(accId) {
+    return this.activeUdpiEntries().filter(u => u.accountId === accId)
       .reduce((sum, u) => {
         if (u.returned) return sum;
         return sum + (u.direction === 'borrowed' ? u.amount : -u.amount);
       }, 0);
-    return base + payments + ledgerNet + udpiNet;
   }
   activeLedger() { return (this.state.ledger || []).filter(le => !le._deleted); }
   ledgerCategories() {
@@ -2272,7 +2278,7 @@ export default class App extends React.Component {
                   accs.map(acc => { const active = np.accountId === acc.id; return h('button', { type: 'button', key: acc.id, onClick: () => set('accountId', acc.id), style: { padding: '10px 8px', borderRadius: 10, border: '1px solid ' + (active ? '#0f6b4b' : '#ece8dc'), background: active ? '#eaf5ee' : '#fdfcf8', fontSize: 12, fontWeight: 600, color: active ? '#0f6b4b' : '#3a4a3f', textAlign: 'center' } },
                     h('div', { style: { fontSize: 18, marginBottom: 4 } }, acc.emoji),
                     h('div', {}, acc.name),
-                    h('div', { className: 'mono', style: { fontSize: 11, color: '#7a7663', marginTop: 2 } }, this.fmtPKR(this.accountBalance(acc.id))),
+                    h('div', { className: 'mono', style: { fontSize: 11, color: '#7a7663', marginTop: 2 } }, '📋 ' + this.fmtPKR(this.accPlanBal(acc.id))),
                   ); }),
                 )
               : h('div', { style: { fontSize: 13, color: '#7a7663' } }, 'No accounts configured. Add in Settings.');
@@ -2598,7 +2604,11 @@ export default class App extends React.Component {
             h('div', { style: { flex: 1, minWidth: 0 } },
               h('div', { style: { fontWeight: 600, fontSize: 14 } }, acc.name),
               acc.nameUr ? h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, acc.nameUr) : null,
-              h('div', { className: 'mono', style: { fontSize: 12, color: '#0f6b4b', fontWeight: 600, marginTop: 2 } }, 'Balance: ' + this.fmtPKR(this.accountBalance(acc.id))),
+              h('div', { style: { display: 'flex', gap: 8, marginTop: 2, fontSize: 10, fontWeight: 600 } },
+                h('span', { className: 'mono', style: { color: this.accExpenseBal(acc.id) >= 0 ? '#0f6b4b' : '#b91c1c' } }, '💰 ' + this.fmtPKR(this.accExpenseBal(acc.id))),
+                h('span', { className: 'mono', style: { color: '#0f6b4b' } }, '📋 ' + this.fmtPKR(this.accPlanBal(acc.id))),
+                h('span', { className: 'mono', style: { color: this.accUdharBal(acc.id) >= 0 ? '#3b82f6' : '#b91c1c' } }, '🤝 ' + this.fmtPKR(this.accUdharBal(acc.id))),
+              ),
             ),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 } },
               h('span', { style: { fontSize: 11, color: '#7a7663' } }, 'Base:'),
@@ -3219,7 +3229,7 @@ export default class App extends React.Component {
             ...accs.map(acc => h('button', { key: acc.id, onClick: () => setM('accountId', acc.id), style: { padding: '10px 8px', borderRadius: 10, fontSize: 12, fontWeight: 600, textAlign: 'center', background: m.accountId === acc.id ? '#eaf5ee' : '#f4f1e6', color: m.accountId === acc.id ? '#0f6b4b' : '#3a4a3f', border: '1.5px solid ' + (m.accountId === acc.id ? '#0f6b4b' : '#ece8dc') } },
               h('div', { style: { fontSize: 18, marginBottom: 2 } }, acc.emoji),
               h('div', {}, acc.name),
-              h('div', { className: 'mono', style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, this.fmtPKR(this.accountBalance(acc.id))),
+              h('div', { className: 'mono', style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, '💰 ' + this.fmtPKR(this.accExpenseBal(acc.id))),
             )),
           ),
         ),
@@ -4582,34 +4592,76 @@ export default class App extends React.Component {
     const h = this.h;
     const accs = this.getAccounts();
     const allTx = this._buildTxList();
-    const totalBalance = accs.reduce((sum, acc) => sum + this.accountBalance(acc.id), 0);
     const sel = this.state.selectedAccountId;
     const selAcc = sel ? accs.find(a => a.id === sel) : null;
     const selTx = sel ? allTx.filter(tx => tx.accountId === sel) : [];
 
+    const accIds = new Set(accs.map(a => a.id));
+    const noUdharLedger = this.activeLedger().filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
+    const gIncome = noUdharLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
+    const gExpense = noUdharLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
+    const gExpNet = gIncome - gExpense;
+    const allPaidSch = [];
+    this.activePlans().forEach(pl => { (pl.schedule || []).forEach(s => { if (s.paid) allPaidSch.push(s); }); });
+    const gPlanCollected = allPaidSch.reduce((s, x) => s + (x.amountPaid || x.amount || 0), 0);
+    const unassignedPlan = allPaidSch.filter(s => !s.accountId || !accIds.has(s.accountId)).reduce((s, x) => s + (x.amountPaid || x.amount || 0), 0);
+    const allUdpiActive = this.activeUdpiEntries().filter(u => !u.returned);
+    const gLent = allUdpiActive.filter(u => u.direction === 'lent').reduce((s, u) => s + u.amount, 0);
+    const gBorrowed = allUdpiActive.filter(u => u.direction === 'borrowed').reduce((s, u) => s + u.amount, 0);
+
     return h('div', { className: 'screen', style: { maxWidth: 720 } },
-      this.card([
-        h('div', { style: { textAlign: 'center', padding: '8px 0 4px' } },
-          h('div', { style: { fontSize: 11, fontWeight: 600, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Total Balance'),
-          h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, 'کل بیلنس'),
-          h('div', { className: 'mono', style: { fontSize: 32, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(totalBalance)),
-          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 4 } }, accs.length + ' accounts'),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 } },
+        this.card([
+          h('div', { style: { textAlign: 'center', padding: '4px 0' } },
+            h('div', { style: { fontSize: 20, marginBottom: 2 } }, '💰'),
+            h('div', { style: { fontSize: 9, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.04em' } }, 'Expenses'),
+            h('div', { className: 'ur', style: { fontSize: 9, color: '#7a7663' } }, 'خرچے / آمدنی'),
+            h('div', { className: 'mono', style: { fontSize: 17, fontWeight: 800, color: gExpNet >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 3 } }, (gExpNet >= 0 ? '+' : '') + this.fmtPKR(gExpNet)),
+            h('div', { style: { fontSize: 8, color: '#7a7663', marginTop: 2 } }, 'In: ' + this.fmtPKR(gIncome)),
+            h('div', { style: { fontSize: 8, color: '#7a7663' } }, 'Out: ' + this.fmtPKR(gExpense)),
+          ),
+        ]),
+        this.card([
+          h('div', { style: { textAlign: 'center', padding: '4px 0' } },
+            h('div', { style: { fontSize: 20, marginBottom: 2 } }, '📋'),
+            h('div', { style: { fontSize: 9, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.04em' } }, 'Plans'),
+            h('div', { className: 'ur', style: { fontSize: 9, color: '#7a7663' } }, 'قسطیں وصول'),
+            h('div', { className: 'mono', style: { fontSize: 17, fontWeight: 800, color: '#0f6b4b', marginTop: 3 } }, this.fmtPKR(gPlanCollected)),
+            h('div', { style: { fontSize: 8, color: '#7a7663', marginTop: 2 } }, allPaidSch.length + ' payments'),
+            unassignedPlan > 0 ? h('div', { style: { fontSize: 8, color: '#b45309' } }, this.fmtPKR(unassignedPlan) + ' unassigned') : null,
+          ),
+        ]),
+        this.card([
+          h('div', { style: { textAlign: 'center', padding: '4px 0' } },
+            h('div', { style: { fontSize: 20, marginBottom: 2 } }, '🤝'),
+            h('div', { style: { fontSize: 9, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.04em' } }, 'Udhar'),
+            h('div', { className: 'ur', style: { fontSize: 9, color: '#7a7663' } }, 'ادھار بیلنس'),
+            h('div', { className: 'mono', style: { fontSize: 17, fontWeight: 800, color: gLent > gBorrowed ? '#b91c1c' : '#0f6b4b', marginTop: 3 } }, this.fmtPKR(Math.abs(gBorrowed - gLent))),
+            h('div', { style: { fontSize: 8, color: '#b91c1c', marginTop: 2 } }, 'Lent: ' + this.fmtPKR(gLent)),
+            h('div', { style: { fontSize: 8, color: '#3b82f6' } }, 'Got: ' + this.fmtPKR(gBorrowed)),
+          ),
+        ]),
+      ),
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 4 } },
+        h('div', {},
+          h('div', { style: { fontWeight: 700, fontSize: 14, color: '#1a2b1f' } }, 'Accounts'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اکاؤنٹس'),
         ),
-      ]),
-      h('div', { style: { height: 12 } }),
+        h('div', { style: { fontSize: 11, color: '#7a7663' } }, accs.length + ' accounts'),
+      ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 } },
         ...accs.map(acc => {
-          const bal = this.accountBalance(acc.id);
-          const base = parseFloat(acc.balance) || 0;
-          const accLedger = this.activeLedger().filter(le => le.accountId === acc.id && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
-          const accIncome = accLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
-          const accExpense = accLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
-          const accUdpi = this.activeUdpiEntries().filter(u => u.accountId === acc.id && !u.returned);
-          const accLent = accUdpi.filter(u => u.direction === 'lent').reduce((s, u) => s + u.amount, 0);
-          const accBorrowed = accUdpi.filter(u => u.direction === 'borrowed').reduce((s, u) => s + u.amount, 0);
-          const installments = bal - base - accIncome + accExpense + accLent - accBorrowed;
-          const received = bal - base;
+          const eBal = this.accExpenseBal(acc.id);
+          const pBal = this.accPlanBal(acc.id);
+          const uBal = this.accUdharBal(acc.id);
           const isSelected = sel === acc.id;
+          const hasAny = eBal !== 0 || pBal !== 0 || uBal !== 0;
+          const balCard = (icon, label, amt, color, sub) => h('div', { style: { flex: 1, textAlign: 'center', padding: '6px 4px', background: '#fdfcf8', borderRadius: 8, border: '1px solid #f2eee2' } },
+            h('div', { style: { fontSize: 14, marginBottom: 1 } }, icon),
+            h('div', { style: { fontSize: 8, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.03em' } }, label),
+            h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 800, color, marginTop: 2 } }, this.fmtPKR(amt)),
+            sub ? h('div', { style: { fontSize: 7, color: '#7a7663', marginTop: 1 } }, sub) : null,
+          );
           return h('div', { key: acc.id, onClick: () => this.setState({ selectedAccountId: isSelected ? null : acc.id }), style: { cursor: 'pointer' } },
             this.card([
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 } },
@@ -4620,16 +4672,12 @@ export default class App extends React.Component {
                 ),
                 isSelected ? h('div', { style: { fontSize: 11, color: '#0f6b4b', fontWeight: 600 } }, '▾ History') : h('div', { style: { fontSize: 11, color: '#7a7663' } }, '▸ Tap'),
               ),
-              h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#1a2b1f', marginBottom: 8 } }, this.fmtPKR(bal)),
-              h('div', { style: { display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', fontSize: 11, color: '#7a7663', borderTop: '1px solid #f2eee2', paddingTop: 8, gap: 4 } },
-                h('span', {}, 'Base: ' + this.fmtPKR(base)),
-                installments > 0 ? h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+' + this.fmtPKR(installments) + ' inst') : null,
-                accIncome > 0 ? h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '+' + this.fmtPKR(accIncome) + ' inc') : null,
-                accExpense > 0 ? h('span', { style: { color: '#b91c1c', fontWeight: 600 } }, '-' + this.fmtPKR(accExpense) + ' exp') : null,
-                accLent > 0 ? h('span', { style: { color: '#b91c1c', fontWeight: 600 } }, '-' + this.fmtPKR(accLent) + ' lent') : null,
-                accBorrowed > 0 ? h('span', { style: { color: '#3b82f6', fontWeight: 600 } }, '+' + this.fmtPKR(accBorrowed) + ' owed') : null,
-              ),
-              h('div', { style: { display: 'flex', gap: 6, marginTop: 8, paddingTop: 8, borderTop: '1px solid #f2eee2' } },
+              hasAny ? h('div', { style: { display: 'flex', gap: 6, marginBottom: 8 } },
+                balCard('💰', 'Expenses', eBal, eBal >= 0 ? '#0f6b4b' : '#b91c1c'),
+                balCard('📋', 'Plans', pBal, '#0f6b4b'),
+                balCard('🤝', 'Udhar', uBal, uBal >= 0 ? '#3b82f6' : '#b91c1c'),
+              ) : h('div', { style: { fontSize: 11, color: '#b5a78a', padding: '4px 0 8px', textAlign: 'center' } }, 'No transactions assigned'),
+              h('div', { style: { display: 'flex', gap: 6, paddingTop: 8, borderTop: '1px solid #f2eee2' } },
                 h('button', { onClick: (e) => { e.stopPropagation(); this.setState({ ledgerModal: { open: true, type: 'income', amount: '', accountId: acc.id, category: '', note: '', date: this.todayStr(), editId: null } }); }, style: { flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#eaf5ee', color: '#0f6b4b', border: '1px solid #d3e9dd' } }, '+ Add Money'),
                 h('button', { onClick: (e) => { e.stopPropagation(); this.setState({ ledgerModal: { open: true, type: 'expense', amount: '', accountId: acc.id, category: '', note: '', date: this.todayStr(), editId: null } }); }, style: { flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' } }, '- Withdraw'),
               ),
@@ -5038,7 +5086,7 @@ export default class App extends React.Component {
               accs.map(acc => { const active = this.state.paymentAccountId === acc.id; return h('button', { type: 'button', key: acc.id, onClick: () => this.setState({ paymentAccountId: acc.id }), style: { padding: '10px 8px', borderRadius: 10, border: '1px solid ' + (active ? '#0f6b4b' : '#ece8dc'), background: active ? '#eaf5ee' : '#fdfcf8', fontSize: 12, fontWeight: 600, color: active ? '#0f6b4b' : '#3a4a3f', textAlign: 'center' } },
                 h('div', { style: { fontSize: 16 } }, acc.emoji),
                 h('div', { style: { marginTop: 2 } }, acc.name),
-                h('div', { className: 'mono', style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, 'Bal: ' + this.fmtPKR(this.accountBalance(acc.id))),
+                h('div', { className: 'mono', style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, '📋 ' + this.fmtPKR(this.accPlanBal(acc.id))),
               ); }),
             )
           : h('div', { style: { padding: '12px 0', marginBottom: 20, color: '#7a7663', fontSize: 12 } }, 'No accounts set up. Add them in Settings → Payment Accounts.');
