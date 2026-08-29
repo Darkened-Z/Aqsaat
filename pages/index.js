@@ -452,6 +452,30 @@ export default class App extends React.Component {
     };
   }
 
+  _builtinCities = ['Lahore','Karachi','Islamabad','Rawalpindi','Faisalabad','Multan','Peshawar','Quetta','Sialkot','Gujranwala','Gujrat','Bahawalpur','Sargodha','Rahim Yar Khan','Jhang','Chiniot','Shorkot','Sahiwal'];
+  getCityList() {
+    const builtin = new Set(this._builtinCities);
+    const custom = [];
+    (this.state.customers || []).forEach(c => { if (c.city && !c._deleted && !builtin.has(c.city)) custom.push(c.city); });
+    return [...this._builtinCities, ...([...new Set(custom)].sort())];
+  }
+  cityField(value, onChange, style) {
+    const h = this.h;
+    if (value === '__add__') {
+      return h('div', { style: { display: 'flex', gap: 6 } },
+        h('input', { autoFocus: true, type: 'text', placeholder: 'Type city name...', style: { ...style, flex: 1 }, onKeyDown: e => { if (e.key === 'Enter' && e.target.value.trim()) onChange(e.target.value.trim()); }, onBlur: e => { if (e.target.value.trim()) onChange(e.target.value.trim()); else onChange(''); } }),
+        h('button', { type: 'button', onClick: () => onChange(''), style: { padding: '6px 10px', borderRadius: 8, background: '#f4f1e6', fontSize: 11, fontWeight: 600, color: '#7a7663' } }, '✕'),
+      );
+    }
+    const cities = this.getCityList();
+    const isCustom = value && !this._builtinCities.includes(value) && !cities.includes(value);
+    const opts = isCustom ? [...cities, value] : cities;
+    return h('select', { value: value, onChange: e => onChange(e.target.value), style },
+      h('option', { value: '' }, 'Select city…'),
+      ...opts.map(c => h('option', { key: c, value: c }, c)),
+      h('option', { value: '__add__' }, '➕ Add new city…'),
+    );
+  }
   activeUdpiEntries() { return (this.state.udpiEntries || []).filter(u => !u._deleted); }
   getRecurring() { return (this.state.settings.recurring || []); }
 
@@ -4766,7 +4790,7 @@ export default class App extends React.Component {
         field('Full Address', 'مکمل پتہ', h('textarea', { value: nc.address, onChange: e => set('address', e.target.value), rows: 3, placeholder: 'House 12, Street 5…', style: { ...inp, resize: 'vertical' } }), true),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
           field('Area / Locality', 'علاقہ', h('input', { value: nc.area, onChange: e => set('area', e.target.value), placeholder: 'Model Town', style: inp })),
-          field('City', 'شہر', h('select', { value: nc.city, onChange: e => set('city', e.target.value), style: inp }, h('option', { value: '' }, 'Select city…'), ['Lahore','Karachi','Islamabad','Rawalpindi','Faisalabad','Multan','Peshawar','Quetta','Sialkot','Gujranwala','Gujrat','Bahawalpur','Sargodha','Rahim Yar Khan','Other'].map(c => h('option', { key: c, value: c }, c)))),
+          field('City', 'شہر', this.cityField(nc.city, v => set('city', v), inp)),
         ),
         field('Notes', 'اضافی معلومات', h('textarea', { value: nc.notes, onChange: e => set('notes', e.target.value), rows: 3, placeholder: 'Preferred collection day, landmarks…', style: { ...inp, resize: 'vertical' } })),
       );
@@ -4885,7 +4909,7 @@ export default class App extends React.Component {
         field('Full Address', 'مکمل پتہ', h('textarea', { value: ec.address, onChange: e => set('address', e.target.value), rows: 3, placeholder: 'House 12, Street 5…', style: { ...inp, resize: 'vertical' } }), true),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 } },
           field('Area / Locality', 'علاقہ', h('input', { value: ec.area, onChange: e => set('area', e.target.value), placeholder: 'Model Town', style: inp })),
-          field('City', 'شہر', h('select', { value: ec.city, onChange: e => set('city', e.target.value), style: inp }, h('option', { value: '' }, 'Select city…'), ['Lahore','Karachi','Islamabad','Rawalpindi','Faisalabad','Multan','Peshawar','Quetta','Sialkot','Gujranwala','Gujrat','Bahawalpur','Sargodha','Rahim Yar Khan','Other'].map(ci => h('option', { key: ci, value: ci }, ci)))),
+          field('City', 'شہر', this.cityField(ec.city, v => set('city', v), inp)),
         ),
         field('Notes', 'اضافی معلومات', h('textarea', { value: ec.notes, onChange: e => set('notes', e.target.value), rows: 3, placeholder: 'Preferred collection day, landmarks…', style: { ...inp, resize: 'vertical' } })),
       );
