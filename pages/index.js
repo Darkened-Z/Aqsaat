@@ -1281,6 +1281,7 @@ export default class App extends React.Component {
       }
     }
     const months = schedule.length;
+    if (months > 24 && !confirm(months + ' installments — is this correct?\n' + months + ' اقساط — کیا یہ درست ہے؟')) return;
     const monthly = installAmt > 0 ? installAmt : (months > 0 ? Math.round(total2Pay / months) : 0);
     const voucherSeq = (this.state.plans.length + 1).toString().padStart(3, '0');
     const voucherNo = 'VCH-' + new Date().getFullYear() + '-' + voucherSeq;
@@ -2344,9 +2345,9 @@ export default class App extends React.Component {
     const totalOut = this.activePlans().reduce((a, p) => a + this.planStats(p).remaining, 0);
 
     const profitOf = (pl) => {
-      const financed = Math.max(0, pl.total - pl.down);
-      const pct = Math.min(Math.max(pl.interest || 0, 0), 100);
-      return financed * pct / 100;
+      const financed = Math.max(0, pl.total - (pl.down || 0));
+      const scheduleTotal = (pl.schedule || []).reduce((s, x) => s + x.amount, 0);
+      return Math.max(0, scheduleTotal - financed);
     };
     const totalProfit = this.activePlans().reduce((a, pl) => a + profitOf(pl), 0);
     const earnedProfit = this.activePlans().reduce((a, pl) => {
@@ -4483,9 +4484,9 @@ export default class App extends React.Component {
     const allSelected = !this.state.reportAccounts;
 
     const profitOf = (pl) => {
-      const financed = Math.max(0, pl.total - pl.down);
-      const pct = Math.min(Math.max(pl.interest || 0, 0), 100);
-      return financed * pct / 100;
+      const financed = Math.max(0, pl.total - (pl.down || 0));
+      const scheduleTotal = (pl.schedule || []).reduce((s, x) => s + x.amount, 0);
+      return Math.max(0, scheduleTotal - financed);
     };
 
     const months = [];
