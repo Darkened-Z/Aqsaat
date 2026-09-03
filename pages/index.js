@@ -458,6 +458,54 @@ export default class App extends React.Component {
     };
   }
 
+  // Categories the app creates itself — never offered as user-pickable options.
+  _reservedCategories = ['Product Cost', 'Down Payment', 'Udhar', 'Udhar Return'];
+  // Built-in categories plus any custom ones the user has typed before, so a
+  // category added once stays available for future entries.
+  getCategoryList(type) {
+    const builtin = type === 'income' ? this.ledgerCategories().income : this.ledgerCategories().expense;
+    const known = new Set([...builtin.map(c => c.name), ...this._reservedCategories]);
+    const custom = [];
+    (this.state.ledger || []).forEach(le => {
+      if (le._deleted || le.type !== type || !le.category || known.has(le.category)) return;
+      custom.push(le.category);
+    });
+    this.getRecurring().forEach(r => {
+      if (r.type !== type || !r.category || known.has(r.category)) return;
+      custom.push(r.category);
+    });
+    return [...builtin, ...[...new Set(custom)].sort().map(name => ({ emoji: '🏷️', name, nameUr: '' }))];
+  }
+  categoryEmojiMap() {
+    const map = {};
+    [...this.getCategoryList('income'), ...this.getCategoryList('expense')].forEach(c => { map[c.name] = c.emoji; });
+    return map;
+  }
+  // Category chips shared by the ledger and recurring modals. Selecting the
+  // trailing "Add" chip swaps the row for a free-text field.
+  categoryPicker(m, setM) {
+    const h = this.h;
+    const accent = m.type === 'income' ? '#0f6b4b' : '#b91c1c';
+    const activeBg = m.type === 'income' ? '#eaf5ee' : '#fef2f2';
+    if (m.category === '__add__') {
+      const save = v => setM('category', (v || '').trim());
+      return h('div', { style: { display: 'flex', gap: 6 } },
+        h('input', { autoFocus: true, type: 'text', placeholder: 'New category name… / نیا زمرہ', maxLength: 40,
+          style: { flex: 1, border: '1.5px solid ' + accent, borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' },
+          onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); save(e.target.value); } else if (e.key === 'Escape') setM('category', ''); },
+          onBlur: e => save(e.target.value) }),
+        h('button', { type: 'button', onClick: () => setM('category', ''), style: { padding: '8px 12px', borderRadius: 8, background: '#f4f1e6', fontSize: 12, fontWeight: 600, color: '#7a7663' } }, '✕'),
+      );
+    }
+    const list = this.getCategoryList(m.type);
+    // A just-typed category has no saved entry yet, so add it here to keep it visible and selected.
+    const opts = m.category && !list.some(c => c.name === m.category) ? [...list, { emoji: '🏷️', name: m.category }] : list;
+    return h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+      ...opts.map(cat => h('button', { key: cat.name, onClick: () => setM('category', cat.name), style: { padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: m.category === cat.name ? activeBg : '#f4f1e6', color: m.category === cat.name ? accent : '#3a4a3f', border: '1.5px solid ' + (m.category === cat.name ? accent : '#ece8dc') } }, cat.emoji + ' ' + cat.name)),
+      h('button', { key: '__add__', onClick: () => setM('category', '__add__'), style: { padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: '#fdfcf8', color: accent, border: '1.5px dashed ' + accent } }, '➕ Add'),
+    );
+  }
+
   _builtinCities = ['Lahore','Karachi','Islamabad','Rawalpindi','Faisalabad','Multan','Peshawar','Quetta','Sialkot','Gujranwala','Gujrat','Bahawalpur','Sargodha','Rahim Yar Khan','Jhang','Chiniot','Shorkot','Sahiwal'];
   getCityList() {
     const builtin = new Set(this._builtinCities);
@@ -525,7 +573,7 @@ export default class App extends React.Component {
     const m = this.state.recurringModal;
     const amount = parseFloat(m.amount);
     if (!amount || amount <= 0) { alert('Enter a valid amount'); return; }
-    if (!m.category) { alert('Select a category'); return; }
+    if (!m.category || m.category === '__add__') { alert('Select a category'); return; }
     if (!m.accountId) { alert('Select an account'); return; }
     const recurring = [...this.getRecurring()];
     if (m.editId) {
@@ -2803,7 +2851,7 @@ export default class App extends React.Component {
     const m = this.state.ledgerModal;
     const amount = parseFloat(m.amount);
     if (!amount || amount <= 0) { alert('Enter a valid amount / درست رقم درج کریں'); return; }
-    if (!m.category) { alert('Select a category / زمرہ منتخب کریں'); return; }
+    if (!m.category || m.category === '__add__') { alert('Select a category / زمرہ منتخب کریں'); return; }
     if (!m.accountId) { alert('Select an account / اکاؤنٹ منتخب کریں'); return; }
     const ledger = [...(this.state.ledger || [])];
     if (m.editId) {
@@ -2852,9 +2900,7 @@ export default class App extends React.Component {
   _renderTxList(txList, accs, showAccount) {
     const h = this.h;
     if (txList.length === 0) return [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No transactions recorded yet.')];
-    const allCats = this.ledgerCategories();
-    const catMap = {};
-    [...allCats.income, ...allCats.expense].forEach(c => { catMap[c.name] = c.emoji; });
+    const catMap = this.categoryEmojiMap();
     return txList.map((tx, i) => {
       const acc = accs.find(a => a.id === tx.accountId);
       if (tx.source === 'ledger') {
@@ -2933,9 +2979,7 @@ export default class App extends React.Component {
     const allTime = totals(noUdharEntries);
     const thisMonth = totals(noUdharEntries.filter(le => le.date.startsWith(curMonth)));
 
-    const allCats = this.ledgerCategories();
-    const catMap = {};
-    [...allCats.income, ...allCats.expense].forEach(c => { catMap[c.name] = c.emoji; });
+    const catMap = this.categoryEmojiMap();
 
     const catBreakdown = {};
     filtered.filter(le => !this._isPlanLedgerEntry(le) && le.category !== 'Udhar' && le.category !== 'Udhar Return').forEach(le => {
@@ -3231,8 +3275,6 @@ export default class App extends React.Component {
     const m = this.state.ledgerModal;
     if (!m.open) return null;
     const accs = this.getAccounts();
-    const cats = this.ledgerCategories();
-    const typeCats = m.type === 'income' ? cats.income : cats.expense;
     const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
     const setM = (k, v) => this.setState({ ledgerModal: { ...m, [k]: v } });
     const typeBtn = (label, val, color) => h('button', { key: val, onClick: () => setM('type', val), style: { flex: 1, padding: '10px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: m.type === val ? (val === 'income' ? '#eaf5ee' : '#fef2f2') : '#f4f1e6', color: m.type === val ? color : '#7a7663', border: '1.5px solid ' + (m.type === val ? color : '#ece8dc') } }, label);
@@ -3253,9 +3295,7 @@ export default class App extends React.Component {
         ),
         h('div', { style: { marginBottom: 14 } },
           h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Category ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'زمرہ')),
-          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
-            ...typeCats.map(cat => h('button', { key: cat.name, onClick: () => setM('category', cat.name), style: { padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: m.category === cat.name ? (m.type === 'income' ? '#eaf5ee' : '#fef2f2') : '#f4f1e6', color: m.category === cat.name ? (m.type === 'income' ? '#0f6b4b' : '#b91c1c') : '#3a4a3f', border: '1.5px solid ' + (m.category === cat.name ? (m.type === 'income' ? '#0f6b4b' : '#b91c1c') : '#ece8dc') } }, cat.emoji + ' ' + cat.name)),
-          ),
+          this.categoryPicker(m, setM),
         ),
         h('div', { style: { marginBottom: 14 } },
           h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Account ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'اکاؤنٹ')),
@@ -3287,8 +3327,6 @@ export default class App extends React.Component {
     const m = this.state.recurringModal;
     if (!m.open) return null;
     const accs = this.getAccounts();
-    const cats = this.ledgerCategories();
-    const typeCats = m.type === 'income' ? cats.income : cats.expense;
     const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 14, background: '#fdfcf8', outline: 'none' };
     const setM = (k, v) => this.setState({ recurringModal: { ...m, [k]: v } });
     const typeBtn = (label, val, color) => h('button', { key: val, onClick: () => setM('type', val), style: { flex: 1, padding: '10px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: m.type === val ? (val === 'income' ? '#eaf5ee' : '#fef2f2') : '#f4f1e6', color: m.type === val ? color : '#7a7663', border: '1.5px solid ' + (m.type === val ? color : '#ece8dc') } }, label);
@@ -3313,9 +3351,7 @@ export default class App extends React.Component {
         ),
         h('div', { style: { marginBottom: 14 } },
           h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Category ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'زمرہ')),
-          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
-            ...typeCats.map(cat => h('button', { key: cat.name, onClick: () => setM('category', cat.name), style: { padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: m.category === cat.name ? (m.type === 'income' ? '#eaf5ee' : '#fef2f2') : '#f4f1e6', color: m.category === cat.name ? (m.type === 'income' ? '#0f6b4b' : '#b91c1c') : '#3a4a3f', border: '1.5px solid ' + (m.category === cat.name ? (m.type === 'income' ? '#0f6b4b' : '#b91c1c') : '#ece8dc') } }, cat.emoji + ' ' + cat.name)),
-          ),
+          this.categoryPicker(m, setM),
         ),
         h('div', { style: { marginBottom: 14 } },
           h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Account ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'اکاؤنٹ')),
