@@ -409,17 +409,23 @@ export default class App extends React.Component {
   accountBalance(accId) {
     return this.accExpenseBal(accId) + this.accPlanBal(accId) + this.accUdharBal(accId);
   }
+  _isPlanLedgerEntry(le) {
+    return le && (le.category === 'Product Cost' || le.category === 'Down Payment');
+  }
   accExpenseBal(accId) {
     const acc = this.getAccounts().find(a => a.id === accId);
     const base = acc ? (parseFloat(acc.balance) || 0) : 0;
-    return base + (this.state.ledger || []).filter(le => !le._deleted && le.accountId === accId && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return')
+    return base + (this.state.ledger || []).filter(le => !le._deleted && le.accountId === accId && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return' && !this._isPlanLedgerEntry(le))
       .reduce((sum, le) => sum + (le.type === 'income' ? le.amount : -le.amount), 0);
   }
   accPlanBal(accId) {
-    return this.activePlans().reduce((sum, pl) => {
+    const fromInstallments = this.activePlans().reduce((sum, pl) => {
       return sum + (pl.schedule || []).filter(s => s.paid && s.accountId === accId)
         .reduce((a, s) => a + (s.amountPaid || s.amount || 0), 0);
     }, 0);
+    const fromLedger = (this.state.ledger || []).filter(le => !le._deleted && le.accountId === accId && this._isPlanLedgerEntry(le))
+      .reduce((sum, le) => sum + (le.type === 'income' ? le.amount : -le.amount), 0);
+    return fromInstallments + fromLedger;
   }
   accUdharBal(accId) {
     return this.activeUdpiEntries().filter(u => u.accountId === accId)
@@ -1528,18 +1534,20 @@ export default class App extends React.Component {
       const mLabel = new Date(mKey + '-01T00:00:00').toLocaleDateString('en', { month: 'long', year: 'numeric' });
       title = 'Monthly P&L Report / ماہانہ نفع نقصان';
       dateLabel = mLabel;
-      let instCollected = 0, instProfit = 0, downPayments = 0;
+      let instCollected = 0, instProfit = 0, downPayments = 0, productCost = 0;
       this.activePlans().forEach(pl => {
-        const financed = Math.max(0, pl.total - pl.down);
-        const pct = Math.min(Math.max(pl.interest || 0, 0), 100);
-        const profit = financed * pct / 100;
+        const financed = Math.max(0, pl.total - (pl.down || 0));
         const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
+        const profit = Math.max(0, scheduleTotal - financed);
         const profitPerRupee = profit / scheduleTotal;
         const idPart = (pl.id || '').replace(/^pl_/, '');
         const createdMs = parseInt(idPart, 36);
         const createdDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
         const createdKey = createdDate ? createdDate.getFullYear() + '-' + String(createdDate.getMonth() + 1).padStart(2, '0') : '';
-        if (createdKey === mKey) downPayments += (pl.down || 0);
+        if (createdKey === mKey && selIds.includes(pl.accountId)) {
+          downPayments += (pl.down || 0);
+          productCost += (pl.total || 0);
+        }
         pl.schedule.forEach(s => {
           if (s.paid && s.paidDate && s.paidDate.slice(0, 7) === mKey && selIds.includes(s.accountId)) {
             instCollected += (s.amountPaid || s.amount);
@@ -1547,11 +1555,11 @@ export default class App extends React.Component {
           }
         });
       });
-      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId) && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
+      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId) && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return' && !this._isPlanLedgerEntry(le));
       const ledgerIncome = mLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
       const ledgerExpense = mLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
       const totalIncome = instCollected + downPayments + ledgerIncome;
-      const totalExpense = ledgerExpense;
+      const totalExpense = ledgerExpense + productCost;
       const netPnL = totalIncome - totalExpense;
       rows = [
         { section: 'Income / آمدنی' },
@@ -1560,6 +1568,7 @@ export default class App extends React.Component {
         { desc: 'Other Income / دیگر آمدنی', amount: ledgerIncome },
         { desc: 'Total Income / کل آمدنی', amount: totalIncome, isTotal: true },
         { section: 'Expenses / اخراجات' },
+        { desc: 'Product Cost / پلانز کی لاگت', amount: productCost },
         { desc: 'Expenses / لیجر اخراجات', amount: ledgerExpense },
         { desc: 'Total Expenses / کل اخراجات', amount: totalExpense, isTotal: true },
         { section: 'Profitability / منافع' },
@@ -1843,7 +1852,7 @@ export default class App extends React.Component {
         kpiCard('Outstanding',   'باقی رقم',     this.fmtPKR(totalOutstanding), plans.filter(p => p.status === 'active').length + ' active plans', 'neutral'),
       ),
       (() => {
-        const le = this.activeLedger().filter(x => !x.udpiRef && x.category !== 'Udhar' && x.category !== 'Udhar Return');
+        const le = this.activeLedger().filter(x => !x.udpiRef && x.category !== 'Udhar' && x.category !== 'Udhar Return' && !this._isPlanLedgerEntry(x));
         const curMonth = this.todayStr().slice(0, 7);
         const mEntries = le.filter(x => x.date.startsWith(curMonth));
         const mInc = mEntries.filter(x => x.type === 'income').reduce((s, x) => s + x.amount, 0);
@@ -2920,7 +2929,7 @@ export default class App extends React.Component {
       list.forEach(le => { if (le.type === 'income') inc += le.amount; else exp += le.amount; });
       return { inc, exp, net: inc - exp };
     };
-    const noUdharEntries = entries.filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
+    const noUdharEntries = entries.filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return' && !this._isPlanLedgerEntry(le));
     const allTime = totals(noUdharEntries);
     const thisMonth = totals(noUdharEntries.filter(le => le.date.startsWith(curMonth)));
 
@@ -2929,7 +2938,7 @@ export default class App extends React.Component {
     [...allCats.income, ...allCats.expense].forEach(c => { catMap[c.name] = c.emoji; });
 
     const catBreakdown = {};
-    filtered.forEach(le => {
+    filtered.filter(le => !this._isPlanLedgerEntry(le) && le.category !== 'Udhar' && le.category !== 'Udhar Return').forEach(le => {
       if (!catBreakdown[le.category]) catBreakdown[le.category] = { inc: 0, exp: 0 };
       if (le.type === 'income') catBreakdown[le.category].inc += le.amount;
       else catBreakdown[le.category].exp += le.amount;
@@ -2941,9 +2950,9 @@ export default class App extends React.Component {
 
     const filterBtn = (label, val) => h('button', { key: val, onClick: () => this.setState({ ledgerFilter: val }), style: { padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: filter === val ? '#0f6b4b' : '#f4f1e6', color: filter === val ? 'white' : '#3a4a3f', border: filter === val ? '1px solid #0f6b4b' : '1px solid #ece8dc' } }, label);
 
-    // Quick-add chips: top 6 most-used categories
+    // Quick-add chips: top 6 most-used categories (excluding plan-related ones)
     const catCount = {};
-    entries.forEach(le => { const k = le.type + '|' + le.category; catCount[k] = (catCount[k] || 0) + 1; });
+    entries.filter(le => !this._isPlanLedgerEntry(le) && le.category !== 'Udhar' && le.category !== 'Udhar Return').forEach(le => { const k = le.type + '|' + le.category; catCount[k] = (catCount[k] || 0) + 1; });
     const topChips = Object.entries(catCount).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
     // Recurring entries
@@ -2962,8 +2971,8 @@ export default class App extends React.Component {
       h('div', { className: 'ur', style: { fontSize: 9, marginTop: 1, opacity: 0.8 } }, ur),
     );
 
-    const expEntries = filtered.filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
-    const planEntries = filtered.filter(le => le.category === 'Product Cost' || le.category === 'Down Payment');
+    const expEntries = filtered.filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return' && !this._isPlanLedgerEntry(le));
+    const planEntries = filtered.filter(le => this._isPlanLedgerEntry(le));
 
     const allPlans = this.activePlans();
     const activePlansList = allPlans.filter(p => p.status === 'active');
@@ -4496,7 +4505,7 @@ export default class App extends React.Component {
     }
 
     const buildMonth = (mKey) => {
-      let instCollected = 0, instProfit = 0, downPayments = 0;
+      let instCollected = 0, instProfit = 0, downPayments = 0, productCost = 0;
       this.activePlans().forEach(pl => {
         const profit = profitOf(pl);
         const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
@@ -4505,7 +4514,10 @@ export default class App extends React.Component {
         const createdMs = parseInt(idPart, 36);
         const createdDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
         const createdKey = createdDate ? createdDate.getFullYear() + '-' + String(createdDate.getMonth() + 1).padStart(2, '0') : '';
-        if (createdKey === mKey) downPayments += (pl.down || 0);
+        if (createdKey === mKey && selIds.includes(pl.accountId)) {
+          downPayments += (pl.down || 0);
+          productCost += (pl.total || 0);
+        }
         pl.schedule.forEach(s => {
           if (s.paid && s.paidDate && s.paidDate.slice(0, 7) === mKey && selIds.includes(s.accountId)) {
             instCollected += (s.amountPaid || s.amount);
@@ -4514,16 +4526,17 @@ export default class App extends React.Component {
         });
       });
 
-      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId) && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
+      // Exclude plan-related ledger entries — they're counted from plan records above.
+      const mLedger = this.activeLedger().filter(le => le.date && le.date.slice(0, 7) === mKey && selIds.includes(le.accountId) && !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return' && !this._isPlanLedgerEntry(le));
       const ledgerIncome = mLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
       const ledgerExpense = mLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
 
       const totalIncome = instCollected + downPayments + ledgerIncome;
-      const totalExpense = ledgerExpense;
+      const totalExpense = ledgerExpense + productCost;
       const grossProfit = instProfit;
       const netPnL = totalIncome - totalExpense;
 
-      return { instCollected, instProfit: Math.round(instProfit), downPayments, ledgerIncome, ledgerExpense, totalIncome, totalExpense, grossProfit: Math.round(grossProfit), netPnL };
+      return { instCollected, instProfit: Math.round(instProfit), downPayments, productCost, ledgerIncome, ledgerExpense, totalIncome, totalExpense, grossProfit: Math.round(grossProfit), netPnL };
     };
 
     const data = buildMonth(selMonth);
@@ -4575,6 +4588,7 @@ export default class App extends React.Component {
       h('div', { style: { height: 12 } }),
       this.card([
         this.sectionHeader('Expenses', 'اخراجات'),
+        row('Product Cost (Plans)', 'پلانز کی لاگت', data.productCost, '#b91c1c'),
         row('Expenses (Ledger)', 'لیجر اخراجات', data.ledgerExpense, '#b91c1c'),
         h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderTop: '2px solid #ece8dc', alignItems: 'center' } },
           h('div', { style: { fontWeight: 800, fontSize: 14 } }, 'Total Expenses'),
@@ -4622,13 +4636,15 @@ export default class App extends React.Component {
     const selTx = sel ? allTx.filter(tx => tx.accountId === sel) : [];
 
     const accIds = new Set(accs.map(a => a.id));
-    const noUdharLedger = this.activeLedger().filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return');
+    const noUdharLedger = this.activeLedger().filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return' && !this._isPlanLedgerEntry(le));
     const gIncome = noUdharLedger.filter(le => le.type === 'income').reduce((s, le) => s + le.amount, 0);
     const gExpense = noUdharLedger.filter(le => le.type === 'expense').reduce((s, le) => s + le.amount, 0);
     const gExpNet = gIncome - gExpense;
+    const planLedger = this.activeLedger().filter(le => this._isPlanLedgerEntry(le));
+    const gPlanLedgerNet = planLedger.reduce((s, le) => s + (le.type === 'income' ? le.amount : -le.amount), 0);
     const allPaidSch = [];
     this.activePlans().forEach(pl => { (pl.schedule || []).forEach(s => { if (s.paid) allPaidSch.push(s); }); });
-    const gPlanCollected = allPaidSch.reduce((s, x) => s + (x.amountPaid || x.amount || 0), 0);
+    const gPlanCollected = allPaidSch.reduce((s, x) => s + (x.amountPaid || x.amount || 0), 0) + gPlanLedgerNet;
     const unassignedPlan = allPaidSch.filter(s => !s.accountId || !accIds.has(s.accountId)).reduce((s, x) => s + (x.amountPaid || x.amount || 0), 0);
     const allUdpiActive = this.activeUdpiEntries().filter(u => !u.returned);
     const gLent = allUdpiActive.filter(u => u.direction === 'lent').reduce((s, u) => s + u.amount, 0);
