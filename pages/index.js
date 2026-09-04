@@ -106,11 +106,11 @@ export default class App extends React.Component {
     customers: null,
     products: null,
     plans: null,
-    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: this.todayStr(), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', engineNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' },
+    newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: this.todayStr(), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', engineNo: '', serialNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' },
     paymentAmount: '',
     menuOpen: false,
     deletePlanModal: { open: false, planId: null, pinInput: '' },
-    editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: false, draftSchedule: [], draftImei: '', draftChassisNo: '', draftEngineNo: '', draftNotes: '' },
+    editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: false, draftSchedule: [], draftImei: '', draftChassisNo: '', draftEngineNo: '', draftSerialNo: '', draftNotes: '' },
     editCustomerModal: { open: false },
     pinModal: { open: false, callback: null, error: '' },
     pinModalInput: '',
@@ -411,9 +411,15 @@ export default class App extends React.Component {
   }
   // Item-type buckets. 'Bike' is legacy data for the same thing as 'Motorcycle',
   // so both are accepted here or those products lose their vehicle fields.
-  _phoneCats = ['Mobile', 'Laptop', 'Tablet'];
-  _vehicleCats = ['Car', 'Motorcycle', 'Bike', 'Rickshaw', 'Loader'];
+  _phoneCats = ['Mobile', 'Tablet', 'Laptop'];
+  _electricalCats = ['Television', 'Refrigerator', 'Deep Freezer', 'Washing Machine',
+    'Air Conditioner', 'Water Dispenser', 'Microwave Oven', 'Juicer / Blender', 'Fan',
+    'Iron', 'Geyser', 'Sewing Machine', 'Generator / UPS', 'Appliance'];
+  // 'Bike' is legacy data for the same thing as 'Motorcycle'; both are accepted
+  // or those products silently lose their vehicle fields.
+  _vehicleCats = ['Car', 'Motorcycle', 'Bike'];
   isPhoneCat(cat) { return this._phoneCats.includes(cat); }
+  isElectricalCat(cat) { return this._electricalCats.includes(cat); }
   isVehicleCat(cat) { return this._vehicleCats.includes(cat); }
 
   _isPlanLedgerEntry(le) {
@@ -1346,7 +1352,7 @@ export default class App extends React.Component {
     const monthly = installAmt > 0 ? installAmt : (months > 0 ? Math.round(total2Pay / months) : 0);
     const voucherSeq = (this.state.plans.length + 1).toString().padStart(3, '0');
     const voucherNo = 'VCH-' + new Date().getFullYear() + '-' + voucherSeq;
-    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: this._localDateStr(start), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, engineNo: np.engineNo, frequency: np.frequency, frequencyDays: freqDays, accountId: np.accountId, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
+    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: this._localDateStr(start), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, engineNo: np.engineNo, serialNo: np.serialNo, frequency: np.frequency, frequencyDays: freqDays, accountId: np.accountId, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
     const customer = this.state.customers.find(c => c.id === np.customerId);
     const custName = customer ? customer.name : '';
     const prodName = product ? product.name : '';
@@ -1357,7 +1363,7 @@ export default class App extends React.Component {
       ledger.unshift({ id: 'le_' + (Date.now() + 1).toString(36), type: 'income', amount: down, accountId: np.accountId, category: 'Down Payment', note: prodName + ' — ' + custName + ' (' + voucherNo + ')', date: today });
     }
     const updProducts = this.state.products.map(p => p.id === np.productId && p.stock > 0 ? { ...p, stock: p.stock - 1 } : p);
-    this.setState({ plans: [plan, ...this.state.plans], ledger, products: updProducts, newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: this.todayStr(), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', engineNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' } });
+    this.setState({ plans: [plan, ...this.state.plans], ledger, products: updProducts, newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: this.todayStr(), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', engineNo: '', serialNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' } });
     this.go('customer', { id: np.customerId });
   };
 
@@ -1723,10 +1729,10 @@ export default class App extends React.Component {
     const initAmt = String(Math.round(financed0 * (pl.interest || 0) / 100));
     const firstUnpaid = pl.schedule.find(s => !s.paid);
     const initInst = String(firstUnpaid ? firstUnpaid.amount : (pl.installmentAmount || pl.monthly || 0));
-    const doOpen = () => this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftInterestAmount: initAmt, draftInstallmentAmount: initInst, draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftEngineNo: pl.engineNo || '', draftNotes: pl.notes || '' } });
+    const doOpen = () => this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftInterestAmount: initAmt, draftInstallmentAmount: initInst, draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftEngineNo: pl.engineNo || '', draftSerialNo: pl.serialNo || '', draftNotes: pl.notes || '' } });
     this.requirePin(doOpen);
   };
-  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftInstallmentAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftEngineNo: '', draftNotes: '' } });
+  closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftInstallmentAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftEngineNo: '', draftSerialNo: '', draftNotes: '' } });
   // Rebuilds the unpaid part of a schedule so it sums to total2Pay, keeping paid
   // installments untouched. With a fixed installment amount it produces clean
   // "amt × N + remainder" installments; otherwise it splits equally.
@@ -1780,9 +1786,9 @@ export default class App extends React.Component {
       const months = schedule.length;
       const firstUnpaid = schedule.find(s => !s.paid);
       const monthly = installAmt > 0 ? installAmt : (firstUnpaid ? firstUnpaid.amount : (months > 0 ? Math.round(total2Pay / months) : 0));
-      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, installmentAmount: installAmt, startDate: em.draftStartDate || pl.startDate, months, schedule, imei: em.draftImei, chassisNo: em.draftChassisNo, engineNo: em.draftEngineNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
+      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, installmentAmount: installAmt, startDate: em.draftStartDate || pl.startDate, months, schedule, imei: em.draftImei, chassisNo: em.draftChassisNo, engineNo: em.draftEngineNo, serialNo: em.draftSerialNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
     });
-    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftEngineNo: '', draftNotes: '' } });
+    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftEngineNo: '', draftSerialNo: '', draftNotes: '' } });
   };
   submitEditPlanPin = () => {
     const { pinInput } = this.state.editPlanModal;
@@ -2270,7 +2276,8 @@ export default class App extends React.Component {
         || (pl.voucherNo || '').toLowerCase().includes(q)
         || (pl.imei || '').toLowerCase().includes(q)
         || (pl.chassisNo || '').toLowerCase().includes(q)
-        || (pl.engineNo || '').toLowerCase().includes(q);
+        || (pl.engineNo || '').toLowerCase().includes(q)
+        || (pl.serialNo || '').toLowerCase().includes(q);
     });
     if (filter === 'active') plans = plans.filter(p => p.status === 'active');
     if (filter === 'completed') plans = plans.filter(p => p.status === 'completed');
@@ -2317,6 +2324,7 @@ export default class App extends React.Component {
     );
     const isMobile = product && this.isPhoneCat(product.category);
     const isVehicle = product && this.isVehicleCat(product.category);
+    const isElectrical = product && this.isElectricalCat(product.category);
     const freqLabel = np.frequency === 'days' ? (np.frequencyDays + '-day') : 'Monthly';
     return h('div', { className: 'screen', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 16 } },
       this.card([
@@ -2377,6 +2385,7 @@ export default class App extends React.Component {
           isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('input', { value: np.imei, onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isVehicle ? field('Chassis Number', 'چیسس نمبر', h('input', { value: np.chassisNo, onChange: e => set('chassisNo', e.target.value), placeholder: 'e.g. ABC1234567890', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isVehicle ? field('Engine Number', 'انجن نمبر', h('input', { value: np.engineNo, onChange: e => set('engineNo', e.target.value), placeholder: 'e.g. G15A1234567', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
+          isElectrical ? field('Serial Number', 'سیریل نمبر', h('input', { value: np.serialNo, onChange: e => set('serialNo', e.target.value), placeholder: 'Serial / model number on the unit', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
         ),
       ]),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
@@ -5044,7 +5053,7 @@ export default class App extends React.Component {
       h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, label),
       node,
     );
-    const categories = ['Mobile', 'Car', 'Motorcycle', 'Rickshaw', 'Loader', 'Television', 'Refrigerator', 'Appliance', 'Air Conditioner', 'Laptop', 'Tablet', 'Other'];
+    const categories = ['Mobile', 'Tablet', 'Laptop', 'Television', 'Refrigerator', 'Deep Freezer', 'Washing Machine', 'Air Conditioner', 'Water Dispenser', 'Microwave Oven', 'Juicer / Blender', 'Fan', 'Iron', 'Geyser', 'Sewing Machine', 'Generator / UPS', 'Appliance', 'Car', 'Motorcycle', 'Other'];
     const emojis = ['📱','🏍️','📺','❄️','🧺','💻','📦','⚡','🔌','🎮','📷','🖨️'];
     return h('div', { onClick: this.closeAddProduct, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)' } },
       h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 480, animation: 'slideIn .2s ease' } },
@@ -5091,7 +5100,7 @@ export default class App extends React.Component {
       h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, label, labelUr ? h('span', { className: 'ur', style: { color: '#7a7663', marginLeft: 6 } }, labelUr) : null),
       node,
     );
-    const categories = ['Mobile', 'Car', 'Motorcycle', 'Rickshaw', 'Loader', 'Television', 'Refrigerator', 'Appliance', 'Air Conditioner', 'Laptop', 'Tablet', 'Other'];
+    const categories = ['Mobile', 'Tablet', 'Laptop', 'Television', 'Refrigerator', 'Deep Freezer', 'Washing Machine', 'Air Conditioner', 'Water Dispenser', 'Microwave Oven', 'Juicer / Blender', 'Fan', 'Iron', 'Geyser', 'Sewing Machine', 'Generator / UPS', 'Appliance', 'Car', 'Motorcycle', 'Other'];
     const emojis = ['📱','🏍️','📺','❄️','🧺','💻','📦','⚡','🔌','🎮','📷','🖨️'];
     const sold = this.activePlans().filter(pl => pl.productId === ep.id).length;
     return h('div', { onClick: this.closeEditProduct, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)' } },
@@ -5224,6 +5233,7 @@ export default class App extends React.Component {
     const inpStyle = { border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, background: '#fdfcf8', outline: 'none', boxSizing: 'border-box' };
     const isMobile = p && this.isPhoneCat(p.category);
     const isVehicle = p && this.isVehicleCat(p.category);
+    const isElectrical = p && this.isElectricalCat(p.category);
     const overlay = { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 50, padding: '12px 16px', backdropFilter: 'blur(4px)', overflowY: 'auto' };
     if (!em.pinConfirmed) {
       return h('div', { onClick: this.closeEditPlan, style: { ...overlay, alignItems: 'center' } },
@@ -5315,7 +5325,7 @@ export default class App extends React.Component {
               h('div', { style: { marginTop: 6, background: '#eaf5ee', borderRadius: 8, padding: '7px 10px', fontSize: 12, color: '#0f6b4b', fontWeight: 600 } }, preview),
             );
           })(),
-          h('div', { style: { display: 'grid', gridTemplateColumns: isMobile || isVehicle ? '1fr 1fr' : '1fr', gap: 10 } },
+          h('div', { style: { display: 'grid', gridTemplateColumns: isMobile || isVehicle || isElectrical ? '1fr 1fr' : '1fr', gap: 10 } },
             h('div', {},
               h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Start Date ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'آغاز')),
               h('input', { type: 'date', value: em.draftStartDate, onChange: e => setDraft('draftStartDate', e.target.value), style: { ...inpStyle, width: '100%' } }),
@@ -5331,6 +5341,10 @@ export default class App extends React.Component {
             isVehicle ? h('div', {},
               h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Engine No.'),
               h('input', { value: em.draftEngineNo, onChange: e => setDraft('draftEngineNo', e.target.value), placeholder: 'Engine number', style: { ...inpStyle, width: '100%', fontFamily: 'monospace' } }),
+            ) : null,
+            isElectrical ? h('div', {},
+              h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Serial No.'),
+              h('input', { value: em.draftSerialNo, onChange: e => setDraft('draftSerialNo', e.target.value), placeholder: 'Serial number', style: { ...inpStyle, width: '100%', fontFamily: 'monospace' } }),
             ) : null,
           ),
           h('div', {},
