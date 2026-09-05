@@ -145,7 +145,7 @@ export default class App extends React.Component {
     ledgerModal: { open: false, type: 'expense', amount: '', accountId: '', category: '', note: '', date: this.todayStr(), editId: null },
     ledgerFilter: 'all',
     ledgerSection: 'expenses',
-    ledgerScope: 'month',
+    catScope: 'month',
     dayBookSection: 'all',
     ledgerMonthFilter: '',
     ledgerSearch: '',
@@ -2997,16 +2997,24 @@ export default class App extends React.Component {
     const noUdharEntries = entries.filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return' && !this._isPlanLedgerEntry(le));
     const allTime = totals(noUdharEntries);
     const thisMonth = totals(noUdharEntries.filter(le => le.date.startsWith(curMonth)));
-    // Income, Expenses and Net all read from one scope so they add up.
-    const scope = this.state.ledgerScope === 'all' ? 'all' : 'month';
-    const sum = scope === 'all' ? allTime : thisMonth;
-    const scopeLabel = scope === 'all' ? 'Overall' : 'This Month';
-    const scopeLabelUr = scope === 'all' ? 'مجموعی' : 'اس ماہ';
+    // The three summary cards all read this month, so Net equals income minus
+    // expenses. Net used to be all-time here, which never reconciled.
+    const sum = thisMonth;
+    const catScope = this.state.catScope === 'all' ? 'all' : 'month';
 
     const catMap = this.categoryEmojiMap();
 
+    // Category totals answer "this month vs everything", so they use their own
+    // scope rather than the month chips that filter the transaction list.
+    const catSource = entries.filter(le => {
+      if (this._isPlanLedgerEntry(le) || le.category === 'Udhar' || le.category === 'Udhar Return') return false;
+      if (filter !== 'all' && le.type !== filter) return false;
+      if (search && !(le.category || '').toLowerCase().includes(search) && !(le.note || '').toLowerCase().includes(search)) return false;
+      if (catScope === 'month' && !le.date.startsWith(curMonth)) return false;
+      return true;
+    });
     const catBreakdown = {};
-    filtered.filter(le => !this._isPlanLedgerEntry(le) && le.category !== 'Udhar' && le.category !== 'Udhar Return').forEach(le => {
+    catSource.forEach(le => {
       if (!catBreakdown[le.category]) catBreakdown[le.category] = { inc: 0, exp: 0 };
       if (le.type === 'income') catBreakdown[le.category].inc += le.amount;
       else catBreakdown[le.category].exp += le.amount;
@@ -3016,9 +3024,9 @@ export default class App extends React.Component {
 
     const months = [...new Set(entries.map(le => le.date.slice(0, 7)))].sort().reverse();
 
-    const scopeBtn = (label, ur, val) => h('button', { key: val, onClick: () => this.setState({ ledgerScope: val }), style: { flex: 1, padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: scope === val ? '#0f6b4b' : '#fdfcf8', color: scope === val ? 'white' : '#3a4a3f', border: '1px solid ' + (scope === val ? '#0f6b4b' : '#ece8dc') } },
+    const scopeBtn = (label, ur, val) => h('button', { key: val, onClick: () => this.setState({ catScope: val }), style: { padding: '4px 12px', borderRadius: 7, fontSize: 11, fontWeight: 700, background: catScope === val ? '#0f6b4b' : '#f4f1e6', color: catScope === val ? 'white' : '#3a4a3f', border: '1px solid ' + (catScope === val ? '#0f6b4b' : '#ece8dc') } },
       h('span', {}, label),
-      h('span', { className: 'ur', style: { fontSize: 10, opacity: 0.85, marginRight: 4 } }, ' ' + ur),
+      h('span', { className: 'ur', style: { fontSize: 10, opacity: 0.85, marginRight: 3 } }, ' ' + ur),
     );
     const filterBtn = (label, val) => h('button', { key: val, onClick: () => this.setState({ ledgerFilter: val }), style: { padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: filter === val ? '#0f6b4b' : '#f4f1e6', color: filter === val ? 'white' : '#3a4a3f', border: filter === val ? '1px solid #0f6b4b' : '1px solid #ece8dc' } }, label);
 
@@ -3068,24 +3076,20 @@ export default class App extends React.Component {
         secTab('Udhar', 'ادھار', 'udhar', '🤝'),
       ),
       ...(ls === 'expenses' ? [
-      h('div', { style: { display: 'flex', gap: 6, marginBottom: 10 } },
-        scopeBtn('Monthly', 'ماہانہ', 'month'),
-        scopeBtn('Overall', 'مجموعی', 'all'),
-      ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 14 } },
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, scopeLabel + ' Income'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, scopeLabelUr + ' آمدنی'),
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Income'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ آمدنی'),
           h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(sum.inc)),
         ]),
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, scopeLabel + ' Expenses'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, scopeLabelUr + ' اخراجات'),
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Expenses'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ اخراجات'),
           h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(sum.exp)),
         ]),
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, scopeLabel + ' Net'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, scopeLabelUr + ' خالص'),
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Net'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ خالص'),
           h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: sum.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (sum.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(sum.net))),
         ]),
       ),
@@ -3136,8 +3140,13 @@ export default class App extends React.Component {
         }),
       ]) : null,
       recurring.length > 0 ? h('div', { style: { height: 12 } }) : null,
-      catList.length > 0 ? this.card([
-        this.sectionHeader('By Category', 'زمرے کے مطابق'),
+      this.card([
+        this.sectionHeader('By Category', 'زمرے کے مطابق',
+          h('div', { style: { display: 'flex', gap: 5 } },
+            scopeBtn('Monthly', 'ماہانہ', 'month'),
+            scopeBtn('Overall', 'مجموعی', 'all'),
+          ),
+        ),
         ...catList.map(([cat, v]) => {
           const total = v.inc + v.exp;
           const pct = Math.round((total / maxCatAmt) * 100);
@@ -3156,7 +3165,9 @@ export default class App extends React.Component {
             ),
           );
         }),
-      ]) : null,
+        catList.length === 0 ? h('div', { key: 'nocat', style: { padding: '12px 0', color: '#7a7663', fontSize: 13 } },
+          catScope === 'month' ? 'No entries this month. Switch to Overall to see earlier ones.' : 'No entries yet.') : null,
+      ]),
       h('div', { style: { height: 12 } }),
       this.card([
         this.sectionHeader('Transactions', 'لین دین', h('span', { style: { fontSize: 12, color: '#7a7663' } }, expEntries.length + ' entries')),
