@@ -145,6 +145,7 @@ export default class App extends React.Component {
     ledgerModal: { open: false, type: 'expense', amount: '', accountId: '', category: '', note: '', date: this.todayStr(), editId: null },
     ledgerFilter: 'all',
     ledgerSection: 'expenses',
+    ledgerScope: 'month',
     dayBookSection: 'all',
     ledgerMonthFilter: '',
     ledgerSearch: '',
@@ -2996,6 +2997,11 @@ export default class App extends React.Component {
     const noUdharEntries = entries.filter(le => !le.udpiRef && le.category !== 'Udhar' && le.category !== 'Udhar Return' && !this._isPlanLedgerEntry(le));
     const allTime = totals(noUdharEntries);
     const thisMonth = totals(noUdharEntries.filter(le => le.date.startsWith(curMonth)));
+    // Income, Expenses and Net all read from one scope so they add up.
+    const scope = this.state.ledgerScope === 'all' ? 'all' : 'month';
+    const sum = scope === 'all' ? allTime : thisMonth;
+    const scopeLabel = scope === 'all' ? 'Overall' : 'This Month';
+    const scopeLabelUr = scope === 'all' ? 'مجموعی' : 'اس ماہ';
 
     const catMap = this.categoryEmojiMap();
 
@@ -3010,6 +3016,10 @@ export default class App extends React.Component {
 
     const months = [...new Set(entries.map(le => le.date.slice(0, 7)))].sort().reverse();
 
+    const scopeBtn = (label, ur, val) => h('button', { key: val, onClick: () => this.setState({ ledgerScope: val }), style: { flex: 1, padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: scope === val ? '#0f6b4b' : '#fdfcf8', color: scope === val ? 'white' : '#3a4a3f', border: '1px solid ' + (scope === val ? '#0f6b4b' : '#ece8dc') } },
+      h('span', {}, label),
+      h('span', { className: 'ur', style: { fontSize: 10, opacity: 0.85, marginRight: 4 } }, ' ' + ur),
+    );
     const filterBtn = (label, val) => h('button', { key: val, onClick: () => this.setState({ ledgerFilter: val }), style: { padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: filter === val ? '#0f6b4b' : '#f4f1e6', color: filter === val ? 'white' : '#3a4a3f', border: filter === val ? '1px solid #0f6b4b' : '1px solid #ece8dc' } }, label);
 
     // Quick-add chips: top 6 most-used categories (excluding plan-related ones)
@@ -3058,21 +3068,25 @@ export default class App extends React.Component {
         secTab('Udhar', 'ادھار', 'udhar', '🤝'),
       ),
       ...(ls === 'expenses' ? [
+      h('div', { style: { display: 'flex', gap: 6, marginBottom: 10 } },
+        scopeBtn('Monthly', 'ماہانہ', 'month'),
+        scopeBtn('Overall', 'مجموعی', 'all'),
+      ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 14 } },
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Income'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ آمدنی'),
-          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(thisMonth.inc)),
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, scopeLabel + ' Income'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, scopeLabelUr + ' آمدنی'),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(sum.inc)),
         ]),
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Expenses'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ اخراجات'),
-          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(thisMonth.exp)),
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, scopeLabel + ' Expenses'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, scopeLabelUr + ' اخراجات'),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(sum.exp)),
         ]),
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'Net'),
-          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'خالص'),
-          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: allTime.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (allTime.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(allTime.net))),
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, scopeLabel + ' Net'),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, scopeLabelUr + ' خالص'),
+          h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: sum.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (sum.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(sum.net))),
         ]),
       ),
       // Quick-add chips
