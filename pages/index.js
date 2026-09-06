@@ -244,6 +244,7 @@ export default class App extends React.Component {
     const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced' };
     if (cloudPin) payload.savedPin = cloudPin;
     localStorage.setItem('aqsat_data', JSON.stringify(merged));
+    this._syncSnapshot = this._snapshotOf(merged);
     this.setState(payload, () => this.processRecurring());
   };
 
@@ -298,6 +299,7 @@ export default class App extends React.Component {
         const merged = this._mergeData(this.state, data.data);
         this._fromCloud = true;
         localStorage.setItem('aqsat_data', JSON.stringify(merged));
+        this._syncSnapshot = this._snapshotOf(merged);
         const cloudPin = (merged.settings || {}).pin || '';
         if (cloudPin) localStorage.setItem('aqsat_pin', cloudPin);
         this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], syncStatus: 'synced', ...(cloudPin ? { savedPin: cloudPin } : {}) });
@@ -306,11 +308,63 @@ export default class App extends React.Component {
     this._refetching = false;
   };
 
+  _collections = ['customers', 'products', 'plans', 'ledger', 'udpiEntries', 'invoices', 'staff'];
+
+  // Signature of every row as last seen in sync, so we can tell which rows this
+  // device actually edited rather than assuming all of them are fresh.
+  _snapshotOf = (data) => {
+    const snap = {};
+    this._collections.forEach(k => {
+      const m = {};
+      (data[k] || []).forEach(r => {
+        if (!r || !r.id) return;
+        const { updatedAt, ...rest } = r;
+        m[r.id] = JSON.stringify(rest);
+      });
+      snap[k] = m;
+    });
+    return snap;
+  };
+
+  // Stamp only rows this device changed since the last sync. Untouched rows keep
+  // whatever timestamp they arrived with, so they never beat another device's edit.
+  _stampLocalChanges = (data) => {
+    const snap = this._syncSnapshot;
+    // With no baseline we cannot tell edited rows from untouched ones. Stamping
+    // everything would mark this whole device fresh and let it win over the
+    // cloud — the exact bug being fixed — so stamp nothing until we have one.
+    if (!snap) return data;
+    const now = new Date().toISOString();
+    const out = { ...data };
+    this._collections.forEach(k => {
+      out[k] = (data[k] || []).map(r => {
+        if (!r || !r.id) return r;
+        const { updatedAt, ...rest } = r;
+        if (snap && snap[k] && snap[k][r.id] === JSON.stringify(rest)) return r;
+        return { ...r, updatedAt: now };
+      });
+    });
+    return out;
+  };
+
   _mergeData = (local, cloud) => {
+    // Newer edit wins. If only one side carries a timestamp it is the one that has
+    // been written since stamping shipped, so it is the fresher of the two.
+    const pickNewer = (mine, theirs) => {
+      const a = mine && mine.updatedAt, b = theirs && theirs.updatedAt;
+      if (a && b) return a >= b ? mine : theirs;
+      if (a) return mine;
+      if (b) return theirs;
+      return mine;
+    };
     const mergeArr = (localArr, cloudArr) => {
       const map = new Map();
-      (cloudArr || []).forEach(item => map.set(item.id, item));
-      (localArr || []).forEach(item => map.set(item.id, item));
+      (cloudArr || []).forEach(item => { if (item && item.id) map.set(item.id, item); });
+      (localArr || []).forEach(item => {
+        if (!item || !item.id) return;
+        const other = map.get(item.id);
+        map.set(item.id, other ? pickNewer(item, other) : item);
+      });
       return Array.from(map.values());
     };
     return {
@@ -328,23 +382,34 @@ export default class App extends React.Component {
   pushToSupabase = async () => {
     const { customers, products, plans, settings, ledger, udpiEntries, invoices, staff } = this.state;
     if (!customers) return;
+    const localData = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], invoices: invoices || [], staff: staff || [] };
     this.setState({ syncStatus: 'syncing' });
     try {
-      const { data: cloud } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
-      const localData = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], invoices: invoices || [], staff: staff || [] };
-      const merged = cloud?.data ? this._mergeData(localData, cloud.data) : localData;
+      const { data: cloud, error: readErr } = await supabase.from('shops').select('data').eq('id', SHOP_ID).maybeSingle();
+      // If the read failed we do not know what is up there. Writing anyway would
+      // replace the cloud with this device's copy and destroy every row it has
+      // not seen, so abort and let the next push retry.
+      if (readErr) {
+        localStorage.setItem('aqsat_data', JSON.stringify(localData));
+        this.setState({ syncStatus: 'error', syncError: readErr.message || 'sync read failed' });
+        return;
+      }
+      const stamped = this._stampLocalChanges(localData);
+      const merged = cloud?.data ? this._mergeData(stamped, cloud.data) : stamped;
       localStorage.setItem('aqsat_data', JSON.stringify(merged));
       const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: merged, updated_at: new Date().toISOString() });
-      if (!error && merged !== localData) {
-        this._fromCloud = true;
-        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced' });
-      } else {
-        this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
+      if (error) {
+        this.setState({ syncStatus: 'error', syncError: error.message || '' });
+        return;
       }
+      this._syncSnapshot = this._snapshotOf(merged);
+      this._fromCloud = true;
+      this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced' });
     } catch(e) {
-      localStorage.setItem('aqsat_data', JSON.stringify({ customers, products, plans, settings, ledger: ledger || [], invoices: invoices || [], staff: staff || [] }));
-      const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: { customers, products, plans, settings, ledger: ledger || [], invoices: invoices || [], staff: staff || [] }, updated_at: new Date().toISOString() });
-      this.setState({ syncStatus: error ? 'error' : 'synced', syncError: error?.message || '' });
+      // Keep the full local copy — every collection, udpiEntries included — and
+      // push nothing. A partial object here used to wipe the whole Udhar Book.
+      localStorage.setItem('aqsat_data', JSON.stringify(localData));
+      this.setState({ syncStatus: 'error', syncError: (e && e.message) || 'sync failed' });
     }
   };
 
