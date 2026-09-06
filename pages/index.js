@@ -212,6 +212,20 @@ export default class App extends React.Component {
       if (document.visibilityState === 'visible') this._refetchCloud();
     };
     document.addEventListener('visibilitychange', this._onVisibility);
+
+    // Offline is a normal state in a shop, not an error. Edits keep working
+    // against localStorage; this just flushes them the moment we are back.
+    this._onOnline = () => {
+      this.setState({ syncStatus: 'syncing' });
+      this._refetchCloud();
+      if (this._pendingSync) this.pushToSupabase();
+    };
+    this._onOffline = () => this.setState({ syncStatus: 'offline' });
+    window.addEventListener('online', this._onOnline);
+    window.addEventListener('offline', this._onOffline);
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.setState({ syncStatus: 'offline' });
+    }
   }
 
   componentDidUpdate(_, prev) {
@@ -229,6 +243,8 @@ export default class App extends React.Component {
     if (this._syncChannel) supabase.removeChannel(this._syncChannel);
     clearTimeout(this._syncTimer);
     if (this._onVisibility) document.removeEventListener('visibilitychange', this._onVisibility);
+    if (this._onOnline) window.removeEventListener('online', this._onOnline);
+    if (this._onOffline) window.removeEventListener('offline', this._onOffline);
   }
 
   _applyCloudData = (d) => {
@@ -383,6 +399,13 @@ export default class App extends React.Component {
     const { customers, products, plans, settings, ledger, udpiEntries, invoices, staff } = this.state;
     if (!customers) return;
     const localData = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], invoices: invoices || [], staff: staff || [] };
+    // No connection: keep the work safely on the device and wait for 'online'.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      try { localStorage.setItem('aqsat_data', JSON.stringify(localData)); } catch (e) {}
+      this._pendingSync = true;
+      this.setState({ syncStatus: 'offline' });
+      return;
+    }
     this.setState({ syncStatus: 'syncing' });
     try {
       const { data: cloud, error: readErr } = await supabase.from('shops').select('data').eq('id', SHOP_ID).maybeSingle();
@@ -391,6 +414,7 @@ export default class App extends React.Component {
       // not seen, so abort and let the next push retry.
       if (readErr) {
         localStorage.setItem('aqsat_data', JSON.stringify(localData));
+        this._pendingSync = true;
         this.setState({ syncStatus: 'error', syncError: readErr.message || 'sync read failed' });
         return;
       }
@@ -399,9 +423,11 @@ export default class App extends React.Component {
       localStorage.setItem('aqsat_data', JSON.stringify(merged));
       const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: merged, updated_at: new Date().toISOString() });
       if (error) {
+        this._pendingSync = true;
         this.setState({ syncStatus: 'error', syncError: error.message || '' });
         return;
       }
+      this._pendingSync = false;
       this._syncSnapshot = this._snapshotOf(merged);
       this._fromCloud = true;
       this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced' });
@@ -409,7 +435,9 @@ export default class App extends React.Component {
       // Keep the full local copy — every collection, udpiEntries included — and
       // push nothing. A partial object here used to wipe the whole Udhar Book.
       localStorage.setItem('aqsat_data', JSON.stringify(localData));
-      this.setState({ syncStatus: 'error', syncError: (e && e.message) || 'sync failed' });
+      this._pendingSync = true;
+      const off = typeof navigator !== 'undefined' && navigator.onLine === false;
+      this.setState({ syncStatus: off ? 'offline' : 'error', syncError: off ? '' : ((e && e.message) || 'sync failed') });
     }
   };
 
@@ -2860,7 +2888,7 @@ export default class App extends React.Component {
           h('div', { style: { fontSize: 16, fontWeight: 700 } }, 'Appearance & Security'),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 5 } },
             h('div', { style: { width: 7, height: 7, borderRadius: '50%', background: this.state.syncStatus === 'synced' ? '#0f6b4b' : this.state.syncStatus === 'syncing' || this.state.syncStatus === 'loading' ? '#a26a10' : '#a4362b' } }),
-            h('span', { style: { fontSize: 11, color: '#7a7663', fontWeight: 600 } }, this.state.syncStatus === 'synced' ? '☁ Synced' : this.state.syncStatus === 'syncing' ? '☁ Syncing…' : this.state.syncStatus === 'loading' ? '☁ Loading…' : '☁ Offline'),
+            h('span', { style: { fontSize: 11, color: '#7a7663', fontWeight: 600 } }, this.state.syncStatus === 'synced' ? '☁ Synced' : this.state.syncStatus === 'syncing' ? '☁ Syncing…' : this.state.syncStatus === 'loading' ? '☁ Loading…' : (this._pendingSync ? '☁ Offline — saved on device' : '☁ Offline')),
           ),
         ),
         this.state.syncStatus === 'error' ? h('div', { style: { background: '#fdecea', border: '1px solid #f5cac2', borderRadius: 8, padding: '10px 12px', fontSize: 11, color: '#a4362b', marginBottom: 12 } },
