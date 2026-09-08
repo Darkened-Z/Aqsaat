@@ -1425,7 +1425,7 @@ export default class App extends React.Component {
     const fixedMonths = parseInt(np.customMonths || np.months) || 6;
     const start = new Date(np.startDate || new Date());
     const schedule = [];
-    const freqDays = parseInt(np.frequencyDays) || 30;
+    const freqDays = this._freqDays(np.frequencyDays);
     if (installAmt > 0) {
       if (total2Pay === 0) { alert('Total payable is 0 — check sale price and down payment'); return; }
       let remaining = total2Pay;
@@ -1839,7 +1839,14 @@ export default class App extends React.Component {
   // Rebuilds the unpaid part of a schedule so it sums to total2Pay, keeping paid
   // installments untouched. With a fixed installment amount it produces clean
   // "amt × N + remainder" installments; otherwise it splits equally.
-  _rebuildSchedule(draftSchedule, total2Pay, installAmt, freq, freqDays, startBase) {
+  // Days between installments, never zero or negative. `parseInt(x) || 30` used to
+  // allow -1 through, which stepped a schedule backwards a day at a time.
+  _freqDays(v) {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n > 0 ? n : 30;
+  }
+
+  _rebuildSchedule(draftSchedule, total2Pay, installAmt, freq, freqDays, startBase, startMoved) {
     // Rows are reused by position further down, so they must be in date order
     // first — otherwise installment n can inherit a date earlier than n-1.
     const byDate = (a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || ''));
@@ -1862,10 +1869,26 @@ export default class App extends React.Component {
       unpaidAmounts = oldUnpaid.map((_, i) => i === oldUnpaid.length - 1 ? Math.round(remain - per * (oldUnpaid.length - 1)) : per);
     }
     const schedule = paidList.map((s, i) => ({ ...s, n: i + 1 }));
-    const startChanged = paidList.length === 0 || (oldUnpaid.length > 0 && oldUnpaid[0].dueDate !== stepDate(paidList.length));
+    // Regenerate every due date only when the plan's start date has moved. If it
+    // has not, the dates on the rows are kept — including any the user just typed
+    // into an installment. Those edits used to be silently discarded on save.
+    const regenerate = startMoved === undefined
+      ? (paidList.length === 0 || (oldUnpaid.length > 0 && oldUnpaid[0].dueDate !== stepDate(paidList.length)))
+      : !!startMoved;
+    // Extra installments created by a price change continue on from the last date
+    // already in the plan, rather than restarting at the plan's start date.
+    const lastKnown = oldUnpaid.length ? oldUnpaid[oldUnpaid.length - 1].dueDate
+      : (paidList.length ? paidList[paidList.length - 1].dueDate : startBase);
+    const stepFrom = (base, k) => {
+      const d = new Date(base);
+      if (freq === 'days') d.setDate(d.getDate() + k * freqDays);
+      else d.setMonth(d.getMonth() + k);
+      return this._localDateStr(d);
+    };
     unpaidAmounts.forEach((amt, j) => {
       const globalIdx = paidList.length + j;
-      const dueDate = startChanged ? stepDate(globalIdx) : (j < oldUnpaid.length ? oldUnpaid[j].dueDate : stepDate(globalIdx));
+      const dueDate = regenerate ? stepDate(globalIdx)
+        : (j < oldUnpaid.length ? oldUnpaid[j].dueDate : stepFrom(lastKnown, j - oldUnpaid.length + 1));
       schedule.push({ n: globalIdx + 1, dueDate, amount: amt, paid: false, paidDate: null });
     });
     // A schedule must run forwards. If an installment still falls due before the
@@ -1933,14 +1956,19 @@ export default class App extends React.Component {
       const total2Pay = financed + profit;
       const installAmt = parseFloat(em.draftInstallmentAmount) || 0;
       const freq = pl.frequency || 'monthly';
-      const freqDays = parseInt(pl.frequencyDays) || 30;
+      const freqDays = this._freqDays(pl.frequencyDays);
       const startBase = em.draftStartDate || pl.startDate || this.todayStr();
-      const schedule = this._rebuildSchedule(em.draftSchedule, total2Pay, installAmt, freq, freqDays, startBase);
+      // A plan saved with a bad gap (frequencyDays of 0 or less) has dates that are
+      // wrong by definition — they stepped backwards or stood still. Regenerate them
+      // rather than carrying the bad dates forward.
+      const badFreq = freq === 'days' && !(parseInt(pl.frequencyDays, 10) > 0);
+      const startMoved = !!em.draftStartDate && em.draftStartDate !== pl.startDate;
+      const schedule = this._rebuildSchedule(em.draftSchedule, total2Pay, installAmt, freq, freqDays, startBase, startMoved || badFreq);
       const allPaid = schedule.length > 0 && schedule.every(s => s.paid);
       const months = schedule.length;
       const firstUnpaid = schedule.find(s => !s.paid);
       const monthly = installAmt > 0 ? installAmt : (firstUnpaid ? firstUnpaid.amount : (months > 0 ? Math.round(total2Pay / months) : 0));
-      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, installmentAmount: installAmt, startDate: em.draftStartDate || pl.startDate, months, schedule, imei: em.draftImei, chassisNo: em.draftChassisNo, engineNo: em.draftEngineNo, serialNo: em.draftSerialNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
+      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, installmentAmount: installAmt, startDate: em.draftStartDate || pl.startDate, months, schedule, frequencyDays: freqDays, imei: em.draftImei, chassisNo: em.draftChassisNo, engineNo: em.draftEngineNo, serialNo: em.draftSerialNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
     });
     const edited = plans.find(pl => pl.id === em.planId);
     const ledger = edited ? this._syncPlanLedger(this.state.ledger || [], edited) : this.state.ledger;
@@ -2511,7 +2539,7 @@ export default class App extends React.Component {
               h('div', { style: { display: 'flex', gap: 6 } },
                 h('button', { type: 'button', onClick: () => set('frequency', 'monthly'), style: { flex: 1, padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: np.frequency === 'monthly' ? '#1a2b1f' : '#fdfcf8', color: np.frequency === 'monthly' ? 'white' : '#3a4a3f', border: '1px solid ' + (np.frequency === 'monthly' ? '#1a2b1f' : '#ece8dc') } }, 'Monthly'),
                 h('button', { type: 'button', onClick: () => set('frequency', 'days'), style: { flex: 1, padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: np.frequency === 'days' ? '#1a2b1f' : '#fdfcf8', color: np.frequency === 'days' ? 'white' : '#3a4a3f', border: '1px solid ' + (np.frequency === 'days' ? '#1a2b1f' : '#ece8dc') } }, 'Every X days'),
-                np.frequency === 'days' ? h('input', { type: 'number', value: np.frequencyDays, onChange: e => set('frequencyDays', e.target.value), placeholder: '30', style: { ...inpStyle, width: 70, padding: '7px 8px' } }) : null,
+                np.frequency === 'days' ? h('input', { type: 'number', min: 1, step: 1, value: np.frequencyDays, onChange: e => set('frequencyDays', e.target.value), onBlur: e => set('frequencyDays', this._freqDays(e.target.value)), placeholder: '30', style: { ...inpStyle, width: 70, padding: '7px 8px' } }) : null,
               ),
             ),
           ),
