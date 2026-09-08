@@ -1840,8 +1840,11 @@ export default class App extends React.Component {
   // installments untouched. With a fixed installment amount it produces clean
   // "amt × N + remainder" installments; otherwise it splits equally.
   _rebuildSchedule(draftSchedule, total2Pay, installAmt, freq, freqDays, startBase) {
-    const paidList = draftSchedule.filter(s => s.paid);
-    const oldUnpaid = draftSchedule.filter(s => !s.paid);
+    // Rows are reused by position further down, so they must be in date order
+    // first — otherwise installment n can inherit a date earlier than n-1.
+    const byDate = (a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || ''));
+    const paidList = draftSchedule.filter(s => s.paid).sort(byDate);
+    const oldUnpaid = draftSchedule.filter(s => !s.paid).sort(byDate);
     const paidSum = paidList.reduce((a, s) => a + this._cashPaid(s), 0);
     const remain = Math.max(0, Math.round(total2Pay - paidSum));
     const stepDate = (idx) => {
@@ -1865,6 +1868,16 @@ export default class App extends React.Component {
       const dueDate = startChanged ? stepDate(globalIdx) : (j < oldUnpaid.length ? oldUnpaid[j].dueDate : stepDate(globalIdx));
       schedule.push({ n: globalIdx + 1, dueDate, amount: amt, paid: false, paidDate: null });
     });
+    // A schedule must run forwards. If an installment still falls due before the
+    // one before it — a start date moved without the rest following, say — rebuild
+    // the unpaid tail from the plan's own start so the dates line up again. Paid
+    // rows are left alone: they record when money actually changed hands.
+    const outOfOrder = schedule.findIndex((s, i) => i > 0 && String(s.dueDate) < String(schedule[i - 1].dueDate));
+    if (outOfOrder > 0) {
+      for (let k = outOfOrder; k < schedule.length; k++) {
+        if (!schedule[k].paid) schedule[k] = { ...schedule[k], dueDate: stepDate(k) };
+      }
+    }
     return schedule;
   }
   // Editing a plan's price or down payment used to leave its Product Cost and
