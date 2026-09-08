@@ -1268,9 +1268,14 @@ export default class App extends React.Component {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
+  // Cash actually received for an installment. A customer paying 6,000 against an
+  // 8,000 installment records amountPaid 6000; counting the face value instead
+  // silently writes off the 2,000 shortfall.
+  _cashPaid(s) { return s && s.amountPaid != null ? s.amountPaid : (s ? s.amount || 0 : 0); }
+
   planStats(pl) {
     const paid = pl.schedule.filter(s => s.paid);
-    const paidAmount = paid.reduce((a, s) => a + s.amount, 0) + pl.down;
+    const paidAmount = paid.reduce((a, s) => a + this._cashPaid(s), 0) + pl.down;
     const total = pl.schedule.reduce((a, s) => a + s.amount, 0) + pl.down;
     const remaining = total - paidAmount;
     const next = pl.schedule.find(s => !s.paid);
@@ -1833,7 +1838,7 @@ export default class App extends React.Component {
   _rebuildSchedule(draftSchedule, total2Pay, installAmt, freq, freqDays, startBase) {
     const paidList = draftSchedule.filter(s => s.paid);
     const oldUnpaid = draftSchedule.filter(s => !s.paid);
-    const paidSum = paidList.reduce((a, s) => a + s.amount, 0);
+    const paidSum = paidList.reduce((a, s) => a + this._cashPaid(s), 0);
     const remain = Math.max(0, Math.round(total2Pay - paidSum));
     const stepDate = (idx) => {
       const d = new Date(startBase);
@@ -2522,7 +2527,7 @@ export default class App extends React.Component {
     const earnedProfit = this.activePlans().reduce((a, pl) => {
       const profit = profitOf(pl);
       const scheduleTotal = pl.schedule.reduce((s, x) => s + x.amount, 0) || 1;
-      const paidTotal = pl.schedule.filter(s => s.paid).reduce((s, x) => s + x.amount, 0);
+      const paidTotal = pl.schedule.filter(s => s.paid).reduce((s, x) => s + this._cashPaid(x), 0);
       return a + profit * (paidTotal / scheduleTotal);
     }, 0);
 
@@ -5426,7 +5431,7 @@ export default class App extends React.Component {
             const dAmt = parseFloat(em.draftInterestAmount);
             const profit = Math.max(0, (em.draftInterestAmount !== '' && !isNaN(dAmt)) ? dAmt : financed * Math.min(parseFloat(em.draftInterest) || 0, 100) / 100);
             const total2Pay = financed + profit;
-            const paidSum = em.draftSchedule.filter(s => s.paid).reduce((a, s) => a + s.amount, 0);
+            const paidSum = em.draftSchedule.filter(s => s.paid).reduce((a, s) => a + this._cashPaid(s), 0);
             const remain = Math.max(0, Math.round(total2Pay - paidSum));
             const installAmt = parseFloat(em.draftInstallmentAmount) || 0;
             let preview = 'Leave blank to split the balance equally';
