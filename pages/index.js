@@ -1457,9 +1457,9 @@ export default class App extends React.Component {
     const prodName = product ? product.name : '';
     const today = this.todayStr();
     const ledger = [...(this.state.ledger || [])];
-    ledger.unshift({ id: 'le_' + Date.now().toString(36), type: 'expense', amount: total, accountId: np.accountId, category: 'Product Cost', note: prodName + ' — ' + custName + ' (' + voucherNo + ')', date: today });
+    ledger.unshift({ id: 'le_' + Date.now().toString(36), type: 'expense', amount: total, accountId: np.accountId, category: 'Product Cost', note: prodName + ' — ' + custName + ' (' + voucherNo + ')', date: today, planRef: plan.id });
     if (down > 0) {
-      ledger.unshift({ id: 'le_' + (Date.now() + 1).toString(36), type: 'income', amount: down, accountId: np.accountId, category: 'Down Payment', note: prodName + ' — ' + custName + ' (' + voucherNo + ')', date: today });
+      ledger.unshift({ id: 'le_' + (Date.now() + 1).toString(36), type: 'income', amount: down, accountId: np.accountId, category: 'Down Payment', note: prodName + ' — ' + custName + ' (' + voucherNo + ')', date: today, planRef: plan.id });
     }
     const updProducts = this.state.products.map(p => p.id === np.productId && p.stock > 0 ? { ...p, stock: p.stock - 1 } : p);
     this.setState({ plans: [plan, ...this.state.plans], ledger, products: updProducts, newPlan: { customerId: '', productId: '', totalPrice: '', downPayment: '', months: 6, customMonths: '', installmentAmount: '', interestType: 'percent', interest: 12, interestAmount: '', startDate: this.todayStr(), graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, imei: '', chassisNo: '', engineNo: '', serialNo: '', frequency: 'monthly', frequencyDays: 30, accountId: '' } });
@@ -1863,6 +1863,44 @@ export default class App extends React.Component {
     });
     return schedule;
   }
+  // Editing a plan's price or down payment used to leave its Product Cost and
+  // Down Payment rows on the old figures, so the recorded cash movement no longer
+  // matched the sale. Rows the user has deleted stay deleted — many were removed
+  // on purpose back when plan costs still appeared in the Expenses tab.
+  _syncPlanLedger(ledger, pl) {
+    const belongs = l => l.planRef ? l.planRef === pl.id
+      : (!!pl.voucherNo && (l.note || '').includes(pl.voucherNo));
+    let changed = false;
+    const out = ledger.map(l => {
+      if (l._deleted || !this._isPlanLedgerEntry(l) || !belongs(l)) return l;
+      if (l.category === 'Product Cost') {
+        if (l.amount === pl.total && l.planRef) return l;
+        changed = true;
+        return { ...l, amount: pl.total, planRef: pl.id };
+      }
+      // Down payment removed during the edit: the money never came in.
+      if (!(pl.down > 0)) { changed = true; return { ...l, _deleted: true }; }
+      if (l.amount === pl.down && l.planRef) return l;
+      changed = true;
+      return { ...l, amount: pl.down, planRef: pl.id };
+    });
+    // A down payment added during an edit has no row yet. Only create one when the
+    // plan has never had one, so a deliberate deletion is not undone.
+    const everHadDown = ledger.some(l => l.category === 'Down Payment' && belongs(l));
+    if (pl.down > 0 && !everHadDown) {
+      const prod = (this.state.products || []).find(x => x.id === pl.productId);
+      const cust = (this.state.customers || []).find(c => c.id === pl.customerId);
+      out.unshift({
+        id: 'le_' + Date.now().toString(36), type: 'income', amount: pl.down,
+        accountId: pl.accountId, category: 'Down Payment',
+        note: (prod ? prod.name : '') + ' — ' + (cust ? cust.name : '') + ' (' + (pl.voucherNo || '') + ')',
+        date: this.todayStr(), planRef: pl.id,
+      });
+      changed = true;
+    }
+    return changed ? out : ledger;
+  }
+
   _doSaveEditPlan = () => {
     const em = this.state.editPlanModal;
     const plans = this.state.plans.map(pl => {
@@ -1887,7 +1925,9 @@ export default class App extends React.Component {
       const monthly = installAmt > 0 ? installAmt : (firstUnpaid ? firstUnpaid.amount : (months > 0 ? Math.round(total2Pay / months) : 0));
       return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, installmentAmount: installAmt, startDate: em.draftStartDate || pl.startDate, months, schedule, imei: em.draftImei, chassisNo: em.draftChassisNo, engineNo: em.draftEngineNo, serialNo: em.draftSerialNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
     });
-    this.setState({ plans, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftEngineNo: '', draftSerialNo: '', draftNotes: '' } });
+    const edited = plans.find(pl => pl.id === em.planId);
+    const ledger = edited ? this._syncPlanLedger(this.state.ledger || [], edited) : this.state.ledger;
+    this.setState({ plans, ledger, editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftEngineNo: '', draftSerialNo: '', draftNotes: '' } });
   };
   submitEditPlanPin = () => {
     const { pinInput } = this.state.editPlanModal;
