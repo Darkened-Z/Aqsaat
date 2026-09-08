@@ -185,7 +185,11 @@ export default class App extends React.Component {
     if (typeof window === 'undefined') return;
 
     const hostname = window.location.hostname;
-    if (hostname.includes('demo')) {
+    // Demo runs on its own Vercel project, whose generated hostnames are
+    // aqsat-next-*.vercel.app and do not contain the word "demo". The live shop
+    // is aqsaat / udharbook, so neither can match this.
+    const isDemoHost = hostname.includes('demo') || hostname.includes('aqsat-next');
+    if (isDemoHost) {
       this._isDemo = true;
       const demo = this._generateDemoData();
       this.setState({ ...demo, pinLocked: false, syncStatus: 'synced', route: 'dashboard' });
