@@ -509,6 +509,45 @@ export default class App extends React.Component {
   }
   // Item-type buckets. 'Bike' is legacy data for the same thing as 'Motorcycle',
   // so both are accepted here or those products lose their vehicle fields.
+  _builtinProductCats = ['Mobile', 'Tablet', 'Laptop', 'Television', 'Refrigerator',
+    'Deep Freezer', 'Washing Machine', 'Air Conditioner', 'Water Dispenser', 'Microwave Oven',
+    'Juicer / Blender', 'Fan', 'Iron', 'Geyser', 'Sewing Machine', 'Generator / UPS',
+    'Appliance', 'Car', 'Motorcycle', 'Other'];
+
+  // Built-ins plus anything the shop has already typed, so a category added once
+  // stays available for the next product.
+  getProductCats() {
+    const known = new Set(this._builtinProductCats);
+    const custom = [];
+    (this.state.products || []).forEach(pr => {
+      if (pr._deleted || !pr.category || known.has(pr.category)) return;
+      custom.push(pr.category);
+    });
+    return [...this._builtinProductCats, ...[...new Set(custom)].sort()];
+  }
+
+  // Category picker. Choosing the trailing "add new" entry turns the dropdown
+  // into a text box so the shop can name its own.
+  productCatField(value, onChange, style) {
+    const h = this.h;
+    if (value === '__add__') {
+      const save = v => onChange((v || '').trim());
+      return h('div', { style: { display: 'flex', gap: 6 } },
+        h('input', { autoFocus: true, type: 'text', placeholder: 'New category name…', maxLength: 40,
+          style: { ...style, flex: 1 },
+          onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); save(e.target.value); } else if (e.key === 'Escape') onChange('Other'); },
+          onBlur: e => save(e.target.value || 'Other') }),
+        h('button', { type: 'button', onClick: () => onChange('Other'), style: { padding: '6px 10px', borderRadius: 8, background: '#f4f1e6', fontSize: 11, fontWeight: 600, color: '#7a7663' } }, '✕'),
+      );
+    }
+    const cats = this.getProductCats();
+    const opts = value && !cats.includes(value) ? [...cats, value] : cats;
+    return h('select', { value: value, onChange: e => onChange(e.target.value), style },
+      ...opts.map(c => h('option', { key: c, value: c }, c)),
+      h('option', { value: '__add__' }, '➕ Add new category…'),
+    );
+  }
+
   _phoneCats = ['Mobile', 'Tablet', 'Laptop'];
   _electricalCats = ['Television', 'Refrigerator', 'Deep Freezer', 'Washing Machine',
     'Air Conditioner', 'Water Dispenser', 'Microwave Oven', 'Juicer / Blender', 'Fan',
@@ -517,7 +556,9 @@ export default class App extends React.Component {
   // or those products silently lose their vehicle fields.
   _vehicleCats = ['Car', 'Motorcycle', 'Bike'];
   isPhoneCat(cat) { return this._phoneCats.includes(cat); }
-  isElectricalCat(cat) { return this._electricalCats.includes(cat); }
+  // Not a phone and not a vehicle: identified by a serial number. Written as a
+  // fallback rather than a list so a category the shop invents still gets a field.
+  isElectricalCat(cat) { return !!cat && !this.isPhoneCat(cat) && !this.isVehicleCat(cat); }
   isVehicleCat(cat) { return this._vehicleCats.includes(cat); }
 
   _isPlanLedgerEntry(le) {
@@ -5261,7 +5302,6 @@ export default class App extends React.Component {
       h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, label),
       node,
     );
-    const categories = ['Mobile', 'Tablet', 'Laptop', 'Television', 'Refrigerator', 'Deep Freezer', 'Washing Machine', 'Air Conditioner', 'Water Dispenser', 'Microwave Oven', 'Juicer / Blender', 'Fan', 'Iron', 'Geyser', 'Sewing Machine', 'Generator / UPS', 'Appliance', 'Car', 'Motorcycle', 'Other'];
     const emojis = ['📱','🏍️','📺','❄️','🧺','💻','📦','⚡','🔌','🎮','📷','🖨️'];
     return h('div', { onClick: this.closeAddProduct, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)' } },
       h('div', { onClick: e => e.stopPropagation(), style: { background: '#ffffff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 480, animation: 'slideIn .2s ease' } },
@@ -5278,8 +5318,7 @@ export default class App extends React.Component {
             field('Urdu Name', h('input', { className: 'ur', value: np.nameUr, onChange: e => set('nameUr', e.target.value), placeholder: 'سامسنگ', style: { ...inp, textAlign: 'right' } })),
           ),
           h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
-            field('Category', h('select', { value: np.category, onChange: e => set('category', e.target.value), style: inp },
-              categories.map(c => h('option', { key: c, value: c }, c)))),
+            field('Category', this.productCatField(np.category, v => set('category', v), inp)),
             field('Sale Price (Rs) *', h('input', { type: 'number', value: np.price, onChange: e => set('price', e.target.value), placeholder: '0', style: inp })),
           ),
           h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
@@ -5308,7 +5347,6 @@ export default class App extends React.Component {
       h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, label, labelUr ? h('span', { className: 'ur', style: { color: '#7a7663', marginLeft: 6 } }, labelUr) : null),
       node,
     );
-    const categories = ['Mobile', 'Tablet', 'Laptop', 'Television', 'Refrigerator', 'Deep Freezer', 'Washing Machine', 'Air Conditioner', 'Water Dispenser', 'Microwave Oven', 'Juicer / Blender', 'Fan', 'Iron', 'Geyser', 'Sewing Machine', 'Generator / UPS', 'Appliance', 'Car', 'Motorcycle', 'Other'];
     const emojis = ['📱','🏍️','📺','❄️','🧺','💻','📦','⚡','🔌','🎮','📷','🖨️'];
     const sold = this.activePlans().filter(pl => pl.productId === ep.id).length;
     return h('div', { onClick: this.closeEditProduct, style: { position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20, backdropFilter: 'blur(4px)' } },
@@ -5326,8 +5364,7 @@ export default class App extends React.Component {
             field('Urdu Name', 'اردو نام', h('input', { className: 'ur', value: ep.nameUr, onChange: e => set('nameUr', e.target.value), placeholder: 'سامسنگ', style: { ...inp, textAlign: 'right' } })),
           ),
           h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
-            field('Category', 'قسم', h('select', { value: ep.category, onChange: e => set('category', e.target.value), style: inp },
-              categories.map(c => h('option', { key: c, value: c }, c)))),
+            field('Category', 'قسم', this.productCatField(ep.category, v => set('category', v), inp)),
             field('Sale Price (Rs) *', 'فروخت قیمت', h('input', { type: 'number', value: ep.price, onChange: e => set('price', e.target.value), placeholder: '0', className: 'mono', style: inp })),
           ),
           h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
