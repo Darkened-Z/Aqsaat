@@ -128,7 +128,7 @@ export default class App extends React.Component {
     editProductModal: { open: false, id: null, name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
     addProductOpen: false,
     newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', costPrice: '', stock: '', emoji: '📦' },
-    settings: { graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, maxLateFee: 0, businessName: 'Sadar Electronics', ownerName: 'Rehan Malik', city: 'Lahore', accounts: [{ id: 'acc_cash', name: 'Cash in Hand', nameUr: 'نقد', emoji: '💵', balance: 0 }, { id: 'acc_ep', name: 'EasyPaisa', nameUr: 'ایزی پیسہ', emoji: '📱', balance: 0 }, { id: 'acc_bank', name: 'Bank', nameUr: 'بینک', emoji: '🏦', balance: 0 }] },
+    settings: { graceDays: 0, lateFeeFlat: 0, lateFeePerDay: 0, maxLateFee: 0, businessName: '', ownerName: '', city: '', accounts: [{ id: 'acc_cash', name: 'Cash in Hand', nameUr: 'نقد', emoji: '💵', balance: 0 }, { id: 'acc_ep', name: 'EasyPaisa', nameUr: 'ایزی پیسہ', emoji: '📱', balance: 0 }, { id: 'acc_bank', name: 'Bank', nameUr: 'بینک', emoji: '🏦', balance: 0 }] },
     searchQuery: '',
     darkMode: false,
     pinLocked: false,
@@ -391,7 +391,16 @@ export default class App extends React.Component {
       customers: mergeArr(local.customers, cloud.customers),
       products: mergeArr(local.products, cloud.products),
       plans: mergeArr(local.plans, cloud.plans),
-      settings: { ...(cloud.settings || {}), ...(local.settings || {}) },
+      settings: (() => {
+        // For string fields, a blank local value should never overwrite a real cloud
+        // value — the blank comes from the initial React state, not a user edit.
+        const c = cloud.settings || {}, l = local.settings || {};
+        const merged = { ...c, ...l };
+        ['businessName', 'ownerName', 'city'].forEach(k => {
+          if (!(l[k] || '').trim() && (c[k] || '').trim()) merged[k] = c[k];
+        });
+        return merged;
+      })(),
       ledger: mergeArr(local.ledger, cloud.ledger),
       udpiEntries: mergeArr(local.udpiEntries, cloud.udpiEntries),
       invoices: mergeArr(local.invoices, cloud.invoices),
