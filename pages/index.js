@@ -253,7 +253,11 @@ export default class App extends React.Component {
 
   _applyCloudData = (d) => {
     this._fromCloud = true;
-    const local = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], invoices: this.state.invoices || [], staff: this.state.staff || [] } : null;
+    const rawLocal = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], invoices: this.state.invoices || [], staff: this.state.staff || [] } : null;
+    // Stamp any local edits that haven't been pushed yet so they beat the incoming
+    // cloud copy in the merge — without this, a real-time event arriving before the
+    // 1.2s push timer fires reverts the user's last edit.
+    const local = rawLocal ? this._stampLocalChanges(rawLocal) : null;
     const merged = local ? this._mergeData(local, d) : { customers: d.customers || [], products: d.products || [], plans: d.plans || [], settings: d.settings || this.state.settings, ledger: d.ledger || [], udpiEntries: d.udpiEntries || [], invoices: d.invoices || [], staff: d.staff || [] };
     const settings = merged.settings || this.state.settings;
     if (!settings.accounts || !settings.accounts.length) {
