@@ -2164,6 +2164,41 @@ export default class App extends React.Component {
           h('span', { style: { fontSize: 11, color: '#7a7663' } }, 'View →'),
         );
       })(),
+      (() => {
+        const udpiList = this.activeUdpiEntries();
+        const lentOut = udpiList.filter(u => u.direction === 'lent' && !u.returned);
+        if (lentOut.length === 0) return null;
+        const todayS = this.todayStr();
+        const staleness = u => {
+          const lastPay = (u.partialReturns || []).reduce((best, pr) => (pr.date || '') > best ? pr.date : best, '');
+          const refDate = lastPay || u.date || '';
+          return refDate ? Math.round((new Date(todayS) - new Date(refDate)) / 86400000) : 0;
+        };
+        const sorted = lentOut.slice().sort((a, b) => staleness(b) - staleness(a)).slice(0, 5);
+        return h('div', { style: { marginBottom: 16 } },
+          this.card([
+            this.sectionHeader('Udhar Dues', 'اُدھار واجبات', h('button', { onClick: () => this.go('udharbook'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'Full Book →')),
+            ...sorted.map((u, i) => {
+              const days = staleness(u);
+              const dLabel = days === 0 ? 'today' : days === 1 ? 'yesterday' : days + 'd ago';
+              const rem = u.amount - (u.returnedAmount || 0);
+              const hasPartial = (u.returnedAmount || 0) > 0;
+              return h('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
+                h('div', { style: { width: 34, height: 34, borderRadius: 9, background: '#fef2f2', color: '#b91c1c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 } }, u.person.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()),
+                h('div', { style: { flex: 1, minWidth: 0 } },
+                  h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, u.person),
+                  h('div', { style: { fontSize: 11, color: days > 30 ? '#b45309' : '#7a7663', fontWeight: days > 30 ? 600 : 400 } },
+                    hasPartial ? 'Last payment: ' + dLabel : 'No payment · lent ' + dLabel),
+                ),
+                h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                  h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: '#b91c1c' } }, this.fmtPKR(rem)),
+                  h('button', { onClick: e => { e.stopPropagation(); this.markUdpiReturned(u.id); }, style: { marginTop: 3, background: '#0f6b4b', color: 'white', padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, border: 'none', cursor: 'pointer' } }, '💰 Got'),
+                ),
+              );
+            }),
+          ]),
+        );
+      })(),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 12 } },
         this.card([
           this.sectionHeader('Due Today', 'آج کی اقساط', h('button', { onClick: () => this.go('plans'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'View all →')),
@@ -3731,13 +3766,15 @@ export default class App extends React.Component {
       const name = u.person.trim();
       if (!name) return;
       const key = name.toLowerCase();
-      if (!map[key]) map[key] = { name, entries: [], lent: 0, borrowed: 0, lastDate: '', overdueCount: 0, phone: null };
+      if (!map[key]) map[key] = { name, entries: [], lent: 0, borrowed: 0, lastDate: '', overdueCount: 0, phone: null, lastPaymentDate: '' };
       map[key].entries.push(u);
       const remaining = u.amount - (u.returnedAmount || 0);
       if (u.direction === 'lent' && !u.returned) map[key].lent += remaining;
       else if (u.direction === 'borrowed' && !u.returned) map[key].borrowed += remaining;
       if (u.date > map[key].lastDate) map[key].lastDate = u.date;
       if (!u.returned && u.dueDate && u.dueDate < today) map[key].overdueCount++;
+      (u.partialReturns || []).forEach(pr => { if ((pr.date || '') > map[key].lastPaymentDate) map[key].lastPaymentDate = pr.date; });
+      if (u.returned && (u.returnedDate || '') > map[key].lastPaymentDate) map[key].lastPaymentDate = u.returnedDate || '';
     });
     return Object.values(map).map(p => {
       const phone = this._getUdharPersonPhone(p.name);
@@ -4050,6 +4087,9 @@ export default class App extends React.Component {
             const isPayable = p.balance < 0;
             const daysAgo = p.lastDate ? Math.round((new Date(this.todayStr()) - new Date(p.lastDate)) / 86400000) : null;
             const daysLabel = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : daysAgo !== null ? daysAgo + 'd ago' : '';
+            const payDaysAgo = p.lastPaymentDate ? Math.round((new Date(this.todayStr()) - new Date(p.lastPaymentDate)) / 86400000) : null;
+            const paymentLabel = p.balance > 0 ? (payDaysAgo !== null ? 'Last payment: ' + (payDaysAgo === 0 ? 'today' : payDaysAgo === 1 ? 'yesterday' : payDaysAgo + 'd ago') : 'No payment recorded') : '';
+            const paymentWarning = p.balance > 0 && (payDaysAgo === null || payDaysAgo > 30);
             const ac = getAvatarColor(p.name);
             const hasOverdue = p.overdueCount > 0;
             const isPinned = this.isUdharPinned(p.name);
@@ -4061,9 +4101,9 @@ export default class App extends React.Component {
                   isPinned ? '📌 ' : '',
                   p.name,
                 ),
-                h('div', { style: { fontSize: 12, fontWeight: 500, color: hasOverdue ? '#c0392b' : '#9aa69f', marginTop: 2 } },
-                  hasOverdue ? '⚠ Overdue · ' : '',
-                  daysLabel || (p.entries.length + (p.entries.length === 1 ? ' entry' : ' entries')),
+                h('div', { style: { fontSize: 12, fontWeight: 500, color: hasOverdue ? '#c0392b' : paymentWarning ? '#b45309' : '#9aa69f', marginTop: 2 } },
+                  hasOverdue ? '⚠ Overdue · ' : paymentWarning ? '⚠ ' : '',
+                  paymentLabel || daysLabel || (p.entries.length + (p.entries.length === 1 ? ' entry' : ' entries')),
                 ),
               ),
               h('div', { style: { textAlign: 'right', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 } },
@@ -4174,6 +4214,13 @@ export default class App extends React.Component {
           h('span', {}, '↓ Got: ', h('strong', { style: { color: '#0f6b4b' } }, this.fmtPKR(borrowed))),
         ),
       ),
+      balance > 0 ? (() => {
+        const firstLent = entries.filter(u => u.direction === 'lent' && !u.returned).sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0];
+        return firstLent ? h('button', { onClick: () => this.markUdpiReturned(firstLent.id), style: { width: '100%', padding: '13px', borderRadius: 14, background: '#0f6b4b', color: 'white', fontWeight: 800, fontSize: 15, border: 'none', marginBottom: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 } },
+          '💰 Got Payment',
+          h('span', { style: { fontSize: 12, fontWeight: 500, opacity: 0.85 } }, '/ ادائیگی ملی'),
+        ) : null;
+      })() : null,
       overLimit ? h('div', { style: { background: '#fef3c7', borderRadius: 12, padding: '10px 14px', marginBottom: 10, border: '1px solid #fcd34d', display: 'flex', alignItems: 'center', gap: 8 } },
         h('span', { style: { fontSize: 16 } }, '⚠️'),
         h('div', { style: { flex: 1 } },
