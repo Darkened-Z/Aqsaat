@@ -320,13 +320,17 @@ export default class App extends React.Component {
     try {
       const { data } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
       if (data?.data) {
-        const merged = this._mergeData(this.state, data.data);
+        // Stamp any local edits that haven't been pushed yet before merging,
+        // so a tab-switch or reconnect never reverts in-flight changes.
+        const rawLocal = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], invoices: this.state.invoices || [], staff: this.state.staff || [] } : null;
+        const stamped = rawLocal ? this._stampLocalChanges(rawLocal) : null;
+        const merged = stamped ? this._mergeData(stamped, data.data) : this._mergeData(this.state, data.data);
         this._fromCloud = true;
         localStorage.setItem('aqsat_data', JSON.stringify(merged));
         this._syncSnapshot = this._snapshotOf(merged);
         const cloudPin = (merged.settings || {}).pin || '';
         if (cloudPin) localStorage.setItem('aqsat_pin', cloudPin);
-        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], syncStatus: 'synced', ...(cloudPin ? { savedPin: cloudPin } : {}) });
+        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced', ...(cloudPin ? { savedPin: cloudPin } : {}) });
       }
     } catch(e) {}
     this._refetching = false;
