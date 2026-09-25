@@ -2182,28 +2182,30 @@ export default class App extends React.Component {
           const refDate = lastPay || u.date || '';
           return refDate ? Math.round((new Date(todayS) - new Date(refDate)) / 86400000) : 0;
         };
-        const sorted = lentOut.slice().sort((a, b) => staleness(b) - staleness(a)).slice(0, 5);
+        const sorted = lentOut.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10);
         return h('div', { style: { marginBottom: 16 } },
           this.card([
             this.sectionHeader('Udhar Dues', 'اُدھار واجبات', h('button', { onClick: () => this.go('udharbook'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'Full Book →')),
-            ...sorted.map((u, i) => {
-              const days = staleness(u);
-              const dLabel = days === 0 ? 'today' : days === 1 ? 'yesterday' : days + 'd ago';
-              const rem = u.amount - (u.returnedAmount || 0);
-              const hasPartial = (u.returnedAmount || 0) > 0;
-              return h('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' } },
-                h('div', { style: { width: 34, height: 34, borderRadius: 9, background: '#fef2f2', color: '#b91c1c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 } }, u.person.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()),
-                h('div', { style: { flex: 1, minWidth: 0 } },
-                  h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, u.person),
-                  h('div', { style: { fontSize: 11, color: days > 30 ? '#b45309' : '#7a7663', fontWeight: days > 30 ? 600 : 400 } },
-                    hasPartial ? 'Last payment: ' + dLabel : 'No payment · lent ' + dLabel),
-                ),
-                h('div', { style: { textAlign: 'right', flexShrink: 0 } },
-                  h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: '#b91c1c' } }, this.fmtPKR(rem)),
-                  h('button', { onClick: e => { e.stopPropagation(); this.markUdpiReturned(u.id); }, style: { marginTop: 3, background: '#0f6b4b', color: 'white', padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, border: 'none', cursor: 'pointer' } }, '💰 Got'),
-                ),
-              );
-            }),
+            h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '2px 12px' } },
+              ...sorted.map((u, i) => {
+                const days = staleness(u);
+                const dLabel = days === 0 ? 'today' : days === 1 ? 'yesterday' : days + 'd ago';
+                const rem = u.amount - (u.returnedAmount || 0);
+                const hasPartial = (u.returnedAmount || 0) > 0;
+                return h('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: '1px solid #f2eee2' } },
+                  h('div', { style: { width: 30, height: 30, borderRadius: 8, background: '#fef2f2', color: '#b91c1c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, flexShrink: 0 } }, u.person.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()),
+                  h('div', { style: { flex: 1, minWidth: 0 } },
+                    h('div', { style: { fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, u.person),
+                    h('div', { style: { fontSize: 10, color: days > 30 ? '#b45309' : '#7a7663', fontWeight: days > 30 ? 600 : 400 } },
+                      hasPartial ? 'Last pay: ' + dLabel : 'lent ' + dLabel),
+                  ),
+                  h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                    h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 12, color: '#b91c1c' } }, this.fmtPKR(rem)),
+                    h('button', { onClick: e => { e.stopPropagation(); this.markUdpiReturned(u.id); }, style: { marginTop: 2, background: '#0f6b4b', color: 'white', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700, border: 'none', cursor: 'pointer' } }, '💰 Got'),
+                  ),
+                );
+              }),
+            ),
           ]),
         );
       })(),
