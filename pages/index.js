@@ -2182,7 +2182,7 @@ export default class App extends React.Component {
           const refDate = lastPay || u.date || '';
           return refDate ? Math.round((new Date(todayS) - new Date(refDate)) / 86400000) : 0;
         };
-        const sorted = lentOut.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10);
+        const sorted = lentOut.slice().sort((a, b) => (b.id || '').localeCompare(a.id || '')).slice(0, 10);
         return h('div', { style: { marginBottom: 16 } },
           this.card([
             this.sectionHeader('Udhar Dues', 'اُدھار واجبات', h('button', { onClick: () => this.go('udharbook'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'Full Book →')),
