@@ -2648,7 +2648,24 @@ export default class App extends React.Component {
               ) : h('div', { style: { fontSize: 11, color: '#7a7663' } }, 'Leave empty to use the installment count above'),
             ),
           ),
-          field('Start Date', 'آغاز', h('input', { type: 'date', value: np.startDate, onChange: e => set('startDate', e.target.value), style: inpStyle })),
+          field('Start Date', 'آغاز',
+            h('div', { style: { display: 'grid', gap: 8 } },
+              h('input', { type: 'date', value: np.startDate, onChange: e => set('startDate', e.target.value), style: inpStyle }),
+              h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+                (() => {
+                  const today = new Date();
+                  const firstOf = (y, m) => y + '-' + String(m + 1).padStart(2, '0') + '-01';
+                  const shortcuts = [
+                    ['Today', this.todayStr()],
+                    ['This month', firstOf(today.getFullYear(), today.getMonth())],
+                    ['Next month', firstOf(today.getMonth() === 11 ? today.getFullYear() + 1 : today.getFullYear(), (today.getMonth() + 1) % 12)],
+                    ['+2 months', firstOf(today.getMonth() >= 10 ? today.getFullYear() + 1 : today.getFullYear(), (today.getMonth() + 2) % 12)],
+                  ];
+                  return shortcuts.map(([label, val]) => h('button', { key: label, type: 'button', onClick: () => set('startDate', val), style: { padding: '6px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: np.startDate === val ? '#0f6b4b' : '#fdfcf8', color: np.startDate === val ? 'white' : '#3a4a3f', border: '1px solid ' + (np.startDate === val ? '#0f6b4b' : '#ece8dc'), cursor: 'pointer' } }, label));
+                })(),
+              ),
+            ),
+          ),
           field('Deduct From Account', 'اکاؤنٹ منتخب کریں',
             (() => { const accs = this.getAccounts(); return accs.length > 0
               ? h('div', { style: { display: 'grid', gridTemplateColumns: accs.length <= 3 ? 'repeat(' + accs.length + ',1fr)' : 'repeat(2,1fr)', gap: 8 } },
