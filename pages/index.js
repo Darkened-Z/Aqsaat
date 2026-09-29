@@ -125,6 +125,7 @@ export default class App extends React.Component {
     addCustomerStep: 1,
     planFilter: 'all',
     lateFeePanel: null,
+    reportMonthPanel: null,
     editProductModal: { open: false, id: null, name: '', nameUr: '', category: 'Mobile', price: '', stock: '', emoji: '📦' },
     addProductOpen: false,
     newProduct: { name: '', nameUr: '', category: 'Mobile', price: '', costPrice: '', stock: '', emoji: '📦' },
@@ -1883,6 +1884,14 @@ export default class App extends React.Component {
     this.requirePin(() => this.setState({ lateFeePanel: planId }));
   };
 
+  toggleReportMonthPanel = (planId) => {
+    this.setState({ reportMonthPanel: this.state.reportMonthPanel === planId ? null : planId });
+  };
+
+  setPlanReportMonth = (planId, month) => {
+    this.setState({ plans: this.state.plans.map(pl => pl.id !== planId ? pl : { ...pl, reportMonth: month || null }) });
+  };
+
   openEditPlan = (planId) => {
     const pl = this.state.plans.find(p => p.id === planId);
     if (!pl) return;
@@ -2439,6 +2448,7 @@ export default class App extends React.Component {
           h('button', { onClick: () => this.openEditPlan(pl.id), style: { background: '#eaf5ee', color: '#0f6b4b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '✎'),
           h('button', { onClick: () => this.openDeletePlan(pl.id), style: { background: '#fdecea', color: '#a4362b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '🗑'),
           h('button', { onClick: () => this.toggleLateFeePanel(pl.id), title: 'Late fee settings', style: { background: this.state.lateFeePanel === pl.id ? '#fef3c7' : '#f4f1e6', color: '#a26a10', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '⚙'),
+          h('button', { onClick: () => this.toggleReportMonthPanel(pl.id), title: 'Report month', style: { background: this.state.reportMonthPanel === pl.id || pl.reportMonth ? '#eaf0ff' : '#f4f1e6', color: '#3b5bdb', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '📊'),
           pl.status !== 'completed' && st.next && c.phone
             ? h('a', { href: this.waPlanLink(c, p, pl, st.next), target: '_blank', rel: 'noopener', style: { background: '#dcfce7', color: '#15803d', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' } }, '💬')
             : null,
@@ -2465,6 +2475,34 @@ export default class App extends React.Component {
             fld('Per-Day Fee (Rs)', 'یومیہ', 'lateFeePerDay', lf.lateFeePerDay || 0),
             fld('Max Fee (Rs)', 'زیادہ سے زیادہ', 'maxLateFee', lf.maxLateFee || 0),
           ),
+        );
+      })() : null,
+      this.state.reportMonthPanel === pl.id ? (() => {
+        const now = new Date();
+        const idPart = (pl.id || '').replace(/^pl_/, '');
+        const createdMs = parseInt(idPart, 36);
+        const defaultDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : now);
+        const defaultKey = defaultDate.getFullYear() + '-' + String(defaultDate.getMonth() + 1).padStart(2, '0');
+        const monthKey = m => m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0');
+        const monthLabel = k => { const [y, m] = k.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('en', { month: 'short', year: 'numeric' }); };
+        const shortcuts = [];
+        for (let i = 0; i <= 5; i++) {
+          const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+          shortcuts.push(monthKey(d));
+        }
+        if (!shortcuts.includes(defaultKey)) shortcuts.unshift(defaultKey);
+        const current = pl.reportMonth || defaultKey;
+        return h('div', { style: { marginTop: 14, padding: '14px 16px', background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: 12 } },
+          h('div', { style: { fontSize: 12, fontWeight: 700, color: '#3730a3', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+            h('span', {}, '📊 Report Month ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#6366f1' } }, 'رپورٹ مہینہ')),
+            pl.reportMonth ? h('button', { onClick: () => this.setPlanReportMonth(pl.id, null), style: { fontSize: 10, color: '#6366f1', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 } }, '✕ Reset to default') : h('span', { style: { fontSize: 10, color: '#6366f1', fontWeight: 400 } }, 'Using creation month'),
+          ),
+          h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 } },
+            shortcuts.map(k => h('button', { key: k, onClick: () => this.setPlanReportMonth(pl.id, k === defaultKey && !pl.reportMonth ? null : k), style: { padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: current === k ? '#4f46e5' : '#ffffff', color: current === k ? 'white' : '#3730a3', border: '1px solid ' + (current === k ? '#4f46e5' : '#c7d2fe') } },
+              monthLabel(k), k === defaultKey ? ' (default)' : '',
+            )),
+          ),
+          h('div', { style: { fontSize: 11, color: '#6366f1' } }, 'Only affects Reports chart. All payment dates, schedules, and collection remain unchanged.'),
         );
       })() : null,
     );
@@ -2736,10 +2774,13 @@ export default class App extends React.Component {
       monthlyData[key] = { label, collected: 0, profitEarned: 0, plans: 0, down: 0 };
     }
     this.activePlans().forEach(pl => {
-      const idPart = (pl.id || '').replace(/^pl_/, '');
-      const createdMs = parseInt(idPart, 36);
-      const createdDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
-      const createdKey = createdDate ? createdDate.getFullYear() + '-' + String(createdDate.getMonth() + 1).padStart(2, '0') : '';
+      const createdKey = (() => {
+        if (pl.reportMonth) return pl.reportMonth;
+        const idPart = (pl.id || '').replace(/^pl_/, '');
+        const createdMs = parseInt(idPart, 36);
+        const d = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
+        return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') : '';
+      })();
       if (monthlyData[createdKey]) {
         monthlyData[createdKey].plans++;
         monthlyData[createdKey].down += pl.down || 0;
@@ -2792,10 +2833,13 @@ export default class App extends React.Component {
       planProfitData[key] = { label, profit: 0 };
     }
     this.activePlans().forEach(pl => {
-      const idPart2 = (pl.id || '').replace(/^pl_/, '');
-      const createdMs2 = parseInt(idPart2, 36);
-      const createdDate2 = isFinite(createdMs2) && createdMs2 > 0 ? new Date(createdMs2) : (pl.startDate ? new Date(pl.startDate) : null);
-      const cKey = createdDate2 ? createdDate2.getFullYear() + '-' + String(createdDate2.getMonth() + 1).padStart(2, '0') : '';
+      const cKey = (() => {
+        if (pl.reportMonth) return pl.reportMonth;
+        const idPart2 = (pl.id || '').replace(/^pl_/, '');
+        const createdMs2 = parseInt(idPart2, 36);
+        const d2 = isFinite(createdMs2) && createdMs2 > 0 ? new Date(createdMs2) : (pl.startDate ? new Date(pl.startDate) : null);
+        return d2 ? d2.getFullYear() + '-' + String(d2.getMonth() + 1).padStart(2, '0') : '';
+      })();
       if (planProfitData[cKey]) {
         planProfitData[cKey].profit += profitOf(pl);
       }
