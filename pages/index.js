@@ -2736,12 +2736,10 @@ export default class App extends React.Component {
       monthlyData[key] = { label, collected: 0, profitEarned: 0, plans: 0, down: 0 };
     }
     this.activePlans().forEach(pl => {
-      const startDate = pl.startDate ? new Date(pl.startDate) : (() => {
-        const idPart = (pl.id || '').replace(/^pl_/, '');
-        const createdMs = parseInt(idPart, 36);
-        return isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : null;
-      })();
-      const createdKey = startDate ? startDate.getFullYear() + '-' + String(startDate.getMonth() + 1).padStart(2, '0') : '';
+      const idPart = (pl.id || '').replace(/^pl_/, '');
+      const createdMs = parseInt(idPart, 36);
+      const createdDate = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
+      const createdKey = createdDate ? createdDate.getFullYear() + '-' + String(createdDate.getMonth() + 1).padStart(2, '0') : '';
       if (monthlyData[createdKey]) {
         monthlyData[createdKey].plans++;
         monthlyData[createdKey].down += pl.down || 0;
@@ -2794,12 +2792,10 @@ export default class App extends React.Component {
       planProfitData[key] = { label, profit: 0 };
     }
     this.activePlans().forEach(pl => {
-      const startDate2 = pl.startDate ? new Date(pl.startDate) : (() => {
-        const idPart = (pl.id || '').replace(/^pl_/, '');
-        const createdMs = parseInt(idPart, 36);
-        return isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : null;
-      })();
-      const cKey = startDate2 ? startDate2.getFullYear() + '-' + String(startDate2.getMonth() + 1).padStart(2, '0') : '';
+      const idPart2 = (pl.id || '').replace(/^pl_/, '');
+      const createdMs2 = parseInt(idPart2, 36);
+      const createdDate2 = isFinite(createdMs2) && createdMs2 > 0 ? new Date(createdMs2) : (pl.startDate ? new Date(pl.startDate) : null);
+      const cKey = createdDate2 ? createdDate2.getFullYear() + '-' + String(createdDate2.getMonth() + 1).padStart(2, '0') : '';
       if (planProfitData[cKey]) {
         planProfitData[cKey].profit += profitOf(pl);
       }
