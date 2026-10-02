@@ -2194,7 +2194,7 @@ export default class App extends React.Component {
         const activityMs = u => {
           const lastPayStr = (u.partialReturns || []).reduce((best, pr) => (pr.date || '') > best ? pr.date : best, '');
           if (lastPayStr) return new Date(lastPayStr).getTime();
-          const idStr = (u.id || '').replace(/^udpi_/, '');
+          const idStr = (u.id || '').replace(/^ud_|^udpi_/, '');
           const ms = parseInt(idStr, 36);
           return isFinite(ms) && ms > 0 ? ms : (u.date ? new Date(u.date).getTime() : 0);
         };
