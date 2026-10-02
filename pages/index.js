@@ -2191,7 +2191,14 @@ export default class App extends React.Component {
           const refDate = lastPay || u.date || '';
           return refDate ? Math.round((new Date(todayS) - new Date(refDate)) / 86400000) : 0;
         };
-        const sorted = lentOut.slice().sort((a, b) => (b.id || '').localeCompare(a.id || '')).slice(0, 10);
+        const activityMs = u => {
+          const lastPayStr = (u.partialReturns || []).reduce((best, pr) => (pr.date || '') > best ? pr.date : best, '');
+          if (lastPayStr) return new Date(lastPayStr).getTime();
+          const idStr = (u.id || '').replace(/^udpi_/, '');
+          const ms = parseInt(idStr, 36);
+          return isFinite(ms) && ms > 0 ? ms : (u.date ? new Date(u.date).getTime() : 0);
+        };
+        const sorted = lentOut.slice().sort((a, b) => activityMs(b) - activityMs(a)).slice(0, 10);
         return h('div', { style: { marginBottom: 16 } },
           this.card([
             this.sectionHeader('Udhar Dues', 'اُدھار واجبات', h('button', { onClick: () => this.go('udharbook'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'Full Book →')),
