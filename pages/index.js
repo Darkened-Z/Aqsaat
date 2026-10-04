@@ -2183,41 +2183,121 @@ export default class App extends React.Component {
       })(),
       (() => {
         const udpiList = this.activeUdpiEntries();
-        const lentOut = udpiList.filter(u => u.direction === 'lent' && !u.returned);
-        if (lentOut.length === 0) return null;
+        if (udpiList.length === 0) return null;
         const todayS = this.todayStr();
-        const staleness = u => {
-          const lastPay = (u.partialReturns || []).reduce((best, pr) => (pr.date || '') > best ? pr.date : best, '');
-          const refDate = lastPay || u.date || '';
-          return refDate ? Math.round((new Date(todayS) - new Date(refDate)) / 86400000) : 0;
-        };
-        const activityMs = u => {
-          const lastPayStr = (u.partialReturns || []).reduce((best, pr) => (pr.date || '') > best ? pr.date : best, '');
-          if (lastPayStr) return new Date(lastPayStr).getTime();
-          const idStr = (u.id || '').replace(/^ud_|^udpi_/, '');
+
+        const parseMs = (id, dateStr) => {
+          const idStr = (id || '').replace(/^ud_|^udpi_|^pr_/, '');
           const ms = parseInt(idStr, 36);
-          return isFinite(ms) && ms > 0 ? ms : (u.date ? new Date(u.date).getTime() : 0);
+          const dateMs = dateStr ? new Date(dateStr + 'T12:00:00').getTime() : 0;
+          if (isFinite(ms) && ms > 1000000000000) {
+            return Math.abs(dateMs - ms) > 86400000 * 2 ? dateMs : Math.max(ms, dateMs);
+          }
+          return dateMs;
         };
-        const sorted = lentOut.slice().sort((a, b) => activityMs(b) - activityMs(a)).slice(0, 10);
+
+        const people = {};
+        udpiList.forEach(u => {
+          const name = (u.person || '').trim();
+          if (!name) return;
+          const key = name.toLowerCase();
+          if (!people[key]) people[key] = { name, lent: 0, borrowed: 0, entries: [], actions: [] };
+          const p = people[key];
+          p.entries.push(u);
+          if (u.direction === 'lent' && !u.returned) {
+            p.lent += u.amount - (u.returnedAmount || 0);
+          } else if (u.direction === 'borrowed' && !u.returned) {
+            p.borrowed += u.amount - (u.returnedAmount || 0);
+          }
+          p.actions.push({
+            type: u.direction === 'lent' ? 'gave' : 'got',
+            amount: u.amount,
+            date: u.date,
+            note: u.note || '',
+            ms: parseMs(u.id, u.date),
+            entryId: u.id,
+          });
+          (u.partialReturns || []).forEach(pr => {
+            p.actions.push({
+              type: 'got',
+              amount: pr.amount,
+              date: pr.date,
+              note: 'Partial payment',
+              ms: parseMs(pr.id, pr.date),
+              entryId: u.id,
+            });
+          });
+        });
+
+        const duesList = Object.values(people)
+          .map(p => {
+            const balance = p.lent - p.borrowed;
+            p.actions.sort((a, b) => b.ms - a.ms);
+            const latestAction = p.actions[0] || null;
+            return {
+              name: p.name,
+              balance,
+              entries: p.entries,
+              latestAction,
+              latestMs: latestAction ? latestAction.ms : 0,
+            };
+          })
+          .filter(p => p.balance > 0)
+          .sort((a, b) => b.latestMs - a.latestMs);
+
+        if (duesList.length === 0) return null;
+        const sorted = duesList.slice(0, 10);
+
+        const avatarColors = ['#b91c1c','#0f6b4b','#3b82f6','#a26a10','#7c3aed','#0891b2','#c2410c','#4338ca'];
+        const getAvatarColor = (name) => avatarColors[Math.abs((name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % avatarColors.length];
+        const initials = (name) => (name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
         return h('div', { style: { marginBottom: 16 } },
           this.card([
-            this.sectionHeader('Udhar Dues', 'اُدھار واجبات', h('button', { onClick: () => this.go('udharbook'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'Full Book →')),
+            this.sectionHeader('Recent Dues', 'اُدھار واجبات', h('button', { onClick: () => this.go('udharbook'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'Full Book →')),
             h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '2px 12px' } },
-              ...sorted.map((u, i) => {
-                const days = staleness(u);
-                const dLabel = days === 0 ? 'today' : days === 1 ? 'yesterday' : days + 'd ago';
-                const rem = u.amount - (u.returnedAmount || 0);
-                const hasPartial = (u.returnedAmount || 0) > 0;
-                return h('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: '1px solid #f2eee2' } },
-                  h('div', { style: { width: 30, height: 30, borderRadius: 8, background: '#fef2f2', color: '#b91c1c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, flexShrink: 0 } }, u.person.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()),
+              ...sorted.map((p, i) => {
+                const act = p.latestAction;
+                let actLabel = '';
+                let isGot = false;
+                if (act) {
+                  isGot = act.type === 'got';
+                  const days = act.date ? Math.round((new Date(todayS) - new Date(act.date)) / 86400000) : null;
+                  const dLabel = days === 0 ? 'today' : days === 1 ? 'yesterday' : (days !== null && days > 0 ? days + 'd ago' : (act.date || ''));
+                  const actionVerb = isGot ? 'Got' : 'Gave';
+                  const noteSnippet = act.note ? ' (' + (act.note.length > 18 ? act.note.slice(0, 16) + '…' : act.note) + ')' : '';
+                  actLabel = `${actionVerb} ${this.fmtPKR(act.amount)}${noteSnippet} · ${dLabel}`;
+                }
+                const ac = getAvatarColor(p.name);
+                const firstLent = p.entries.find(u => u.direction === 'lent' && !u.returned);
+
+                return h('div', {
+                  key: p.name,
+                  onClick: () => this.setState({ route: 'udharbook', udharPerson: p.name }),
+                  style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: '1px solid #f2eee2', cursor: 'pointer' }
+                },
+                  h('div', { style: { width: 30, height: 30, borderRadius: 8, background: ac + '18', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, flexShrink: 0 } }, initials(p.name)),
                   h('div', { style: { flex: 1, minWidth: 0 } },
-                    h('div', { style: { fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, u.person),
-                    h('div', { style: { fontSize: 10, color: days > 30 ? '#b45309' : '#7a7663', fontWeight: days > 30 ? 600 : 400 } },
-                      hasPartial ? 'Last pay: ' + dLabel : 'lent ' + dLabel),
+                    h('div', { style: { fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, p.name),
+                    h('div', { style: { fontSize: 10, color: isGot ? '#0f6b4b' : '#7a7663', fontWeight: isGot ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 } },
+                      h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: isGot ? '#0f6b4b' : '#b91c1c', display: 'inline-block', flexShrink: 0 } }),
+                      actLabel
+                    ),
                   ),
                   h('div', { style: { textAlign: 'right', flexShrink: 0 } },
-                    h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 12, color: '#b91c1c' } }, this.fmtPKR(rem)),
-                    h('button', { onClick: e => { e.stopPropagation(); this.markUdpiReturned(u.id); }, style: { marginTop: 2, background: '#0f6b4b', color: 'white', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700, border: 'none', cursor: 'pointer' } }, '💰 Got'),
+                    h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 12, color: '#b91c1c' } }, this.fmtPKR(p.balance)),
+                    h('button', {
+                      onClick: e => {
+                        e.stopPropagation();
+                        if (firstLent) {
+                          this.markUdpiReturned(firstLent.id);
+                        } else {
+                          this.openUdpiModal();
+                          setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, open: true, direction: 'borrowed', person: p.name, amount: '', note: '', date: this.todayStr() } }), 20);
+                        }
+                      },
+                      style: { marginTop: 2, background: '#0f6b4b', color: 'white', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700, border: 'none', cursor: 'pointer' }
+                    }, '💰 Got'),
                   ),
                 );
               }),
@@ -3839,24 +3919,54 @@ export default class App extends React.Component {
   _getUdharParties() {
     const entries = this.activeUdpiEntries();
     const today = this.todayStr();
+    const parseMs = (id, dateStr) => {
+      const idStr = (id || '').replace(/^ud_|^udpi_|^pr_/, '');
+      const ms = parseInt(idStr, 36);
+      const dateMs = dateStr ? new Date(dateStr + 'T12:00:00').getTime() : 0;
+      if (isFinite(ms) && ms > 1000000000000) {
+        return Math.abs(dateMs - ms) > 86400000 * 2 ? dateMs : Math.max(ms, dateMs);
+      }
+      return dateMs;
+    };
     const map = {};
     entries.forEach(u => {
       const name = u.person.trim();
       if (!name) return;
       const key = name.toLowerCase();
-      if (!map[key]) map[key] = { name, entries: [], lent: 0, borrowed: 0, lastDate: '', overdueCount: 0, phone: null, lastPaymentDate: '' };
+      if (!map[key]) map[key] = { name, entries: [], lent: 0, borrowed: 0, lastDate: '', overdueCount: 0, phone: null, lastPaymentDate: '', actions: [] };
       map[key].entries.push(u);
       const remaining = u.amount - (u.returnedAmount || 0);
       if (u.direction === 'lent' && !u.returned) map[key].lent += remaining;
       else if (u.direction === 'borrowed' && !u.returned) map[key].borrowed += remaining;
       if (u.date > map[key].lastDate) map[key].lastDate = u.date;
       if (!u.returned && u.dueDate && u.dueDate < today) map[key].overdueCount++;
-      (u.partialReturns || []).forEach(pr => { if ((pr.date || '') > map[key].lastPaymentDate) map[key].lastPaymentDate = pr.date; });
+      if (u.direction === 'borrowed' && (!map[key].lastPaymentDate || u.date > map[key].lastPaymentDate)) {
+        map[key].lastPaymentDate = u.date;
+      }
+      (u.partialReturns || []).forEach(pr => {
+        if ((pr.date || '') > map[key].lastPaymentDate) map[key].lastPaymentDate = pr.date;
+        map[key].actions.push({
+          type: 'got',
+          amount: pr.amount,
+          date: pr.date,
+          note: 'Partial payment',
+          ms: parseMs(pr.id, pr.date),
+        });
+      });
       if (u.returned && (u.returnedDate || '') > map[key].lastPaymentDate) map[key].lastPaymentDate = u.returnedDate || '';
+      map[key].actions.push({
+        type: u.direction === 'lent' ? 'gave' : 'got',
+        amount: u.amount,
+        date: u.date,
+        note: u.note || '',
+        ms: parseMs(u.id, u.date),
+      });
     });
     return Object.values(map).map(p => {
       const phone = this._getUdharPersonPhone(p.name);
-      return { ...p, balance: p.lent - p.borrowed, phone };
+      p.actions.sort((a, b) => b.ms - a.ms);
+      const latestAction = p.actions[0] || null;
+      return { ...p, balance: p.lent - p.borrowed, phone, latestAction, latestMs: latestAction ? latestAction.ms : 0 };
     });
   }
 
@@ -4060,9 +4170,9 @@ export default class App extends React.Component {
     const catFilter = this.state.udharCategoryFilter || '';
     if (catFilter) filtered = filtered.filter(p => { const m = this.getUdharMeta(p.name); return (m.category || '') === catFilter; });
     if (sort === 'balance') filtered.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
-    else if (sort === 'recent') filtered.sort((a, b) => (b.lastDate || '').localeCompare(a.lastDate || ''));
+    else if (sort === 'recent') filtered.sort((a, b) => (b.latestMs || 0) - (a.latestMs || 0) || (b.lastDate || '').localeCompare(a.lastDate || ''));
     else if (sort === 'name') filtered.sort((a, b) => a.name.localeCompare(b.name));
-    else filtered.sort((a, b) => { const rd = (b.lastDate || '').localeCompare(a.lastDate || ''); if (rd !== 0) return rd; return b.entries.length - a.entries.length; });
+    else filtered.sort((a, b) => { const rd = (b.latestMs || 0) - (a.latestMs || 0); if (rd !== 0) return rd; return b.entries.length - a.entries.length; });
 
     const totalReceivable = parties.reduce((s, p) => s + Math.max(0, p.balance), 0);
     const totalPayable = parties.reduce((s, p) => s + Math.max(0, -p.balance), 0);
@@ -4114,7 +4224,7 @@ export default class App extends React.Component {
           h('button', { onClick: () => this.sendAutoReminders(), disabled: this.state.udharAutoSending, style: { padding: '6px 14px', borderRadius: 11, background: this.state.udharAutoSending ? '#d8ded9' : '#0f6b4f', color: 'white', fontWeight: 600, fontSize: 12, border: 'none', flexShrink: 0 } }, this.state.udharAutoSending ? '⏳ Sending...' : 'Remind All'),
         ),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
-          overdueParties.slice(0, 3).map(p => h('div', { key: p.name, onClick: () => this.setState({ udharPerson: p.name }), style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#f4f6f3', borderRadius: 10, cursor: 'pointer', fontSize: 12 } },
+          overdueParties.slice(0, 3).map(p => h('div', { key: p.name, onClick: () => this.setState({ udharPerson: p.name }), style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#f4f1e6', borderRadius: 10, cursor: 'pointer', fontSize: 12 } },
             h('div', { style: { width: 28, height: 28, borderRadius: 8, background: getAvatarColor(p.name) + '18', color: getAvatarColor(p.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 } }, initials(p.name)),
             h('div', { style: { flex: 1, fontWeight: 600, color: '#16211c' } }, p.name),
             h('div', { className: 'mono', style: { fontWeight: 700, color: '#c0392b', fontSize: 13 } }, this.fmtPKR(p.balance)),
@@ -4165,6 +4275,14 @@ export default class App extends React.Component {
             const isPayable = p.balance < 0;
             const daysAgo = p.lastDate ? Math.round((new Date(this.todayStr()) - new Date(p.lastDate)) / 86400000) : null;
             const daysLabel = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : daysAgo !== null ? daysAgo + 'd ago' : '';
+            const act = p.latestAction;
+            let actionSnippet = '';
+            if (act) {
+              const isGot = act.type === 'got';
+              const aDays = act.date ? Math.round((new Date(this.todayStr()) - new Date(act.date)) / 86400000) : null;
+              const aLabel = aDays === 0 ? 'today' : aDays === 1 ? 'yesterday' : (aDays !== null && aDays > 0 ? aDays + 'd ago' : (act.date || ''));
+              actionSnippet = (isGot ? 'Got ' : 'Gave ') + this.fmtPKR(act.amount) + ' · ' + aLabel;
+            }
             const payDaysAgo = p.lastPaymentDate ? Math.round((new Date(this.todayStr()) - new Date(p.lastPaymentDate)) / 86400000) : null;
             const paymentLabel = p.balance > 0 ? (payDaysAgo !== null ? 'Last payment: ' + (payDaysAgo === 0 ? 'today' : payDaysAgo === 1 ? 'yesterday' : payDaysAgo + 'd ago') : 'No payment recorded') : '';
             const paymentWarning = p.balance > 0 && (payDaysAgo === null || payDaysAgo > 30);
@@ -4181,7 +4299,7 @@ export default class App extends React.Component {
                 ),
                 h('div', { style: { fontSize: 12, fontWeight: 500, color: hasOverdue ? '#c0392b' : paymentWarning ? '#b45309' : '#9aa69f', marginTop: 2 } },
                   hasOverdue ? '⚠ Overdue · ' : paymentWarning ? '⚠ ' : '',
-                  paymentLabel || daysLabel || (p.entries.length + (p.entries.length === 1 ? ' entry' : ' entries')),
+                  actionSnippet || paymentLabel || daysLabel || (p.entries.length + (p.entries.length === 1 ? ' entry' : ' entries')),
                 ),
               ),
               h('div', { style: { textAlign: 'right', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 } },
