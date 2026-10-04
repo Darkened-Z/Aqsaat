@@ -51,9 +51,18 @@ export default async function handler(req, res) {
       const hasReminderDue = meta.reminderDate && meta.reminderDate <= today;
       const hasOverdue = p.pending.some(e => e.dueDate && e.dueDate < today);
       if (hasReminderDue || hasOverdue) {
-        const customer = customers.find(c => c.name.toLowerCase() === p.name.toLowerCase());
-        if (customer && customer.phone) {
-          toRemind.push({ ...p, phone: customer.phone, balance });
+        let phone = meta.phone || null;
+        if (!phone) {
+          const pLower = p.name.trim().toLowerCase();
+          const customer = customers.find(c => {
+            if (!c.name || !c.phone) return false;
+            const cn = c.name.trim().toLowerCase();
+            return cn === pLower || cn.startsWith(pLower) || pLower.startsWith(cn);
+          });
+          if (customer && customer.phone) phone = customer.phone;
+        }
+        if (phone) {
+          toRemind.push({ ...p, phone, balance });
         }
       }
     });
