@@ -45,11 +45,14 @@ export default class App extends React.Component {
       for (var m = 1; m <= months; m++) {
         var due = d(60 - m * 30);
         var isPaid = m <= Math.floor(months * 0.4 + idx * 0.3);
-        schedule.push({ month: m, dueDate: due, amount: inst, paid: isPaid ? inst : 0, paidDate: isPaid ? due : null, status: isPaid ? 'paid' : (due < d(0) ? 'overdue' : 'upcoming') });
+        schedule.push({ n: m, month: m, dueDate: due, amount: inst, paid: isPaid, amountPaid: isPaid ? inst : 0, paidDate: isPaid ? due : null, status: isPaid ? 'paid' : (due < d(0) ? 'overdue' : 'upcoming') });
       }
+      var vSeq = (idx + 1).toString().padStart(3, '0');
       plans.push({
-        id: id('pl', idx), customerId: customers[ci].id, productId: products[pi].id,
-        totalPrice: total, downPayment: dp, months: months, installmentAmount: inst,
+        id: id('pl', idx), voucherNo: 'VCH-' + new Date().getFullYear() + '-' + vSeq,
+        customerId: customers[ci].id, productId: products[pi].id,
+        total: total, down: dp, totalPrice: total, downPayment: dp,
+        months: months, monthly: inst, installmentAmount: inst,
         startDate: d(60), status: 'active', schedule: schedule, accountId: 'acc_cash',
       });
     });
@@ -231,6 +234,14 @@ export default class App extends React.Component {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       this.setState({ syncStatus: 'offline' });
     }
+    this._onKeydown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const el = document.getElementById('global-search-input');
+        if (el) { el.focus(); el.select(); }
+      }
+    };
+    window.addEventListener('keydown', this._onKeydown);
   }
 
   componentDidUpdate(_, prev) {
@@ -250,6 +261,7 @@ export default class App extends React.Component {
     if (this._onVisibility) document.removeEventListener('visibilitychange', this._onVisibility);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
     if (this._onOffline) window.removeEventListener('offline', this._onOffline);
+    if (this._onKeydown) window.removeEventListener('keydown', this._onKeydown);
   }
 
   _applyCloudData = (d) => {
@@ -816,8 +828,27 @@ export default class App extends React.Component {
       this.setState({ udpiEntries, ledger });
     });
   };
+  _waPhone = (raw) => {
+    if (!raw) return '';
+    let clean = String(raw).replace(/\D/g, '');
+    if (clean.startsWith('00')) clean = clean.substring(2);
+    if (clean.startsWith('0')) clean = '92' + clean.substring(1);
+    else if (!clean.startsWith('92') && clean.length === 10) clean = '92' + clean;
+    return clean;
+  };
   _getUdharPersonPhone = (personName) => {
-    const c = (this.state.customers || []).find(x => x.name.toLowerCase() === personName.toLowerCase());
+    if (!personName) return null;
+    const meta = this.getUdharMeta(personName);
+    if (meta && meta.phone) return meta.phone;
+    const pName = personName.trim().toLowerCase();
+    const custs = this.state.customers || [];
+    let c = custs.find(x => x.name && x.name.trim().toLowerCase() === pName);
+    if (c && c.phone) return c.phone;
+    c = custs.find(x => {
+      if (!x.name || !x.phone) return false;
+      const xn = x.name.trim().toLowerCase();
+      return pName.startsWith(xn) || xn.startsWith(pName);
+    });
     return c ? c.phone : null;
   };
   shareUdharStatement = (personName) => {
@@ -840,7 +871,8 @@ export default class App extends React.Component {
     msg += '💰 *Balance: ' + this.fmtPKR(Math.abs(balance)) + '*\n';
     msg += balance > 0 ? '📌 آپ کے ذمے ہے / You owe us' : balance < 0 ? '📌 ہمارے ذمے ہے / We owe you' : '✓ All clear / برابر';
     const phone = this._getUdharPersonPhone(personName);
-    const url = phone ? 'https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
+    const waNum = this._waPhone(phone);
+    const url = waNum ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
     window.open(url, '_blank');
   };
   deleteUdpiEntry = (id) => {
@@ -905,18 +937,35 @@ export default class App extends React.Component {
     const total = entries.reduce((s, u) => s + (u.amount - (u.returnedAmount || 0)), 0);
     if (!confirm('Settle all ' + entries.length + ' pending entries for ' + personName + '?\nTotal: ' + this.fmtPKR(total) + '\n\nسب بقایا اندراجات کو برابر کریں؟')) return;
     const today = this.todayStr();
+    const ledger = [...(this.state.ledger || [])];
     const udpiEntries = (this.state.udpiEntries || []).map(u => {
       if (u.person.trim().toLowerCase() === personName.toLowerCase() && !u.returned && !u._deleted) {
-        return { ...u, returned: true, returnedDate: today, returnedAmount: u.amount };
+        const rem = u.amount - (u.returnedAmount || 0);
+        if (rem > 0) {
+          const returnType = u.direction === 'lent' ? 'income' : 'expense';
+          ledger.unshift({
+            id: 'le_' + Date.now().toString(36) + '_' + u.id,
+            type: returnType,
+            amount: rem,
+            accountId: u.accountId,
+            category: 'Udhar Return',
+            note: (u.direction === 'lent' ? 'Got back' : 'Paid back') + ' — ' + u.person + ' (settled)',
+            date: today,
+            udpiRef: u.id,
+          });
+        }
+        const pr = rem > 0 ? [...(u.partialReturns || []), { amount: rem, date: today, id: 'pr_' + Date.now().toString(36) }] : (u.partialReturns || []);
+        return { ...u, returned: true, returnedDate: today, returnedAmount: u.amount, partialReturns: pr };
       }
       return u;
     });
-    this.setState({ udpiEntries });
+    this.setState({ udpiEntries, ledger });
     const phone = this._getUdharPersonPhone(personName);
     if (phone) {
       const msg = 'Assalam o Alaikum ' + personName + '! ✅\n\nAp ka hisaab baraabar ho gaya hai.\nTotal settled: ' + this.fmtPKR(total) + '\n\nShukriya! 🙏\n\n— ' + (this.state.settings.shopName || 'Shop');
       if (confirm('Send settlement receipt via WhatsApp?\nواٹس ایپ پر تصفیہ رسید بھیجیں؟')) {
-        window.open('https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent(msg), '_blank');
+        const waNum = this._waPhone(phone);
+        window.open('https://wa.me/' + waNum + '?text=' + encodeURIComponent(msg), '_blank');
       }
     }
   };
@@ -1056,7 +1105,9 @@ export default class App extends React.Component {
   shareStatementWhatsApp = (personName) => {
     const text = this.generateUdharStatement(personName);
     if (!text) return;
-    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+    const phone = this._getUdharPersonPhone(personName);
+    const waNum = this._waPhone(phone);
+    window.open(waNum ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(text) : 'https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   };
   copyStatement = (personName) => {
     const text = this.generateUdharStatement(personName);
@@ -1069,7 +1120,9 @@ export default class App extends React.Component {
     if (entries.length === 0) { alert('No pending amounts for ' + personName); return; }
     const total = entries.reduce((s, u) => s + (u.amount - (u.returnedAmount || 0)), 0);
     const text = 'Assalam-o-Alaikum ' + personName + ',\n\nYaddhani / Reminder:\nAap per ' + this.fmtPKR(total) + ' baqaya hain.\n\n' + entries.map(u => '• ' + (u.note || 'Amount') + ': ' + this.fmtPKR(u.amount - (u.returnedAmount || 0)) + (u.dueDate ? ' (due: ' + u.dueDate + ')' : '')).join('\n') + '\n\nBara-e-karam jaldi ada karen.\nShukriya! 🙏';
-    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+    const phone = this._getUdharPersonPhone(personName);
+    const waNum = this._waPhone(phone);
+    window.open(waNum ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(text) : 'https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   };
   setUdharReminder = (personName) => {
     const days = prompt('Remind after how many days?\nکتنے دنوں بعد یاد دہانی؟', '7');
@@ -1118,14 +1171,14 @@ export default class App extends React.Component {
   sendSingleReminder = async (personName) => {
     const entries = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase() && u.direction === 'lent' && !u.returned);
     if (entries.length === 0) { alert('No pending amounts'); return; }
-    const customer = (this.state.customers || []).find(c => c.name.toLowerCase() === personName.toLowerCase());
-    if (!customer || !customer.phone) { alert('No phone number for ' + personName + '. Add it in customer details.'); return; }
+    const phone = this._getUdharPersonPhone(personName);
+    if (!phone) { alert('No phone number for ' + personName + '. Add it in customer details or udhar notes.'); return; }
     const total = entries.reduce((s, u) => s + (u.amount - (u.returnedAmount || 0)), 0);
     const message = 'Assalam-o-Alaikum ' + personName + ',\n\nYaddhani / Reminder:\nAap per ' + this.fmtPKR(total) + ' baqaya hain.\n\n' +
       entries.slice(0, 5).map(u => '• ' + (u.note || 'Amount') + ': ' + this.fmtPKR(u.amount - (u.returnedAmount || 0)) + (u.dueDate ? ' (due: ' + u.dueDate + ')' : '')).join('\n') +
       '\n\nBara-e-karam jaldi ada karen.\nShukriya! 🙏';
     this.setState({ udharAutoSending: true });
-    const result = await this.sendWhatsAppAPI(customer.phone, message);
+    const result = await this.sendWhatsAppAPI(phone, message);
     this.setState({ udharAutoSending: false });
     if (result.ok) alert('✓ Reminder sent to ' + personName + ' via WhatsApp!');
     else if (result.error) {
@@ -1404,7 +1457,7 @@ export default class App extends React.Component {
     if (!pl) return;
     const s = pl.schedule.find(x => x.n === installmentN) || pl.schedule.find(x => !x.paid);
     const accs = this.getAccounts();
-    this.setState({ paymentModalOpen: true, paymentContext: { planId, installmentN: s ? s.n : null }, paymentAmount: s ? String(s.amount) : '', paymentAccountId: accs.length > 0 ? accs[0].id : '' });
+    this.setState({ paymentModalOpen: true, paymentContext: { planId, installmentN: s ? s.n : null }, paymentAmount: s ? String(s.amount) : '', paymentAccountId: (s && s.accountId) || pl.accountId || (accs.length > 0 ? accs[0].id : '') });
   }
   closePayment = () => this.setState({ paymentModalOpen: false, paymentContext: null });
   confirmPayment = () => {
@@ -1582,19 +1635,19 @@ export default class App extends React.Component {
   };
 
   waLink = (phone, name, amount, dueDate) => {
-    const num = '92' + phone.replace(/\D/g, '').replace(/^0/, '');
+    const num = this._waPhone(phone);
     const msg = `Assalam-o-Alaikum ${name}! Aapki qist ${this.fmtPKR(amount)} ki due date ${this.fmtDate(dueDate)} hai. Meherbani farma kar waqt par ada kar dain. Shukriya — ${this.state.settings.businessName || 'Aqsat'}`;
     return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
   };
 
   waPlanLink = (c, p, pl, next) => {
     const biz = this.state.settings.businessName || 'Aqsat';
-    const num = '92' + (c.phone || '').replace(/\D/g, '').replace(/^0/, '');
+    const num = this._waPhone(c && c.phone);
     const today = new Date();
     const due = new Date(next.dueDate);
     const daysLeft = Math.round((due - today) / 86400000);
     const urgency = daysLeft < 0 ? `(${Math.abs(daysLeft)} دن تاخیر ہو چکی ہے)` : daysLeft === 0 ? '(آج آخری دن ہے)' : `(${daysLeft} دن باقی ہیں)`;
-    const msg = `السلام وعلیکم ${c.name}! 🙏\n\n${biz} کی طرف سے یاد دہانی:\n\n📦 ${p ? p.name : 'پروڈکٹ'}\n💳 قسط نمبر: ${next.n} / ${pl.months}\n💰 رقم: ${this.fmtPKR(next.amount)}\n📅 تاریخ: ${this.fmtDate(next.dueDate)} ${urgency}\n🔖 وچر: ${pl.voucherNo || '—'}\n\nبراہ کرم بروقت ادائیگی کریں۔\nشکریہ 🙏`;
+    const msg = `السلام وعلیکم ${c ? c.name : ''}! 🙏\n\n${biz} کی طرف سے یاد دہانی:\n\n📦 ${p ? p.name : 'پروڈکٹ'}\n💳 قسط نمبر: ${next.n} / ${pl.months}\n💰 رقم: ${this.fmtPKR(next.amount)}\n📅 تاریخ: ${this.fmtDate(next.dueDate)} ${urgency}\n🔖 وچر: ${pl.voucherNo || '—'}\n\nبراہ کرم بروقت ادائیگی کریں۔\nشکریہ 🙏`;
     return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
   };
 
@@ -2382,7 +2435,7 @@ export default class App extends React.Component {
     const q = this.state.searchQuery.toLowerCase();
     const customers = this.activeCustomers();
     const rows = customers
-      .filter(c => !q || c.name.toLowerCase().includes(q) || c.nameUr.includes(q) || c.phone.includes(q) || (c.area || '').toLowerCase().includes(q))
+      .filter(c => !q || (c.name || '').toLowerCase().includes(q) || (c.nameUr || '').includes(q) || (c.phone || '').includes(q) || (c.area || '').toLowerCase().includes(q))
       .map(c => ({ c, st: this.customerStats(c.id) }))
       .sort((a, b) => (b.c.id || '').localeCompare(a.c.id || ''));
     return h('div', { className: 'screen' },
@@ -2675,8 +2728,8 @@ export default class App extends React.Component {
     if (q) plans = plans.filter(pl => {
       const c = (this.state.customers || []).find(x => x.id === pl.customerId);
       const p = this.activeProducts().find(x => x.id === pl.productId);
-      return (c && (c.name.toLowerCase().includes(q) || c.nameUr.includes(q) || c.phone.includes(q)))
-        || (p && p.name.toLowerCase().includes(q))
+      return (c && (((c.name || '').toLowerCase().includes(q)) || ((c.nameUr || '').includes(q)) || ((c.phone || '').includes(q))))
+        || (p && (p.name || '').toLowerCase().includes(q))
         || (pl.voucherNo || '').toLowerCase().includes(q)
         || (pl.imei || '').toLowerCase().includes(q)
         || (pl.chassisNo || '').toLowerCase().includes(q)
@@ -3319,7 +3372,7 @@ export default class App extends React.Component {
       const c = (this.state.customers || []).find(x => x.id === pl.customerId);
       const p = (this.state.products || []).find(x => x.id === pl.productId);
       (pl.schedule || []).forEach(s => {
-        if (s.paid) tx.push({ source: 'plan', accountId: s.accountId || null, amount: s.amountPaid || s.amount, date: s.paidDate, customer: c, product: p, plan: pl, installment: s });
+        if (s.paid) tx.push({ source: 'plan', accountId: s.accountId || pl.accountId || null, amount: s.amountPaid || s.amount, date: s.paidDate, customer: c, product: p, plan: pl, installment: s });
       });
     });
     this.activeLedger().forEach(le => {
@@ -4384,7 +4437,7 @@ export default class App extends React.Component {
       h('div', { style: { padding: '12px 14px 0' } },
       h('div', { style: { display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' } },
         h('button', { onClick: () => this.toggleUdharPin(personName), style: { padding: '5px 10px', borderRadius: 8, background: isPinned ? '#fef3c7' : '#e6eae5', color: isPinned ? '#b45309' : '#8b978f', fontSize: 10, fontWeight: 700, border: 'none' } }, isPinned ? '📌 Unpin' : '📌 Pin'),
-        phone ? h('a', { href: 'https://wa.me/' + phone.replace(/[^0-9]/g, '') + '?text=' + waMsg, target: '_blank', style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, textDecoration: 'none' } }, '💬 Manual') : h('button', { onClick: () => this.remindViaWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Manual'),
+        phone ? h('a', { href: 'https://wa.me/' + this._waPhone(phone) + '?text=' + waMsg, target: '_blank', style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, textDecoration: 'none' } }, '💬 Manual') : h('button', { onClick: () => this.remindViaWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Manual'),
         h('button', { onClick: () => this.sendSingleReminder(personName), disabled: this.state.udharAutoSending, style: { padding: '5px 10px', borderRadius: 8, background: this.state.udharAutoSending ? '#e6eae5' : '#0f6b4f', color: this.state.udharAutoSending ? '#8b978f' : 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, this.state.udharAutoSending ? '⏳...' : '🤖 Auto'),
         h('button', { onClick: () => this.copyStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none' } }, '📋 Statement'),
         h('button', { onClick: () => this.printUdharStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none' } }, '🖨 PDF'),
@@ -6201,7 +6254,14 @@ export default class App extends React.Component {
           <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, flexShrink: 0 }}>A</div>
           <div style={{ flex: 1, background: '#f4f1e6', borderRadius: 10, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 13 }}>🔍</span>
-            <input placeholder="Search…" value={this.state.searchQuery} onChange={e => this.setState({ searchQuery: e.target.value })} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 13, flex: 1, minWidth: 0 }} />
+            <input placeholder="Search…" value={this.state.searchQuery} onChange={e => {
+              const q = e.target.value;
+              const upd = { searchQuery: q };
+              if (q && !['customers', 'products', 'plans'].includes(this.state.route)) {
+                upd.route = 'customers';
+              }
+              this.setState(upd);
+            }} style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 13, flex: 1, minWidth: 0 }} />
           </div>
           <button onClick={() => this.go('newplan')} style={{ width: 32, height: 32, borderRadius: 9, background: '#0f6b4b', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>＋</button>
         </div>
@@ -6219,7 +6279,14 @@ export default class App extends React.Component {
             <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
               <div style={{ width: 'min(420px,100%)', background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ color: '#a09a86' }}>🔍</span>
-                <input placeholder="Search customer, plan, product…" value={this.state.searchQuery} onChange={e => this.setState({ searchQuery: e.target.value })} style={{ border: 'none', outline: 'none', flex: 1, fontSize: 14, background: 'transparent' }} />
+                <input id="global-search-input" placeholder="Search customer, plan, product…" value={this.state.searchQuery} onChange={e => {
+                  const q = e.target.value;
+                  const upd = { searchQuery: q };
+                  if (q && !['customers', 'products', 'plans'].includes(this.state.route)) {
+                    upd.route = 'customers';
+                  }
+                  this.setState(upd);
+                }} style={{ border: 'none', outline: 'none', flex: 1, fontSize: 14, background: 'transparent' }} />
                 <span style={{ fontSize: 11, color: '#a09a86', background: '#f4f1e6', padding: '2px 6px', borderRadius: 5 }}>⌘K</span>
               </div>
             </div>

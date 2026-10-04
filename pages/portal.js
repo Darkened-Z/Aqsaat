@@ -37,13 +37,20 @@ export default class Portal extends React.Component {
   }
 
   normalizePhone(raw) {
-    return raw.replace(/[^0-9]/g, '');
+    return (raw || '').replace(/[^0-9]/g, '');
+  }
+
+  matchesPhone(target, query) {
+    if (!target || target.length < 7 || !query || query.length < 7) return false;
+    const t10 = target.slice(-10);
+    const q10 = query.slice(-10);
+    return target === query || t10 === q10 || target.endsWith(q10) || query.endsWith(t10);
   }
 
   lookup = async () => {
     const phone = this.normalizePhone(this.state.phone);
-    if (phone.length < 4) {
-      this.setState({ error: 'Please enter a valid phone number / درست فون نمبر درج کریں' });
+    if (phone.length < 7) {
+      this.setState({ error: 'Please enter a valid phone number (at least 7 digits) / درست فون نمبر درج کریں' });
       return;
     }
     this.setState({ loading: true, error: '', found: false });
@@ -59,7 +66,7 @@ export default class Portal extends React.Component {
       const customer = customers.find(c => {
         const cp = this.normalizePhone(c.phone || '');
         const ca = this.normalizePhone(c.altPhone || '');
-        return cp.includes(phone) || phone.includes(cp) || (ca && (ca.includes(phone) || phone.includes(ca)));
+        return this.matchesPhone(cp, phone) || (ca && this.matchesPhone(ca, phone));
       });
 
       if (!customer) {
@@ -145,7 +152,7 @@ export default class Portal extends React.Component {
     });
 
     const totalRemaining = plans.reduce((s, p) => s + (p.schedule || []).filter(si => !si.paid).reduce((a, si) => a + si.amount, 0), 0);
-    const totalPaid = plans.reduce((s, p) => s + (p.schedule || []).filter(si => si.paid).reduce((a, si) => a + (si.amountPaid || si.amount), 0), 0);
+    const totalPaid = plans.reduce((s, p) => s + (p.down || 0) + (p.schedule || []).filter(si => si.paid).reduce((a, si) => a + (si.amountPaid || si.amount), 0), 0);
 
     const nextDue = activePlans
       .flatMap(p => (p.schedule || []).filter(s => !s.paid).map(s => ({ ...s, plan: p })))
