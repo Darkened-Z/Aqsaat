@@ -3969,18 +3969,313 @@ export default class App extends React.Component {
     );
   }
 
+  _parseUdharEntryMs(id, dateStr) {
+    if (!id && !dateStr) return 0;
+    const parts = (id || '').split('_');
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      const ms = parseInt(p.slice(0, 8), 36);
+      if (isFinite(ms) && ms > 1500000000000 && ms < 3000000000000) {
+        const dateMs = dateStr ? new Date(dateStr + 'T12:00:00').getTime() : 0;
+        return (dateMs && Math.abs(dateMs - ms) > 86400000 * 2) ? dateMs : Math.max(ms, dateMs);
+      }
+    }
+    if (dateStr) {
+      const d = new Date(dateStr + 'T12:00:00').getTime();
+      if (!isNaN(d)) return d;
+    }
+    return 0;
+  }
+
+  _formatRelativeTime(ms) {
+    if (!ms) return '';
+    const diff = Math.max(0, Date.now() - ms);
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return mins + 'm ago';
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + 'h ago';
+    return 'Yesterday';
+  }
+
+  _getUdhar24hTransactions() {
+    const entries = this.activeUdpiEntries();
+    const now = Date.now();
+    const cutoff = now - 24 * 60 * 60 * 1000;
+    const today = this.todayStr();
+    const txList = [];
+
+    entries.forEach(u => {
+      const person = (u.person || '').trim();
+      if (!person) return;
+      const mainMs = this._parseUdharEntryMs(u.id, u.date);
+      const isMainIn24h = (mainMs >= cutoff && mainMs <= now + 3600000) || u.date === today;
+      if (isMainIn24h) {
+        txList.push({
+          id: u.id,
+          entryId: u.id,
+          person,
+          type: u.direction === 'lent' ? 'gave' : 'got',
+          direction: u.direction,
+          amount: u.amount,
+          date: u.date,
+          ms: mainMs,
+          note: u.note || '',
+          category: u.category || '',
+          accountId: u.accountId,
+          returned: u.returned,
+          isPartialReturn: false,
+        });
+      }
+
+      (u.partialReturns || []).forEach(pr => {
+        const prMs = this._parseUdharEntryMs(pr.id, pr.date);
+        const isPrIn24h = (prMs >= cutoff && prMs <= now + 3600000) || pr.date === today;
+        if (isPrIn24h) {
+          txList.push({
+            id: pr.id || (u.id + '_pr_' + pr.amount),
+            entryId: u.id,
+            person,
+            type: 'got',
+            direction: 'borrowed',
+            amount: pr.amount,
+            date: pr.date,
+            ms: prMs,
+            note: 'Partial return / واپسی' + (u.note ? ' (' + u.note + ')' : ''),
+            category: u.category || '',
+            accountId: u.accountId,
+            returned: true,
+            isPartialReturn: true,
+          });
+        }
+      });
+    });
+
+    txList.sort((a, b) => (b.ms || 0) - (a.ms || 0) || (b.date || '').localeCompare(a.date || ''));
+    return txList;
+  }
+
+  copy24hSummary = () => {
+    const txList = this._getUdhar24hTransactions();
+    if (txList.length === 0) { alert('No transactions in the last 24 hours / پچھلے 24 گھنٹوں میں کوئی لین دین نہیں ہے۔'); return; }
+    const totalGave = txList.filter(t => t.type === 'gave').reduce((s, t) => s + t.amount, 0);
+    const totalGot = txList.filter(t => t.type === 'got').reduce((s, t) => s + t.amount, 0);
+    const net = totalGot - totalGave;
+    const shopName = this.state.settings.shopName || this.state.settings.businessName || 'Udhar Book';
+    let text = '⏱️ ' + shopName + ' — Last 24 Hours Transactions\n';
+    text += '📅 ' + new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) + ' (' + new Date().toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true }) + ')\n';
+    text += '━━━━━━━━━━━━━━━━━━━\n';
+    text += '🔴 Gave (Lent): ' + this.fmtPKR(totalGave) + '\n';
+    text += '🟢 Got (Received): ' + this.fmtPKR(totalGot) + '\n';
+    text += '📊 Net: ' + (net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(net)) + '\n';
+    text += '📝 Total Entries: ' + txList.length + '\n';
+    text += '━━━━━━━━━━━━━━━━━━━\n\n';
+    txList.forEach(t => {
+      const isGave = t.type === 'gave';
+      const timeStr = t.ms ? new Date(t.ms).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true }) : t.date;
+      text += (isGave ? '🔴 Gave: ' : '🟢 Got: ') + this.fmtPKR(t.amount) + ' — ' + t.person + ' (' + timeStr + ')' + (t.note ? ' · ' + t.note : '') + '\n';
+    });
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => alert('24 Hours summary copied! / رپورٹ کاپی ہوگئی!'));
+    else alert(text);
+  };
+
+  share24hWhatsApp = () => {
+    const txList = this._getUdhar24hTransactions();
+    if (txList.length === 0) { alert('No transactions in the last 24 hours / پچھلے 24 گھنٹوں میں کوئی لین دین نہیں ہے۔'); return; }
+    const totalGave = txList.filter(t => t.type === 'gave').reduce((s, t) => s + t.amount, 0);
+    const totalGot = txList.filter(t => t.type === 'got').reduce((s, t) => s + t.amount, 0);
+    const net = totalGot - totalGave;
+    const shopName = this.state.settings.shopName || this.state.settings.businessName || 'Udhar Book';
+    let text = '⏱️ *' + shopName + ' — Last 24 Hours Udhar*\n';
+    text += '📅 ' + new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) + ' (' + new Date().toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true }) + ')\n';
+    text += '━━━━━━━━━━━━━━━━━━━\n';
+    text += '🔴 Gave (Lent): ' + this.fmtPKR(totalGave) + '\n';
+    text += '🟢 Got (Received): ' + this.fmtPKR(totalGot) + '\n';
+    text += '📊 Net: ' + (net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(net)) + '\n';
+    text += '📝 Total Entries: ' + txList.length + '\n';
+    text += '━━━━━━━━━━━━━━━━━━━\n\n';
+    txList.forEach(t => {
+      const isGave = t.type === 'gave';
+      const timeStr = t.ms ? new Date(t.ms).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true }) : t.date;
+      text += (isGave ? '🔴 Gave: ' : '🟢 Got: ') + this.fmtPKR(t.amount) + ' — ' + t.person + ' (' + timeStr + ')' + (t.note ? ' · ' + t.note : '') + '\n';
+    });
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  };
+
+  renderUdharLast24Hours() {
+    const h = this.h;
+    const all24h = this._getUdhar24hTransactions();
+    const filter = this.state.last24hFilter || 'all';
+    const q = (this.state.last24hSearch || '').toLowerCase();
+
+    let filtered = all24h;
+    if (filter === 'gave') filtered = filtered.filter(t => t.type === 'gave');
+    else if (filter === 'got') filtered = filtered.filter(t => t.type === 'got');
+
+    if (q) {
+      filtered = filtered.filter(t => (t.person || '').toLowerCase().includes(q) || (t.note || '').toLowerCase().includes(q));
+    }
+
+    const totalGave = all24h.filter(t => t.type === 'gave').reduce((s, t) => s + t.amount, 0);
+    const totalGot = all24h.filter(t => t.type === 'got').reduce((s, t) => s + t.amount, 0);
+    const net = totalGot - totalGave;
+    const gaveCount = all24h.filter(t => t.type === 'gave').length;
+    const gotCount = all24h.filter(t => t.type === 'got').length;
+
+    const accs = this.getAccounts();
+    const initials = (name) => (name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+    const avatarColors = ['#b91c1c','#0f6b4b','#3b82f6','#a26a10','#7c3aed','#0891b2','#c2410c','#4338ca'];
+    const getAvatarColor = (name) => avatarColors[Math.abs((name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % avatarColors.length];
+
+    const fBtn = (label, ur, val, count) => h('button', {
+      key: val,
+      onClick: () => this.setState({ last24hFilter: val }),
+      style: {
+        padding: '6px 12px',
+        borderRadius: 8,
+        fontSize: 11,
+        fontWeight: 700,
+        background: filter === val ? '#0f6b4f' : 'transparent',
+        color: filter === val ? '#fff' : '#7a7663',
+        border: filter === val ? 'none' : '1px solid #ece8dc',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        transition: 'all .15s'
+      }
+    },
+      label,
+      h('span', { className: 'ur', style: { fontSize: 10, opacity: 0.8 } }, ur),
+      count != null ? h('span', { style: { background: filter === val ? 'rgba(255,255,255,.24)' : '#eef1ec', color: filter === val ? '#fff' : '#6b7280', fontSize: 10, padding: '1px 5px', borderRadius: 8, fontWeight: 800 } }, count) : null
+    );
+
+    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0 20px' } },
+      h('div', { style: { background: 'linear-gradient(135deg, #0f6b4b 0%, #15803d 100%)', borderRadius: 16, padding: '14px 16px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 } },
+        h('div', {},
+          h('div', { style: { fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 } },
+            '⏱️ Last 24 Hours / پچھلے 24 گھنٹے',
+          ),
+          h('div', { style: { fontSize: 11, opacity: 0.85, marginTop: 2 } },
+            'Live transactions recorded in the last 24h (' + all24h.length + ' total)',
+          ),
+        ),
+        h('div', { style: { display: 'flex', gap: 6 } },
+          h('button', { onClick: () => this.copy24hSummary(), style: { padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,.2)', color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' } }, '📋 Copy'),
+          h('button', { onClick: () => this.share24hWhatsApp(), style: { padding: '6px 10px', borderRadius: 8, background: '#25D366', color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' } }, '💬 WhatsApp'),
+        ),
+      ),
+
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 } },
+        h('div', { style: { background: '#fef2f2', borderRadius: 12, padding: '10px 12px', border: '1px solid #fecaca', borderLeft: '4px solid #b91c1c' } },
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' } }, 'Gave / دیا'),
+          h('div', { className: 'mono', style: { fontSize: 16, fontWeight: 800, color: '#b91c1c', marginTop: 2 } }, this.fmtPKR(totalGave)),
+          h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, gaveCount + ' entries'),
+        ),
+        h('div', { style: { background: '#f0fdf4', borderRadius: 12, padding: '10px 12px', border: '1px solid #bbf7d0', borderLeft: '4px solid #0f6b4b' } },
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#0f6b4b', textTransform: 'uppercase' } }, 'Got / لیا'),
+          h('div', { className: 'mono', style: { fontSize: 16, fontWeight: 800, color: '#0f6b4b', marginTop: 2 } }, this.fmtPKR(totalGot)),
+          h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, gotCount + ' entries'),
+        ),
+        h('div', { style: { background: '#f8fafc', borderRadius: 12, padding: '10px 12px', border: '1px solid #e2e8f0', borderLeft: '4px solid #3b82f6' } },
+          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase' } }, 'Net / خالص'),
+          h('div', { className: 'mono', style: { fontSize: 16, fontWeight: 800, color: net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 2 } }, (net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(net))),
+          h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, all24h.length + ' total txns'),
+        ),
+      ),
+
+      h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' } },
+        h('div', { style: { flex: 1, minWidth: 160, position: 'relative' } },
+          h('span', { style: { position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#7a7663', pointerEvents: 'none' } }, '🔍'),
+          h('input', { type: 'text', value: this.state.last24hSearch || '', onChange: e => this.setState({ last24hSearch: e.target.value }), placeholder: 'Search 24h transactions...', style: { width: '100%', border: '1px solid #ece8dc', borderRadius: 8, padding: '7px 10px 7px 30px', fontSize: 12, background: '#fdfcf8', outline: 'none' } }),
+        ),
+        h('div', { style: { display: 'flex', gap: 4 } },
+          fBtn('All', 'سب', 'all', all24h.length),
+          fBtn('Gave', 'دیا', 'gave', gaveCount),
+          fBtn('Got', 'لیا', 'got', gotCount),
+        ),
+      ),
+
+      filtered.length === 0
+        ? h('div', { style: { textAlign: 'center', padding: '40px 20px', color: '#7a7663', background: '#fdfcf8', borderRadius: 14, border: '1px solid #ece8dc' } },
+            h('div', { style: { fontSize: 44, marginBottom: 8 } }, '⏱️'),
+            h('div', { style: { fontWeight: 800, fontSize: 16, color: '#1a2b1f' } }, all24h.length === 0 ? 'No transactions in the last 24 hours' : 'No matching transactions'),
+            h('div', { className: 'ur', style: { fontSize: 13, marginTop: 2, color: '#8b978f' } }, all24h.length === 0 ? 'پچھلے 24 گھنٹوں میں کوئی لین دین نہیں ہوا' : 'کوئی اندراج نہیں ملا'),
+            all24h.length === 0 ? h('div', { style: { marginTop: 16 } },
+              h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { padding: '10px 20px', borderRadius: 10, background: '#0f6b4f', color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' } }, '+ Record New Entry')
+            ) : null
+          )
+        : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+            filtered.map(t => {
+              const isGave = t.type === 'gave';
+              const ac = getAvatarColor(t.person);
+              const acc = accs.find(a => a.id === t.accountId);
+              const timeFormatted = t.ms ? new Date(t.ms).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+              const dateFormatted = t.date || '';
+              const relTime = this._formatRelativeTime(t.ms);
+
+              return h('div', {
+                key: t.id,
+                onClick: () => this.setState({ udharPerson: t.person, udharTab: 'parties' }),
+                style: {
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '12px 14px',
+                  background: '#fdfcf8',
+                  borderRadius: 12,
+                  border: '1px solid #ece8dc',
+                  borderLeft: '4px solid ' + (isGave ? '#b91c1c' : '#0f6b4b'),
+                  transition: 'background .15s'
+                }
+              },
+                h('div', {
+                  style: {
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    background: ac + '18',
+                    color: ac,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    flexShrink: 0
+                  }
+                }, initials(t.person)),
+                h('div', { style: { flex: 1, minWidth: 0 } },
+                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                    h('div', { style: { fontWeight: 700, fontSize: 14, color: '#16211c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, t.person),
+                    t.isPartialReturn ? h('span', { style: { fontSize: 9, fontWeight: 700, background: '#e0f2fe', color: '#0369a1', padding: '1px 5px', borderRadius: 4 } }, 'Return') : null,
+                  ),
+                  h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' } },
+                    h('span', {}, isGave ? '🔴 Gave / دیا' : '🟢 Got / لیا'),
+                    timeFormatted ? h('span', { style: { fontWeight: 600, color: '#3d4a44' } }, '· ' + timeFormatted) : null,
+                    relTime ? h('span', { style: { color: '#0f6b4f', fontWeight: 600 } }, '(' + relTime + ')') : null,
+                    acc ? h('span', {}, '· ' + acc.emoji + ' ' + acc.name) : null,
+                  ),
+                  t.note ? h('div', { style: { fontSize: 11, color: '#8b978f', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, '📝 ' + t.note) : null,
+                ),
+                h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                  h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: isGave ? '#b91c1c' : '#0f6b4b' } },
+                    (isGave ? '- ' : '+ ') + this.fmtPKR(t.amount)
+                  ),
+                  h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 2 } },
+                    t.returned ? h('span', { style: { color: '#0f6b4b', fontWeight: 600 } }, '✓ Settled') : dateFormatted
+                  )
+                )
+              );
+            })
+          )
+    );
+  }
+
   _getUdharParties() {
     const entries = this.activeUdpiEntries();
     const today = this.todayStr();
-    const parseMs = (id, dateStr) => {
-      const idStr = (id || '').replace(/^ud_|^udpi_|^pr_/, '');
-      const ms = parseInt(idStr, 36);
-      const dateMs = dateStr ? new Date(dateStr + 'T12:00:00').getTime() : 0;
-      if (isFinite(ms) && ms > 1000000000000) {
-        return Math.abs(dateMs - ms) > 86400000 * 2 ? dateMs : Math.max(ms, dateMs);
-      }
-      return dateMs;
-    };
+    const parseMs = (id, dateStr) => this._parseUdharEntryMs(id, dateStr);
     const map = {};
     entries.forEach(u => {
       const name = u.person.trim();
@@ -4267,6 +4562,7 @@ export default class App extends React.Component {
       h('div', { style: { padding: '0' } },
       udharTab === 'activity' ? this.renderUdharActivity()
         : udharTab === 'reports' ? this.renderUdharReports()
+        : udharTab === 'last24h' ? this.renderUdharLast24Hours()
         : h('div', {},
       overdueParties.length > 0 ? h('div', { style: { background: '#fff', padding: '12px 16px', borderBottom: '1px solid #e6eae5' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 } },
@@ -6131,6 +6427,7 @@ export default class App extends React.Component {
             <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', display: 'flex', gap: 6 }}>
               {[
                 { key: 'parties',  label: 'Khata' },
+                { key: 'last24h',  label: '24 Hours' },
                 { key: 'activity', label: 'Activity' },
                 { key: 'reports',  label: 'Reports' },
               ].map(t => (
@@ -6157,6 +6454,7 @@ export default class App extends React.Component {
             <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', display: 'flex', alignItems: 'stretch' }}>
               {[
                 { key: 'parties',  icon: '📒', label: 'Khata' },
+                { key: 'last24h',  icon: '⏱️', label: '24 Hours' },
                 { key: 'activity', icon: '📋', label: 'Activity' },
                 { key: 'reports',  icon: '📊', label: 'Reports' },
                 { key: 'more',     icon: '⋯',  label: 'More' },
