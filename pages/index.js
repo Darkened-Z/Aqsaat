@@ -3280,13 +3280,15 @@ export default class App extends React.Component {
         return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') : '';
       })();
       if (!createdKey) return;
-      if (!investByMonth[createdKey]) investByMonth[createdKey] = { label: '', financed: 0, collected: 0, plans: 0 };
-      const financed = Math.max(0, pl.total - (pl.down || 0));
-      const stats = this.planStats(pl);
+      if (!investByMonth[createdKey]) investByMonth[createdKey] = { label: '', financed: 0, collected: 0, plans: 0, down: 0 };
+      const financed = Math.max(0, (pl.total || 0) - (pl.down || 0));
+      const installmentPaid = (pl.schedule || []).filter(s => s.paid).reduce((a, s) => a + this._cashPaid(s), 0);
       investByMonth[createdKey].financed += financed;
-      investByMonth[createdKey].collected += stats.paidAmount;
+      investByMonth[createdKey].collected += installmentPaid;
+      investByMonth[createdKey].down += (pl.down || 0);
       investByMonth[createdKey].plans++;
-      const d2 = new Date(createdKey + '-01T00:00:00');
+      const [y, m] = createdKey.split('-');
+      const d2 = new Date(Number(y), Number(m) - 1, 1);
       investByMonth[createdKey].label = d2.toLocaleDateString('en', { month: 'short', year: '2-digit' });
     });
     const investByMonthKeys = Object.keys(investByMonth).sort();
@@ -4809,25 +4811,22 @@ export default class App extends React.Component {
     // ── Monthly Investment data ──────────────────────────────────
     const investMonths = {};
     entries.forEach(u => {
-      if (u.direction !== 'lent') return;
       const m = (u.date || '').substring(0, 7);
       if (!m) return;
       if (!investMonths[m]) investMonths[m] = { invested: 0, recovered: 0, entries: 0, settled: 0 };
-      investMonths[m].invested += u.amount;
-      investMonths[m].entries++;
-      if (u.returned) {
+      if (u.direction === 'lent') {
+        investMonths[m].invested += u.amount;
+        investMonths[m].entries++;
+        if (u.returned) investMonths[m].settled++;
+      } else if (u.direction === 'borrowed') {
         investMonths[m].recovered += u.amount;
-        investMonths[m].settled++;
-      } else {
-        const partialReturned = (u.partialReturns || []).reduce((s, pr) => s + (pr.amount || 0), 0);
-        investMonths[m].recovered += partialReturned;
       }
     });
-    const investMonthKeys = Object.keys(investMonths).sort();
+    const investMonthKeys = Object.keys(investMonths).filter(k => investMonths[k].invested > 0 || investMonths[k].recovered > 0).sort();
     const maxInvested = Math.max(...investMonthKeys.map(k => investMonths[k].invested), 1);
     const totalInvested = investMonthKeys.reduce((s, k) => s + investMonths[k].invested, 0);
     const totalRecovered = investMonthKeys.reduce((s, k) => s + investMonths[k].recovered, 0);
-    const totalOutstanding = totalInvested - totalRecovered;
+    const totalOutstanding = Math.max(0, totalInvested - totalRecovered);
 
     const statCard = (label, ur, value, sub, bg, ac) => h('div', { style: { background: bg, borderRadius: 12, padding: '12px 14px', border: '1px solid #ece8dc' } },
       h('div', { style: { fontSize: 10, fontWeight: 700, color: ac, textTransform: 'uppercase', letterSpacing: '0.04em' } }, label),
@@ -4908,8 +4907,9 @@ export default class App extends React.Component {
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
           investMonthKeys.map(k => {
             const im = investMonths[k];
-            const label = new Date(k + '-01T00:00:00').toLocaleDateString('en', { month: 'short', year: '2-digit' });
-            const outstanding = im.invested - im.recovered;
+            const [y, m] = k.split('-');
+            const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
+            const outstanding = Math.max(0, im.invested - im.recovered);
             const recoveryPct = im.invested > 0 ? Math.round(im.recovered / im.invested * 100) : 0;
             const barWidth = Math.max(2, im.invested / maxInvested * 100);
             const recoveredBarWidth = im.invested > 0 ? Math.max(0, im.recovered / im.invested * 100) : 0;
