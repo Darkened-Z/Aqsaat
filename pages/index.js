@@ -2996,6 +2996,32 @@ export default class App extends React.Component {
     const tblHead = { fontSize: 11, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, padding: '10px 8px', textAlign: 'right', borderBottom: '2px solid #ece8dc' };
     const tblCell = { fontSize: 13, fontWeight: 600, padding: '10px 8px', textAlign: 'right', borderBottom: '1px solid #f2eee2' };
 
+    // ── Monthly Investment (Installments) ────────────────────────
+    const investByMonth = {};
+    this.activePlans().forEach(pl => {
+      const createdKey = (() => {
+        if (pl.reportMonth) return pl.reportMonth;
+        const idPart = (pl.id || '').replace(/^pl_/, '');
+        const createdMs = parseInt(idPart, 36);
+        const d = isFinite(createdMs) && createdMs > 0 ? new Date(createdMs) : (pl.startDate ? new Date(pl.startDate) : null);
+        return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') : '';
+      })();
+      if (!createdKey) return;
+      if (!investByMonth[createdKey]) investByMonth[createdKey] = { label: '', financed: 0, collected: 0, plans: 0 };
+      const financed = Math.max(0, pl.total - (pl.down || 0));
+      const stats = this.planStats(pl);
+      investByMonth[createdKey].financed += financed;
+      investByMonth[createdKey].collected += stats.paidAmount;
+      investByMonth[createdKey].plans++;
+      const d2 = new Date(createdKey + '-01T00:00:00');
+      investByMonth[createdKey].label = d2.toLocaleDateString('en', { month: 'short', year: '2-digit' });
+    });
+    const investByMonthKeys = Object.keys(investByMonth).sort();
+    const maxFinanced = Math.max(...investByMonthKeys.map(k => investByMonth[k].financed), 1);
+    const totalFinanced = investByMonthKeys.reduce((s, k) => s + investByMonth[k].financed, 0);
+    const totalCollectedBack = investByMonthKeys.reduce((s, k) => s + investByMonth[k].collected, 0);
+    const totalStillOut = totalFinanced - totalCollectedBack;
+
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginBottom: 12 } },
         h('button', { onClick: this.exportCSV, style: { background: '#f4f1e6', color: '#3a4a3f', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 } }, '⬇ Export CSV'),
@@ -3110,6 +3136,105 @@ export default class App extends React.Component {
           ),
         ),
       ]),
+
+      investByMonthKeys.length > 0 ? h('div', { style: { height: 20 } }) : null,
+      investByMonthKeys.length > 0 ? this.card([
+        // Header row
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 } },
+          h('div', {},
+            this.sectionHeader('Monthly Investment', 'ماہانہ سرمایہ کاری'),
+            h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } },
+              'How much was financed per month vs collected back',
+            ),
+          ),
+          h('button', {
+            onClick: () => {
+              const shopName = (this.state.settings || {}).shopName || (this.state.settings || {}).businessName || 'Installments';
+              let text = '💰 ' + shopName + ' — Monthly Investment Report\n';
+              text += '📅 ' + new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) + '\n';
+              text += '━━━━━━━━━━━━━━━━━━━\n';
+              investByMonthKeys.forEach(k => {
+                const im = investByMonth[k];
+                const rate = im.financed > 0 ? Math.round(im.collected / im.financed * 100) : 0;
+                text += im.label + ' (' + im.plans + ' plans): Financed ' + this.fmtPKR(im.financed) + ' | Collected ' + this.fmtPKR(im.collected) + ' | Outstanding ' + this.fmtPKR(im.financed - im.collected) + ' (' + rate + '% collected)\n';
+              });
+              text += '━━━━━━━━━━━━━━━━━━━\n';
+              text += 'Total Financed: ' + this.fmtPKR(totalFinanced) + '\n';
+              text += 'Total Collected: ' + this.fmtPKR(totalCollectedBack) + '\n';
+              text += 'Total Outstanding: ' + this.fmtPKR(totalStillOut) + '\n';
+              if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => alert('Investment report copied!'));
+              else alert(text);
+            },
+            style: { padding: '6px 12px', borderRadius: 8, background: '#1a2b1f', color: '#fff', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', flexShrink: 0 }
+          }, '📋 Copy'),
+        ),
+
+        // Summary 3-cards
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 } },
+          h('div', { style: { background: '#fef2f2', borderRadius: 12, padding: '10px 12px', border: '1px solid #fecaca', borderLeft: '3px solid #b91c1c' } },
+            h('div', { style: { fontSize: 9, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' } }, 'Financed / سرمایہ'),
+            h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#b91c1c', marginTop: 3 } }, this.fmtPKR(totalFinanced)),
+            h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, investByMonthKeys.reduce((s, k) => s + investByMonth[k].plans, 0) + ' plans'),
+          ),
+          h('div', { style: { background: '#f0fdf4', borderRadius: 12, padding: '10px 12px', border: '1px solid #bbf7d0', borderLeft: '3px solid #0f6b4b' } },
+            h('div', { style: { fontSize: 9, fontWeight: 700, color: '#0f6b4b', textTransform: 'uppercase' } }, 'Collected / وصولی'),
+            h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#0f6b4b', marginTop: 3 } }, this.fmtPKR(totalCollectedBack)),
+            h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, totalFinanced > 0 ? Math.round(totalCollectedBack / totalFinanced * 100) + '% recovered' : '—'),
+          ),
+          h('div', { style: { background: '#fff7ed', borderRadius: 12, padding: '10px 12px', border: '1px solid #fed7aa', borderLeft: '3px solid #ea580c' } },
+            h('div', { style: { fontSize: 9, fontWeight: 700, color: '#ea580c', textTransform: 'uppercase' } }, 'Outstanding / باقی'),
+            h('div', { className: 'mono', style: { fontSize: 14, fontWeight: 800, color: '#ea580c', marginTop: 3 } }, this.fmtPKR(totalStillOut)),
+            h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 2 } }, totalFinanced > 0 ? Math.round(totalStillOut / totalFinanced * 100) + '% pending' : '—'),
+          ),
+        ),
+
+        // Per-month bar rows
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+          investByMonthKeys.map(k => {
+            const im = investByMonth[k];
+            const outstanding = im.financed - im.collected;
+            const recoveryPct = im.financed > 0 ? Math.round(im.collected / im.financed * 100) : 0;
+            const barWidth = Math.max(2, im.financed / maxFinanced * 100);
+            const collectedBarWidth = im.financed > 0 ? Math.max(0, im.collected / im.financed * 100) : 0;
+            return h('div', { key: k },
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 } },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                  h('span', { style: { fontSize: 12, fontWeight: 800, color: '#3a4a3f', width: 52 } }, im.label),
+                  h('span', { style: { fontSize: 11, color: '#7a7663' } }, im.plans + (im.plans === 1 ? ' plan' : ' plans')),
+                  recoveryPct >= 100
+                    ? h('span', { style: { fontSize: 9, fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: 4 } }, '✓ Fully')
+                    : recoveryPct > 0
+                      ? h('span', { style: { fontSize: 9, fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 6px', borderRadius: 4 } }, recoveryPct + '%')
+                      : h('span', { style: { fontSize: 9, fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: 4 } }, '0%'),
+                ),
+                h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 800, color: '#b91c1c' } }, this.fmtPKR(im.financed)),
+              ),
+              // Nested bar: grey track → pink financed → green collected
+              h('div', { style: { height: 10, borderRadius: 5, background: '#ece8dc', overflow: 'hidden', width: '100%' } },
+                h('div', { style: { height: '100%', borderRadius: 5, background: '#fca5a5', width: barWidth + '%', transition: 'width .3s' } },
+                  h('div', { style: { height: '100%', borderRadius: 5, background: '#0f6b4b', width: collectedBarWidth + '%', transition: 'width .3s' } }),
+                ),
+              ),
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: 4 } },
+                h('span', { style: { fontSize: 11, color: '#0f6b4b', fontWeight: 600 } }, '↩ ' + this.fmtPKR(im.collected) + ' collected'),
+                outstanding > 0 ? h('span', { style: { fontSize: 11, color: '#ea580c', fontWeight: 600 } }, this.fmtPKR(outstanding) + ' pending') : null,
+              ),
+            );
+          }),
+        ),
+
+        // Legend
+        h('div', { style: { display: 'flex', gap: 16, marginTop: 14, paddingTop: 10, borderTop: '1px solid #f2eee2' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#7a7663' } },
+            h('div', { style: { width: 10, height: 10, borderRadius: 2, background: '#fca5a5' } }),
+            'Financed / سرمایہ',
+          ),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#7a7663' } },
+            h('div', { style: { width: 10, height: 10, borderRadius: 2, background: '#0f6b4b' } }),
+            'Collected / وصولی',
+          ),
+        ),
+      ]) : null,
     );
   }
 
