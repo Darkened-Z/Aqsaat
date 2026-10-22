@@ -4529,10 +4529,11 @@ export default class App extends React.Component {
                 ),
                 h('div', { className: 'mono', style: { fontSize: 12, fontWeight: 800, color: '#b91c1c' } }, this.fmtPKR(im.invested)),
               ),
-              // Stacked progress bar: invested base + recovered overlay
-              h('div', { style: { position: 'relative', height: 10, borderRadius: 5, background: '#fee2e2', overflow: 'hidden' } },
-                h('div', { style: { position: 'absolute', left: 0, top: 0, height: '100%', width: barWidth + '%', background: '#fca5a5', borderRadius: 5 } }),
-                h('div', { style: { position: 'absolute', left: 0, top: 0, height: '100%', width: (barWidth * recoveredBarWidth / 100) + '%', background: '#0f6b4b', borderRadius: 5, transition: 'width .3s' } }),
+              // Progress bar: full track → pink invested → green recovered fill
+              h('div', { style: { height: 10, borderRadius: 5, background: '#ece8dc', overflow: 'hidden', width: '100%' } },
+                h('div', { style: { height: '100%', borderRadius: 5, background: '#fca5a5', width: barWidth + '%', transition: 'width .3s' } },
+                  h('div', { style: { height: '100%', borderRadius: 5, background: '#0f6b4b', width: recoveredBarWidth + '%', transition: 'width .3s' } }),
+                ),
               ),
               // Sub-row: recovered + outstanding
               h('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: 3 } },
