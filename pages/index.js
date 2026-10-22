@@ -3287,12 +3287,14 @@ export default class App extends React.Component {
         return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') : '';
       })();
       if (!createdKey) return;
-      if (!investByMonth[createdKey]) investByMonth[createdKey] = { label: '', financed: 0, collected: 0, plans: 0, down: 0 };
+      if (!investByMonth[createdKey]) investByMonth[createdKey] = { label: '', financed: 0, collected: 0, plans: 0, down: 0, outstanding: 0 };
       const financed = Math.max(0, (pl.total || 0) - (pl.down || 0));
       const installmentPaid = (pl.schedule || []).filter(s => s.paid).reduce((a, s) => a + this._cashPaid(s), 0);
+      const plRemaining = Math.max(0, financed - installmentPaid);
       investByMonth[createdKey].financed += financed;
       investByMonth[createdKey].collected += installmentPaid;
       investByMonth[createdKey].down += (pl.down || 0);
+      investByMonth[createdKey].outstanding += plRemaining;
       investByMonth[createdKey].plans++;
       const [y, m] = createdKey.split('-');
       const d2 = new Date(Number(y), Number(m) - 1, 1);
@@ -3302,7 +3304,7 @@ export default class App extends React.Component {
     const maxFinanced = Math.max(...investByMonthKeys.map(k => investByMonth[k].financed), 1);
     const totalFinanced = investByMonthKeys.reduce((s, k) => s + investByMonth[k].financed, 0);
     const totalCollectedBack = investByMonthKeys.reduce((s, k) => s + investByMonth[k].collected, 0);
-    const totalStillOut = totalFinanced - totalCollectedBack;
+    const totalStillOut = investByMonthKeys.reduce((s, k) => s + investByMonth[k].outstanding, 0);
 
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginBottom: 12 } },
@@ -3437,8 +3439,8 @@ export default class App extends React.Component {
               text += '━━━━━━━━━━━━━━━━━━━\n';
               investByMonthKeys.forEach(k => {
                 const im = investByMonth[k];
-                const rate = im.financed > 0 ? Math.round(im.collected / im.financed * 100) : 0;
-                text += im.label + ' (' + im.plans + ' plans): Financed ' + this.fmtPKR(im.financed) + ' | Collected ' + this.fmtPKR(im.collected) + ' | Outstanding ' + this.fmtPKR(im.financed - im.collected) + ' (' + rate + '% collected)\n';
+                const rate = im.financed > 0 ? Math.min(100, Math.round(im.collected / im.financed * 100)) : 0;
+                text += im.label + ' (' + im.plans + ' plans): Financed ' + this.fmtPKR(im.financed) + ' | Collected ' + this.fmtPKR(im.collected) + ' | Outstanding ' + this.fmtPKR(im.outstanding) + ' (' + rate + '% collected)\n';
               });
               text += '━━━━━━━━━━━━━━━━━━━\n';
               text += 'Total Financed: ' + this.fmtPKR(totalFinanced) + '\n';
@@ -3474,10 +3476,10 @@ export default class App extends React.Component {
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
           investByMonthKeys.map(k => {
             const im = investByMonth[k];
-            const outstanding = im.financed - im.collected;
-            const recoveryPct = im.financed > 0 ? Math.round(im.collected / im.financed * 100) : 0;
+            const outstanding = im.outstanding;
+            const recoveryPct = im.financed > 0 ? Math.min(100, Math.round(im.collected / im.financed * 100)) : 0;
             const barWidth = Math.max(2, im.financed / maxFinanced * 100);
-            const collectedBarWidth = im.financed > 0 ? Math.max(0, im.collected / im.financed * 100) : 0;
+            const collectedBarWidth = im.financed > 0 ? Math.min(100, Math.max(0, im.collected / im.financed * 100)) : 0;
             return h('div', { key: k },
               h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 } },
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
@@ -5018,11 +5020,14 @@ export default class App extends React.Component {
     entries.forEach(u => {
       const m = (u.date || '').substring(0, 7);
       if (!m) return;
-      if (!investMonths[m]) investMonths[m] = { invested: 0, recovered: 0, entries: 0, settled: 0 };
+      if (!investMonths[m]) investMonths[m] = { invested: 0, recovered: 0, entries: 0, settled: 0, outstanding: 0 };
       if (u.direction === 'lent') {
         investMonths[m].invested += u.amount;
         investMonths[m].entries++;
-        if (u.returned) investMonths[m].settled++;
+        const rec = u.returned ? u.amount : Math.min(u.amount, (u.returnedAmount || 0) || ((u.partialReturns || []).reduce((s, pr) => s + (pr.amount || 0), 0)));
+        investMonths[m].recovered += rec;
+        investMonths[m].outstanding += Math.max(0, u.amount - rec);
+        if (u.returned || rec >= u.amount) investMonths[m].settled++;
       } else if (u.direction === 'borrowed') {
         investMonths[m].recovered += u.amount;
       }
@@ -5031,7 +5036,7 @@ export default class App extends React.Component {
     const maxInvested = Math.max(...investMonthKeys.map(k => investMonths[k].invested), 1);
     const totalInvested = investMonthKeys.reduce((s, k) => s + investMonths[k].invested, 0);
     const totalRecovered = investMonthKeys.reduce((s, k) => s + investMonths[k].recovered, 0);
-    const totalOutstanding = Math.max(0, totalInvested - totalRecovered);
+    const totalOutstanding = investMonthKeys.reduce((s, k) => s + investMonths[k].outstanding, 0);
 
     const statCard = (label, ur, value, sub, bg, ac) => h('div', { style: { background: bg, borderRadius: 12, padding: '12px 14px', border: '1px solid #ece8dc' } },
       h('div', { style: { fontSize: 10, fontWeight: 700, color: ac, textTransform: 'uppercase', letterSpacing: '0.04em' } }, label),
@@ -5077,9 +5082,10 @@ export default class App extends React.Component {
               text += '━━━━━━━━━━━━━━━━━━━\n';
               investMonthKeys.forEach(k => {
                 const im = investMonths[k];
-                const label = new Date(k + '-01T00:00:00').toLocaleDateString('en', { month: 'short', year: 'numeric' });
-                const rate = im.invested > 0 ? Math.round(im.recovered / im.invested * 100) : 0;
-                text += label + ': Invested ' + this.fmtPKR(im.invested) + ' | Recovered ' + this.fmtPKR(im.recovered) + ' | Outstanding ' + this.fmtPKR(im.invested - im.recovered) + ' (' + rate + '% recovered)\n';
+                const [y, m] = k.split('-');
+                const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en', { month: 'short', year: 'numeric' });
+                const rate = im.invested > 0 ? Math.min(100, Math.round(im.recovered / im.invested * 100)) : 0;
+                text += label + ': Invested ' + this.fmtPKR(im.invested) + ' | Recovered ' + this.fmtPKR(im.recovered) + ' | Outstanding ' + this.fmtPKR(im.outstanding) + ' (' + rate + '% recovered)\n';
               });
               text += '━━━━━━━━━━━━━━━━━━━\n';
               text += 'Total Invested: ' + this.fmtPKR(totalInvested) + '\n';
@@ -5114,10 +5120,10 @@ export default class App extends React.Component {
             const im = investMonths[k];
             const [y, m] = k.split('-');
             const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
-            const outstanding = Math.max(0, im.invested - im.recovered);
-            const recoveryPct = im.invested > 0 ? Math.round(im.recovered / im.invested * 100) : 0;
+            const outstanding = im.outstanding;
+            const recoveryPct = im.invested > 0 ? Math.min(100, Math.round(im.recovered / im.invested * 100)) : (im.recovered > 0 ? 100 : 0);
             const barWidth = Math.max(2, im.invested / maxInvested * 100);
-            const recoveredBarWidth = im.invested > 0 ? Math.max(0, im.recovered / im.invested * 100) : 0;
+            const recoveredBarWidth = im.invested > 0 ? Math.min(100, Math.max(0, im.recovered / im.invested * 100)) : 0;
             return h('div', { key: k },
               // Month label row
               h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 } },
