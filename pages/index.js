@@ -180,6 +180,7 @@ export default class App extends React.Component {
     invoiceView: null,
     dashKpiModal: null,
     dashKpiTab: 'due',
+    ledgerDetailModal: null,
     staff: [],
     staffModal: { open: false, editId: null, name: '', phone: '', role: '', salary: '', joinDate: '' },
     staffView: null,
@@ -2152,7 +2153,13 @@ export default class App extends React.Component {
   h = React.createElement;
 
   card(children, extra = {}) {
-    return this.h('div', { style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 16, ...extra } }, children);
+    const { onClick, className, key, ...restStyle } = extra;
+    return this.h('div', {
+      key,
+      className,
+      onClick,
+      style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 16, ...(onClick ? { cursor: 'pointer' } : {}), ...restStyle }
+    }, children);
   }
 
   sectionHeader(title, ur, action) {
@@ -3948,7 +3955,186 @@ export default class App extends React.Component {
     const totalCollected = recentPayments.reduce((s, rp) => s + (rp.installment.amountPaid || rp.installment.amount), 0);
     const totalPending = allPlans.reduce((s, pl) => s + (pl.schedule || []).filter(si => !si.paid).reduce((ss, si) => ss + si.amount, 0), 0);
 
+    // ── Ledger Detail / History Modal ───────────────────────────────────────
+    const ledgerModalData = this.state.ledgerDetailModal;
+    const closeLedgerDetailModal = () => this.setState({ ledgerDetailModal: null });
+
+    const ledgerDetailModalEl = ledgerModalData ? (() => {
+      const { type, category } = ledgerModalData;
+      const modalScope = ledgerModalData.scope || catScope;
+
+      let modalTitle = '';
+      let modalTitleUr = '';
+      let modalColor = '#0f6b4b';
+      let modalBg = '#f0fdf4';
+      let list = [];
+
+      if (type === 'category') {
+        modalTitle = (catMap[category] || '💡') + ' ' + category;
+        modalTitleUr = 'اخراجات کی تفصیل';
+        modalColor = '#3a4a3f';
+        modalBg = '#f4f1e6';
+
+        list = noUdharEntries.filter(le => {
+          if (le.category !== category) return false;
+          if (modalScope === 'month' && !le.date.startsWith(curMonth)) return false;
+          return true;
+        });
+      } else if (type === 'this_month_expenses') {
+        modalTitle = 'This Month Expenses';
+        modalTitleUr = 'اس ماہ کے اخراجات';
+        modalColor = '#b91c1c';
+        modalBg = '#fef2f2';
+
+        list = noUdharEntries.filter(le => le.type === 'expense' && le.date.startsWith(curMonth));
+      } else if (type === 'this_month_income') {
+        modalTitle = 'This Month Income';
+        modalTitleUr = 'اس ماہ کی آمدنی';
+        modalColor = '#0f6b4b';
+        modalBg = '#f0fdf4';
+
+        list = noUdharEntries.filter(le => le.type === 'income' && le.date.startsWith(curMonth));
+      } else if (type === 'this_month_net') {
+        modalTitle = 'This Month Net Overview';
+        modalTitleUr = 'اس ماہ کا مکمل حساب کتاب';
+        modalColor = sum.net >= 0 ? '#0f6b4b' : '#b91c1c';
+        modalBg = sum.net >= 0 ? '#f0fdf4' : '#fef2f2';
+
+        list = noUdharEntries.filter(le => le.date.startsWith(curMonth));
+      }
+
+      list.sort((a, b) => (b.date || '').localeCompare(a.date || '') || String(b.id || '').localeCompare(String(a.id || '')));
+
+      let totalInc = 0, totalExp = 0;
+      list.forEach(le => {
+        if (le.type === 'income') totalInc += le.amount;
+        else totalExp += le.amount;
+      });
+      const netAmt = totalInc - totalExp;
+
+      return h('div', {
+        onClick: closeLedgerDetailModal,
+        style: { position: 'fixed', inset: 0, background: 'rgba(20,32,27,.45)', zIndex: 9990, display: 'flex', alignItems: 'flex-end', animation: 'fadeIn .15s ease-out' }
+      },
+        h('div', {
+          onClick: e => e.stopPropagation(),
+          style: { width: '100%', maxWidth: 620, margin: '0 auto', background: '#fff', borderRadius: '20px 20px 0 0', padding: '0 0 28px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -8px 40px rgba(0,0,0,.18)', overflow: 'hidden' }
+        },
+          // Handle
+          h('div', { style: { display: 'flex', justifyContent: 'center', padding: '10px 0 2px' } },
+            h('div', { style: { width: 40, height: 4, borderRadius: 2, background: '#d8ded9' } }),
+          ),
+          // Header
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 18px 12px', borderBottom: '1px solid #e6eae5' } },
+            h('div', {},
+              h('div', { style: { fontWeight: 800, fontSize: 16, color: modalColor } }, modalTitle),
+              h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663', marginTop: 1 } }, modalTitleUr),
+            ),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('span', { style: { fontSize: 12, fontWeight: 700, background: modalBg, color: modalColor, padding: '4px 10px', borderRadius: 10 } }, list.length + ' ' + (list.length === 1 ? 'entry' : 'entries')),
+              h('button', { onClick: closeLedgerDetailModal, style: { background: 'none', border: 'none', fontSize: 20, color: '#7a7663', cursor: 'pointer', padding: '0 4px', lineHeight: 1 } }, '✕'),
+            ),
+          ),
+          // Subheader controls (for category: month vs all toggle + quick add)
+          type === 'category' ? h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 18px', background: '#fdfcf8', borderBottom: '1px solid #f2eee2', flexWrap: 'wrap', gap: 6 } },
+            h('div', { style: { display: 'flex', gap: 4 } },
+              h('button', {
+                onClick: () => this.setState({ ledgerDetailModal: { ...ledgerModalData, scope: 'month' } }),
+                style: { padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: modalScope === 'month' ? '#0f6b4b' : '#f4f1e6', color: modalScope === 'month' ? 'white' : '#3a4a3f', border: '1px solid ' + (modalScope === 'month' ? '#0f6b4b' : '#ece8dc'), cursor: 'pointer' }
+              }, 'This Month / اس ماہ'),
+              h('button', {
+                onClick: () => this.setState({ ledgerDetailModal: { ...ledgerModalData, scope: 'all' } }),
+                style: { padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: modalScope === 'all' ? '#0f6b4b' : '#f4f1e6', color: modalScope === 'all' ? 'white' : '#3a4a3f', border: '1px solid ' + (modalScope === 'all' ? '#0f6b4b' : '#ece8dc'), cursor: 'pointer' }
+              }, 'All Time / مجموعی'),
+            ),
+            h('button', {
+              onClick: () => {
+                closeLedgerDetailModal();
+                this.openLedgerModal();
+                setTimeout(() => {
+                  const m = this.state.ledgerModal;
+                  this.setState({ ledgerModal: { ...m, category, type: totalExp >= totalInc ? 'expense' : 'income' } });
+                }, 50);
+              },
+              style: { padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: '#0f6b4b', color: 'white', border: 'none', cursor: 'pointer' }
+            }, '＋ Add ' + category),
+          ) : null,
+          // Summary bar
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 18px', background: modalBg, borderBottom: '1px solid #e6eae5' } },
+            h('div', { style: { fontSize: 12, fontWeight: 600, color: modalColor } },
+              type === 'category'
+                ? (modalScope === 'month' ? 'This Month Total' : 'All Time Total')
+                : (type === 'this_month_expenses' ? 'Total Expenses This Month' : (type === 'this_month_income' ? 'Total Income This Month' : 'Net Balance This Month'))
+            ),
+            h('div', { className: 'mono', style: { fontSize: 16, fontWeight: 800, color: modalColor } },
+              type === 'this_month_expenses'
+                ? '- ' + this.fmtPKR(totalExp)
+                : (type === 'this_month_income'
+                  ? '+ ' + this.fmtPKR(totalInc)
+                  : (type === 'category'
+                    ? ((totalExp > 0 ? '- ' + this.fmtPKR(totalExp) : '') + (totalExp > 0 && totalInc > 0 ? ' · ' : '') + (totalInc > 0 ? '+ ' + this.fmtPKR(totalInc) : (totalExp === 0 ? this.fmtPKR(0) : '')))
+                    : ((netAmt >= 0 ? '+ ' : '- ') + this.fmtPKR(Math.abs(netAmt)))
+                  )
+                )
+            ),
+          ),
+          // Scrollable List
+          h('div', { style: { overflowY: 'auto', flex: 1, padding: '6px 18px' } },
+            list.length === 0
+              ? h('div', { style: { padding: '36px 0', textAlign: 'center', color: '#7a7663' } },
+                h('div', { style: { fontSize: 24, marginBottom: 6 } }, '📋'),
+                h('div', { style: { fontSize: 14, fontWeight: 600 } }, 'No entries found'),
+                h('div', { className: 'ur', style: { fontSize: 12, marginTop: 2 } }, 'کوئی اندراج نہیں ملا'),
+              )
+              : list.map((le, i) => {
+                const acc = accs.find(a => a.id === le.accountId);
+                const isInc = le.type === 'income';
+                return h('div', {
+                  key: le.id,
+                  style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2' }
+                },
+                  h('div', { style: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 } }, catMap[le.category] || '💡'),
+                  h('div', { style: { flex: 1, minWidth: 0 } },
+                    h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                      type === 'category' ? (le.note || le.category) : le.category
+                    ),
+                    h('div', { style: { fontSize: 11, color: '#7a7663', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                      (type !== 'category' && le.note ? le.note + ' · ' : '') +
+                      (acc ? acc.emoji + ' ' + acc.name + ' · ' : '') +
+                      this.fmtDate(le.date) + (this._idTime(le.id) ? ' ' + this._idTime(le.id) : '')
+                    ),
+                  ),
+                  h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                    h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isInc ? '#0f6b4b' : '#b91c1c' } }, (isInc ? '+ ' : '- ') + this.fmtPKR(le.amount)),
+                  ),
+                  h('div', { style: { display: 'flex', gap: 4, flexShrink: 0, marginLeft: 4 } },
+                    h('button', {
+                      onClick: e => {
+                        e.stopPropagation();
+                        closeLedgerDetailModal();
+                        this.openLedgerModal(le.id);
+                      },
+                      title: 'Edit / ترمیم',
+                      style: { padding: '4px 8px', borderRadius: 6, background: '#f4f1e6', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer' }
+                    }, '✏'),
+                    h('button', {
+                      onClick: e => {
+                        e.stopPropagation();
+                        this.deleteLedgerEntry(le.id);
+                      },
+                      title: 'Delete / حذف',
+                      style: { padding: '4px 8px', borderRadius: 6, background: '#fef2f2', color: '#b91c1c', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer' }
+                    }, '✕'),
+                  ),
+                );
+              })
+          ),
+        )
+      );
+    })() : null;
+
     return h('div', { className: 'screen', style: { maxWidth: 800 } },
+      ledgerDetailModalEl,
       h('div', { style: { display: 'flex', gap: 4, marginBottom: 14 } },
         secTab('Expenses', 'اخراجات', 'expenses', '💰'),
         secTab('Plans', 'قسطیں', 'plans', '📋'),
@@ -3957,20 +4143,29 @@ export default class App extends React.Component {
       ...(ls === 'expenses' ? [
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 14 } },
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Income'),
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
+            h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Income'),
+            h('div', { style: { fontSize: 10, color: '#0f6b4b', fontWeight: 700 } }, 'View ›')
+          ),
           h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ آمدنی'),
           h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#0f6b4b', marginTop: 4 } }, this.fmtPKR(sum.inc)),
-        ]),
+        ], { onClick: () => this.setState({ ledgerDetailModal: { type: 'this_month_income' } }), cursor: 'pointer' }),
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Expenses'),
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
+            h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Expenses'),
+            h('div', { style: { fontSize: 10, color: '#b91c1c', fontWeight: 700 } }, 'View ›')
+          ),
           h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ اخراجات'),
           h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: '#b91c1c', marginTop: 4 } }, this.fmtPKR(sum.exp)),
-        ]),
+        ], { onClick: () => this.setState({ ledgerDetailModal: { type: 'this_month_expenses' } }), cursor: 'pointer' }),
         this.card([
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Net'),
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' } },
+            h('div', { style: { fontSize: 10, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'This Month Net'),
+            h('div', { style: { fontSize: 10, color: sum.net >= 0 ? '#0f6b4b' : '#b91c1c', fontWeight: 700 } }, 'View ›')
+          ),
           h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, 'اس ماہ خالص'),
           h('div', { className: 'mono', style: { fontSize: 20, fontWeight: 800, color: sum.net >= 0 ? '#0f6b4b' : '#b91c1c', marginTop: 4 } }, (sum.net >= 0 ? '+' : '-') + ' ' + this.fmtPKR(Math.abs(sum.net))),
-        ]),
+        ], { onClick: () => this.setState({ ledgerDetailModal: { type: 'this_month_net' } }), cursor: 'pointer' }),
       ),
       // Quick-add chips
       topChips.length > 0 ? h('div', { style: { marginBottom: 12 } },
@@ -4029,10 +4224,20 @@ export default class App extends React.Component {
         ...catList.map(([cat, v]) => {
           const total = v.inc + v.exp;
           const pct = Math.round((total / maxCatAmt) * 100);
-          return h('div', { key: cat, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: '1px solid #f9f6ee' } },
+          return h('div', {
+            key: cat,
+            onClick: () => this.setState({ ledgerDetailModal: { type: 'category', category: cat, scope: catScope } }),
+            title: 'View transactions / تفصیل دیکھیں',
+            style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', borderTop: '1px solid #f9f6ee', cursor: 'pointer', borderRadius: 8, transition: 'background .12s' },
+            onMouseEnter: e => { e.currentTarget.style.background = '#f9fbf8'; },
+            onMouseLeave: e => { e.currentTarget.style.background = 'transparent'; },
+          },
             h('div', { style: { fontSize: 16, width: 28, textAlign: 'center', flexShrink: 0 } }, catMap[cat] || '💡'),
             h('div', { style: { flex: 1, minWidth: 0 } },
-              h('div', { style: { fontWeight: 600, fontSize: 13 } }, cat),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                h('span', { style: { fontWeight: 600, fontSize: 13, color: '#1a2b1f' } }, cat),
+                h('span', { style: { fontSize: 11, color: '#7a7663' } }, '›'),
+              ),
               h('div', { style: { height: 4, background: '#f2eee2', borderRadius: 2, marginTop: 4 } },
                 h('div', { style: { height: '100%', width: pct + '%', borderRadius: 2, background: v.exp > v.inc ? '#b91c1c' : '#0f6b4b' } }),
               ),
