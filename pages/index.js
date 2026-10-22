@@ -4408,6 +4408,29 @@ export default class App extends React.Component {
     const overdueEntries = entries.filter(u => !u.returned && u.dueDate && u.dueDate < today);
     const overdueAmount = overdueEntries.reduce((s, u) => s + (u.amount - (u.returnedAmount || 0)), 0);
 
+    // ── Monthly Investment data ──────────────────────────────────
+    const investMonths = {};
+    entries.forEach(u => {
+      if (u.direction !== 'lent') return;
+      const m = (u.date || '').substring(0, 7);
+      if (!m) return;
+      if (!investMonths[m]) investMonths[m] = { invested: 0, recovered: 0, entries: 0, settled: 0 };
+      investMonths[m].invested += u.amount;
+      investMonths[m].entries++;
+      if (u.returned) {
+        investMonths[m].recovered += u.amount;
+        investMonths[m].settled++;
+      } else {
+        const partialReturned = (u.partialReturns || []).reduce((s, pr) => s + (pr.amount || 0), 0);
+        investMonths[m].recovered += partialReturned;
+      }
+    });
+    const investMonthKeys = Object.keys(investMonths).sort();
+    const maxInvested = Math.max(...investMonthKeys.map(k => investMonths[k].invested), 1);
+    const totalInvested = investMonthKeys.reduce((s, k) => s + investMonths[k].invested, 0);
+    const totalRecovered = investMonthKeys.reduce((s, k) => s + investMonths[k].recovered, 0);
+    const totalOutstanding = totalInvested - totalRecovered;
+
     const statCard = (label, ur, value, sub, bg, ac) => h('div', { style: { background: bg, borderRadius: 12, padding: '12px 14px', border: '1px solid #ece8dc' } },
       h('div', { style: { fontSize: 10, fontWeight: 700, color: ac, textTransform: 'uppercase', letterSpacing: '0.04em' } }, label),
       h('div', { className: 'ur', style: { fontSize: 9, color: '#7a7663' } }, ur),
@@ -4431,6 +4454,112 @@ export default class App extends React.Component {
           h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 800, color: '#b91c1c' } }, this.fmtPKR(overdueAmount)),
         ),
       ) : null,
+
+      // ── Monthly Investment Report ────────────────────────────────
+      investMonthKeys.length > 0 ? h('div', { style: { background: '#fdfcf8', borderRadius: 14, padding: '16px', border: '1px solid #ece8dc' } },
+        // Header
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 } },
+          h('div', {},
+            h('div', { style: { fontWeight: 800, fontSize: 14, color: '#1a2b1f', display: 'flex', alignItems: 'center', gap: 6 } },
+              '💰 Monthly Investment / ماہانہ سرمایہ کاری',
+            ),
+            h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 2 } },
+              investMonthKeys.length + ' months · ' + investMonthKeys.reduce((s, k) => s + investMonths[k].entries, 0) + ' lending entries',
+            ),
+          ),
+          h('button', {
+            onClick: () => {
+              const shopName = (this.state.settings || {}).shopName || (this.state.settings || {}).businessName || 'Udhar Book';
+              let text = '💰 ' + shopName + ' — Monthly Investment Report\n';
+              text += '📅 ' + new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) + '\n';
+              text += '━━━━━━━━━━━━━━━━━━━\n';
+              investMonthKeys.forEach(k => {
+                const im = investMonths[k];
+                const label = new Date(k + '-01T00:00:00').toLocaleDateString('en', { month: 'short', year: 'numeric' });
+                const rate = im.invested > 0 ? Math.round(im.recovered / im.invested * 100) : 0;
+                text += label + ': Invested ' + this.fmtPKR(im.invested) + ' | Recovered ' + this.fmtPKR(im.recovered) + ' | Outstanding ' + this.fmtPKR(im.invested - im.recovered) + ' (' + rate + '% recovered)\n';
+              });
+              text += '━━━━━━━━━━━━━━━━━━━\n';
+              text += 'Total Invested: ' + this.fmtPKR(totalInvested) + '\n';
+              text += 'Total Recovered: ' + this.fmtPKR(totalRecovered) + '\n';
+              text += 'Total Outstanding: ' + this.fmtPKR(totalOutstanding) + '\n';
+              if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => alert('Investment report copied! / رپورٹ کاپی ہوگئی!'));
+              else alert(text);
+            },
+            style: { padding: '5px 10px', borderRadius: 8, background: '#1a2b1f', color: '#fff', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', flexShrink: 0 }
+          }, '📋 Copy'),
+        ),
+
+        // Summary totals row
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 14 } },
+          h('div', { style: { background: '#fef2f2', borderRadius: 10, padding: '8px 10px', border: '1px solid #fecaca', borderLeft: '3px solid #b91c1c' } },
+            h('div', { style: { fontSize: 9, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' } }, 'Invested / دیا'),
+            h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 800, color: '#b91c1c', marginTop: 2 } }, this.fmtPKR(totalInvested)),
+          ),
+          h('div', { style: { background: '#f0fdf4', borderRadius: 10, padding: '8px 10px', border: '1px solid #bbf7d0', borderLeft: '3px solid #0f6b4b' } },
+            h('div', { style: { fontSize: 9, fontWeight: 700, color: '#0f6b4b', textTransform: 'uppercase' } }, 'Recovered / واپس'),
+            h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 800, color: '#0f6b4b', marginTop: 2 } }, this.fmtPKR(totalRecovered)),
+          ),
+          h('div', { style: { background: '#fff7ed', borderRadius: 10, padding: '8px 10px', border: '1px solid #fed7aa', borderLeft: '3px solid #ea580c' } },
+            h('div', { style: { fontSize: 9, fontWeight: 700, color: '#ea580c', textTransform: 'uppercase' } }, 'Outstanding / باقی'),
+            h('div', { className: 'mono', style: { fontSize: 13, fontWeight: 800, color: '#ea580c', marginTop: 2 } }, this.fmtPKR(totalOutstanding)),
+          ),
+        ),
+
+        // Per-month rows
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+          investMonthKeys.map(k => {
+            const im = investMonths[k];
+            const label = new Date(k + '-01T00:00:00').toLocaleDateString('en', { month: 'short', year: '2-digit' });
+            const outstanding = im.invested - im.recovered;
+            const recoveryPct = im.invested > 0 ? Math.round(im.recovered / im.invested * 100) : 0;
+            const barWidth = Math.max(2, im.invested / maxInvested * 100);
+            const recoveredBarWidth = im.invested > 0 ? Math.max(0, im.recovered / im.invested * 100) : 0;
+            return h('div', { key: k },
+              // Month label row
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 } },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                  h('span', { style: { fontSize: 11, fontWeight: 800, color: '#3a4a3f', width: 48 } }, label),
+                  h('span', { style: { fontSize: 10, color: '#7a7663' } }, im.entries + ' entries'),
+                  recoveryPct >= 100
+                    ? h('span', { style: { fontSize: 9, fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '1px 5px', borderRadius: 4 } }, '✓ Fully')
+                    : recoveryPct > 0
+                      ? h('span', { style: { fontSize: 9, fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 5px', borderRadius: 4 } }, recoveryPct + '%')
+                      : h('span', { style: { fontSize: 9, fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 5px', borderRadius: 4 } }, '0%'),
+                ),
+                h('div', { className: 'mono', style: { fontSize: 12, fontWeight: 800, color: '#b91c1c' } }, this.fmtPKR(im.invested)),
+              ),
+              // Stacked progress bar: invested base + recovered overlay
+              h('div', { style: { position: 'relative', height: 10, borderRadius: 5, background: '#fee2e2', overflow: 'hidden' } },
+                h('div', { style: { position: 'absolute', left: 0, top: 0, height: '100%', width: barWidth + '%', background: '#fca5a5', borderRadius: 5 } }),
+                h('div', { style: { position: 'absolute', left: 0, top: 0, height: '100%', width: (barWidth * recoveredBarWidth / 100) + '%', background: '#0f6b4b', borderRadius: 5, transition: 'width .3s' } }),
+              ),
+              // Sub-row: recovered + outstanding
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: 3 } },
+                h('span', { style: { fontSize: 10, color: '#0f6b4b', fontWeight: 600 } }, '↩ ' + this.fmtPKR(im.recovered) + ' recovered'),
+                outstanding > 0 ? h('span', { style: { fontSize: 10, color: '#ea580c', fontWeight: 600 } }, this.fmtPKR(outstanding) + ' pending') : null,
+              ),
+            );
+          }),
+        ),
+
+        // Legend
+        h('div', { style: { display: 'flex', gap: 16, marginTop: 12, paddingTop: 10, borderTop: '1px solid #ece8dc' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#7a7663' } },
+            h('div', { style: { width: 10, height: 10, borderRadius: 2, background: '#fca5a5' } }),
+            'Invested / سرمایہ',
+          ),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#7a7663' } },
+            h('div', { style: { width: 10, height: 10, borderRadius: 2, background: '#0f6b4b' } }),
+            'Recovered / واپس',
+          ),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#7a7663' } },
+            h('div', { style: { width: 10, height: 10, borderRadius: 2, background: '#fca5a5', opacity: 0.4 } }),
+            'Outstanding / باقی',
+          ),
+        ),
+      ) : null,
+
       monthKeys.length > 0 ? h('div', { style: { background: '#fdfcf8', borderRadius: 14, padding: '16px', border: '1px solid #ece8dc' } },
         h('div', { style: { fontWeight: 800, fontSize: 14, color: '#1a2b1f', marginBottom: 4 } }, 'Monthly Trend / ماہانہ رجحان'),
         h('div', { style: { fontSize: 11, color: '#7a7663', marginBottom: 12 } }, 'Last ' + monthKeys.length + ' months'),
