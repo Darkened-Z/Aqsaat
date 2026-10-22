@@ -178,6 +178,8 @@ export default class App extends React.Component {
     invoices: [],
     invoiceModal: { open: false, person: '', items: [{ desc: '', qty: 1, price: '' }], note: '', date: this.todayStr() },
     invoiceView: null,
+    dashKpiModal: null,
+    dashKpiTab: 'due',
     staff: [],
     staffModal: { open: false, editId: null, name: '', phone: '', role: '', salary: '', joinDate: '' },
     staffView: null,
@@ -2191,30 +2193,301 @@ export default class App extends React.Component {
     upcomingList.sort((a, b) => a.diff - b.diff);
     recentPayments.sort((a, b) => a.pDiff - b.pDiff);
 
-    const kpiCard = (label, ur, value, sub, tone) => {
+    const receivedTodayList = recentPayments.filter(r => r.pDiff === 0);
+    const totalReceivedToday = receivedTodayList.reduce((s, r) => s + r.s.amount, 0);
+
+    const kpiCard = (label, ur, value, sub, tone, onClick) => {
       const tones = { green: { bg: 'linear-gradient(140deg,#eaf5ee,#d3e9dd)', ac: '#0f6b4b' }, amber: { bg: 'linear-gradient(140deg,#fdf2d9,#f6e2af)', ac: '#a26a10' }, red: { bg: 'linear-gradient(140deg,#fbe5e2,#f5cac2)', ac: '#a4362b' }, neutral: { bg: '#ffffff', ac: '#3a4a3f' } }[tone];
-      return h('div', { style: { background: tones.bg, border: '1px solid #ece8dc', borderRadius: 12, padding: '12px 14px' } },
+      return h('div', {
+        onClick,
+        style: {
+          background: tones.bg,
+          border: '1px solid #ece8dc',
+          borderRadius: 12,
+          padding: '12px 14px',
+          cursor: onClick ? 'pointer' : 'default',
+          position: 'relative',
+          transition: 'transform .15s, box-shadow .15s',
+          userSelect: 'none'
+        }
+      },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 } },
           h('div', { style: { fontSize: 10, fontWeight: 700, color: tones.ac, textTransform: 'uppercase', letterSpacing: '0.05em' } }, label),
           h('div', { className: 'ur', style: { fontSize: 11, color: tones.ac, opacity: 0.75 } }, ur),
         ),
         h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 700, marginTop: 6, color: '#1a2b1f', letterSpacing: '-0.02em' } }, value),
         sub ? h('div', { style: { fontSize: 11, color: '#5a6a5f', marginTop: 2 } }, sub) : null,
+        onClick ? h('div', { style: { position: 'absolute', bottom: 8, right: 10, fontSize: 10, color: tones.ac, opacity: 0.7, fontWeight: 700 } }, 'View ›') : null,
       );
     };
+
+    // ── KPI Detail Modal renderer ─────────────────────────────────────────────
+    const kpiModal = this.state.dashKpiModal;
+    const closeKpiModal = () => this.setState({ dashKpiModal: null });
+    const dashKpiTab = this.state.dashKpiTab || (dueTodayList.length > 0 ? 'due' : 'received');
+
+    const kpiModalEl = kpiModal ? (() => {
+      const isToday = kpiModal === 'today';
+      const showReceived = isToday && dashKpiTab === 'received';
+
+      const configs = {
+        today: {
+          title: showReceived ? 'Received Today' : 'Due Today',
+          titleUr: showReceived ? 'آج وصول شدہ رقم' : 'آج کی واجب الادا اقساط',
+          color: '#0f6b4b',
+          bg: '#f0fdf4',
+          totalAmt: showReceived ? totalReceivedToday : cashToday,
+          list: showReceived ? receivedTodayList : dueTodayList,
+          empty: showReceived ? 'No payments received today' : 'No installments due today',
+          emptyUr: showReceived ? 'آج کوئی رقم وصول نہیں ہوئی' : 'آج کوئی قسط واجب نہیں',
+          renderItem: (r, i) => {
+            const c = r.c; const p = r.p;
+            if (showReceived) {
+              return h('div', {
+                key: i,
+                onClick: () => { closeKpiModal(); this.setState({ selectedPlan: r.pl.id }); },
+                style: { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid #e6f4ed', cursor: 'pointer' }
+              },
+                h('div', { style: { width: 38, height: 38, borderRadius: 10, background: (c && c.color) || '#d3e9dd', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 } }, (c && c.avatar) || '?'),
+                h('div', { style: { flex: 1, minWidth: 0 } },
+                  h('div', { style: { fontWeight: 700, fontSize: 13, color: '#16211c' } }, c ? c.name : '—'),
+                  h('div', { style: { fontSize: 11, color: '#5a6a5f' } }, (p ? p.name : '') + ' · Installment #' + (r.s.n || r.s.month)),
+                  h('div', { style: { fontSize: 10, color: '#0f6b4b', fontWeight: 700, marginTop: 2 } }, '✓ Paid Today / آج وصول ہوا'),
+                ),
+                h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                  h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#0f6b4b' } }, '+ ' + this.fmtPKR(r.s.amount)),
+                  h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, 'Received'),
+                ),
+              );
+            }
+            return h('div', {
+              key: i,
+              onClick: () => { closeKpiModal(); this.setState({ selectedPlan: r.pl.id }); },
+              style: { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid #e6f4ed', cursor: 'pointer' }
+            },
+              h('div', { style: { width: 38, height: 38, borderRadius: 10, background: (c && c.color) || '#d3e9dd', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 } }, (c && c.avatar) || '?'),
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { fontWeight: 700, fontSize: 13, color: '#16211c' } }, c ? c.name : '—'),
+                h('div', { style: { fontSize: 11, color: '#5a6a5f' } }, (p ? p.name : '') + ' · Installment #' + (r.s.n || r.s.month)),
+                h('div', { style: { fontSize: 10, color: '#0f6b4b', fontWeight: 600, marginTop: 2 } }, 'Due Today / آج واجب الادا'),
+              ),
+              h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#0f6b4b' } }, this.fmtPKR(r.s.amount)),
+                h('button', {
+                  onClick: (e) => { e.stopPropagation(); closeKpiModal(); this.openPayment(r.pl.id, r.s.n); },
+                  style: { marginTop: 4, padding: '4px 10px', borderRadius: 6, background: '#0f6b4b', color: '#fff', fontWeight: 700, fontSize: 10, border: 'none', cursor: 'pointer' }
+                }, 'Collect'),
+              ),
+            );
+          },
+        },
+        upcoming: {
+          title: 'Upcoming (7 Days)',
+          titleUr: 'اگلے ۷ دن کی اقساط',
+          color: '#a26a10',
+          bg: '#fdf8ec',
+          totalAmt: upcomingWeek,
+          list: upcomingList,
+          empty: 'No upcoming installments in 7 days',
+          emptyUr: 'اگلے 7 دنوں میں کوئی قسط نہیں',
+          renderItem: (r, i) => {
+            const c = r.c; const p = r.p;
+            const dLabel = r.diff === 1 ? 'Tomorrow' : 'In ' + r.diff + ' days';
+            return h('div', {
+              key: i,
+              onClick: () => { closeKpiModal(); this.setState({ selectedPlan: r.pl.id }); },
+              style: { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid #f0e6c8', cursor: 'pointer' }
+            },
+              h('div', { style: { width: 38, height: 38, borderRadius: 10, background: (c && c.color) || '#f6e2af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 } }, (c && c.avatar) || '?'),
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { fontWeight: 700, fontSize: 13, color: '#16211c' } }, c ? c.name : '—'),
+                h('div', { style: { fontSize: 11, color: '#5a6a5f' } }, (p ? p.name : '') + ' · Installment #' + (r.s.n || r.s.month)),
+                h('div', { style: { fontSize: 10, color: '#a26a10', fontWeight: 600, marginTop: 2 } }, '📅 ' + dLabel + ' (' + (r.s.dueDate || '') + ')'),
+              ),
+              h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#a26a10' } }, this.fmtPKR(r.s.amount)),
+                h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, 'Upcoming'),
+              ),
+            );
+          },
+        },
+        overdue: {
+          title: 'Overdue Installments',
+          titleUr: 'واجب الادا اقساط کی تاریخ',
+          color: '#a4362b',
+          bg: '#fdf2f0',
+          totalAmt: overdueTotal,
+          list: overdueList,
+          empty: 'No overdue installments',
+          emptyUr: 'کوئی واجب المعیاد قسط نہیں',
+          renderItem: (r, i) => {
+            const c = r.c; const p = r.p;
+            const lateFee = this.computeLateFee(r.s, r.pl);
+            return h('div', {
+              key: i,
+              onClick: () => { closeKpiModal(); this.setState({ selectedPlan: r.pl.id }); },
+              style: { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid #f5cac2', cursor: 'pointer' }
+            },
+              h('div', { style: { width: 38, height: 38, borderRadius: 10, background: (c && c.color) || '#f5cac2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 } }, (c && c.avatar) || '?'),
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { fontWeight: 700, fontSize: 13, color: '#16211c' } }, c ? c.name : '—'),
+                h('div', { style: { fontSize: 11, color: '#5a6a5f' } }, (p ? p.name : '') + ' · Installment #' + (r.s.n || r.s.month)),
+                h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', marginTop: 3, flexWrap: 'wrap' } },
+                  h('span', { style: { fontSize: 10, color: '#a4362b', fontWeight: 700, background: '#fee2e2', padding: '1px 6px', borderRadius: 4 } }, Math.abs(r.diff) + ' days late'),
+                  lateFee > 0 ? h('span', { style: { fontSize: 10, color: '#7c3aed', fontWeight: 700, background: '#f3e8ff', padding: '1px 6px', borderRadius: 4 } }, '+' + this.fmtPKR(lateFee) + ' late fee') : null,
+                  h('span', { style: { fontSize: 10, color: '#7a7663' } }, 'Due: ' + (r.s.dueDate || '')),
+                ),
+              ),
+              h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#a4362b' } }, this.fmtPKR(r.s.amount)),
+                h('button', {
+                  onClick: (e) => { e.stopPropagation(); closeKpiModal(); this.openPayment(r.pl.id, r.s.n); },
+                  style: { marginTop: 4, padding: '4px 10px', borderRadius: 6, background: '#a4362b', color: '#fff', fontWeight: 700, fontSize: 10, border: 'none', cursor: 'pointer' }
+                }, 'Collect'),
+              ),
+            );
+          },
+        },
+        outstanding: {
+          title: 'Outstanding Plans',
+          titleUr: 'باقی اقساط پلانز',
+          color: '#3a4a3f',
+          bg: '#f8faf7',
+          totalAmt: totalOutstanding,
+          list: plans.filter(pl => this.planStats(pl).remaining > 0).sort((a, b) => this.planStats(b).remaining - this.planStats(a).remaining).map(pl => ({ pl, c: customers.find(x => x.id === pl.customerId), p: products.find(x => x.id === pl.productId), stats: this.planStats(pl) })),
+          empty: 'No outstanding plans',
+          emptyUr: 'کوئی بقایا پلان نہیں',
+          renderItem: (r, i) => {
+            const c = r.c; const p = r.p; const st = r.stats;
+            const pct = st.total > 0 ? Math.round(st.paidAmount / st.total * 100) : 0;
+            return h('div', {
+              key: i,
+              onClick: () => { closeKpiModal(); this.setState({ selectedPlan: r.pl.id }); },
+              style: { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: i === 0 ? 'none' : '1px solid #e6eae5', cursor: 'pointer' }
+            },
+              h('div', { style: { width: 38, height: 38, borderRadius: 10, background: (c && c.color) || '#e6eae5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 } }, (c && c.avatar) || '?'),
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { fontWeight: 700, fontSize: 13, color: '#16211c' } }, c ? c.name : '—'),
+                h('div', { style: { fontSize: 11, color: '#5a6a5f' } }, p ? p.name : ''),
+                h('div', { style: { height: 5, borderRadius: 3, background: '#e6eae5', marginTop: 4, overflow: 'hidden' } },
+                  h('div', { style: { height: '100%', borderRadius: 3, background: '#0f6b4b', width: pct + '%' } }),
+                ),
+                h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 3, display: 'flex', gap: 6, alignItems: 'center' } },
+                  h('span', {}, pct + '% paid (' + this.fmtPKR(st.paidAmount) + ')'),
+                  st.overdue.length > 0 ? h('span', { style: { color: '#a4362b', fontWeight: 700 } }, '· ' + st.overdue.length + ' overdue') : h('span', { style: { color: '#0f6b4b' } }, '· on track'),
+                ),
+              ),
+              h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#3a4a3f' } }, this.fmtPKR(st.remaining)),
+                h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, 'remaining'),
+              ),
+            );
+          },
+        },
+      };
+
+      const cfg = configs[kpiModal];
+      if (!cfg) return null;
+
+      return h('div', {
+        onClick: closeKpiModal,
+        style: { position: 'fixed', inset: 0, background: 'rgba(20,32,27,.45)', zIndex: 9990, display: 'flex', alignItems: 'flex-end', animation: 'fadeIn .15s ease-out' }
+      },
+        h('div', {
+          onClick: e => e.stopPropagation(),
+          style: { width: '100%', maxWidth: 560, margin: '0 auto', background: '#fff', borderRadius: '20px 20px 0 0', padding: '0 0 32px', maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -8px 40px rgba(0,0,0,.18)', overflow: 'hidden' }
+        },
+          // Handle
+          h('div', { style: { display: 'flex', justifyContent: 'center', padding: '10px 0 2px' } },
+            h('div', { style: { width: 40, height: 4, borderRadius: 2, background: '#d8ded9' } }),
+          ),
+          // Header
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 18px 12px', borderBottom: '1px solid #e6eae5' } },
+            h('div', {},
+              h('div', { style: { fontWeight: 800, fontSize: 16, color: cfg.color } }, cfg.title),
+              h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663', marginTop: 1 } }, cfg.titleUr),
+            ),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('span', { style: { fontSize: 12, fontWeight: 700, background: cfg.bg, color: cfg.color, padding: '4px 10px', borderRadius: 10 } }, cfg.list.length + ' entries'),
+              h('button', { onClick: closeKpiModal, style: { background: 'none', border: 'none', fontSize: 20, color: '#7a7663', cursor: 'pointer', padding: '0 4px', lineHeight: 1 } }, '✕'),
+            ),
+          ),
+
+          // Sub-tabs for Cash Today (Due vs Received)
+          isToday ? h('div', { style: { display: 'flex', gap: 6, padding: '8px 18px', borderBottom: '1px solid #e6eae5', background: '#faf9f5' } },
+            h('button', {
+              onClick: () => this.setState({ dashKpiTab: 'due' }),
+              style: {
+                flex: 1,
+                padding: '7px 10px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 700,
+                background: !showReceived ? '#0f6b4b' : '#f4f1e6',
+                color: !showReceived ? '#fff' : '#3a4a3f',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                transition: 'all .15s'
+              }
+            }, 'Due Today (' + dueTodayList.length + ')', h('span', { className: 'mono', style: { opacity: 0.85 } }, this.fmtPKR(cashToday))),
+            h('button', {
+              onClick: () => this.setState({ dashKpiTab: 'received' }),
+              style: {
+                flex: 1,
+                padding: '7px 10px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 700,
+                background: showReceived ? '#0f6b4b' : '#f4f1e6',
+                color: showReceived ? '#fff' : '#3a4a3f',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                transition: 'all .15s'
+              }
+            }, 'Received (' + receivedTodayList.length + ')', h('span', { className: 'mono', style: { opacity: 0.85 } }, this.fmtPKR(totalReceivedToday))),
+          ) : null,
+
+          // Total Summary Banner
+          h('div', { style: { padding: '8px 18px', background: cfg.bg, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #ece8dc' } },
+            h('span', { style: { fontSize: 11, fontWeight: 700, color: cfg.color, textTransform: 'uppercase', letterSpacing: '0.04em' } }, 'Total Amount / کل رقم'),
+            h('span', { className: 'mono', style: { fontSize: 15, fontWeight: 800, color: cfg.color } }, this.fmtPKR(cfg.totalAmt)),
+          ),
+
+          // Scrollable list
+          h('div', { style: { overflowY: 'auto', padding: '0 18px', flex: 1 } },
+            cfg.list.length === 0
+              ? h('div', { style: { textAlign: 'center', padding: '40px 20px', color: '#7a7663' } },
+                  h('div', { style: { fontSize: 36, marginBottom: 8 } }, '✅'),
+                  h('div', { style: { fontWeight: 700, fontSize: 14, color: '#1a2b1f' } }, cfg.empty),
+                  h('div', { className: 'ur', style: { fontSize: 12, marginTop: 4, color: '#8b978f' } }, cfg.emptyUr),
+                )
+              : cfg.list.map((r, i) => cfg.renderItem(r, i))
+          ),
+        ),
+      );
+    })() : null;
 
     const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #f2eee2' };
 
     return h('div', { className: 'screen' },
+      kpiModalEl,
       h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14, flexWrap: 'wrap' } },
         h('div', { style: { fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em' } }, new Date().toLocaleDateString('en-PK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })),
         h('div', { style: { fontSize: 12, color: '#7a7663' } }, '· Assalam-o-Alaikum' + (this.state.settings.ownerName ? ', ' + this.state.settings.ownerName.split(' ')[0] : '')),
       ),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10, marginBottom: 16 } },
-        kpiCard('Cash Today',    'آج کی وصولی', this.fmtPKR(cashToday),       dueTodayList.length + ' installments due', 'green'),
-        kpiCard('Upcoming (7d)', 'اگلے ۷ دن',   this.fmtPKR(upcomingWeek),    upcomingList.length + ' installments', 'amber'),
-        kpiCard('Overdue',       'بقایا',        this.fmtPKR(overdueTotal),    overdueCount + ' late · +' + this.fmtPKR(plans.reduce((a, p) => a + this.planStats(p).lateFees, 0)) + ' fees', 'red'),
-        kpiCard('Outstanding',   'باقی رقم',     this.fmtPKR(totalOutstanding), plans.filter(p => p.status === 'active').length + ' active plans', 'neutral'),
+        kpiCard('Cash Today',    'آج کی وصولی', this.fmtPKR(cashToday),       dueTodayList.length + ' installments due', 'green', () => this.setState({ dashKpiModal: 'today', dashKpiTab: dueTodayList.length > 0 ? 'due' : 'received' })),
+        kpiCard('Upcoming (7d)', 'اگلے ۷ دن',   this.fmtPKR(upcomingWeek),    upcomingList.length + ' installments', 'amber', () => this.setState({ dashKpiModal: 'upcoming' })),
+        kpiCard('Overdue',       'بقایا',        this.fmtPKR(overdueTotal),    overdueCount + ' late · +' + this.fmtPKR(plans.reduce((a, p) => a + this.planStats(p).lateFees, 0)) + ' fees', 'red', () => this.setState({ dashKpiModal: 'overdue' })),
+        kpiCard('Outstanding',   'باقی رقم',     this.fmtPKR(totalOutstanding), plans.filter(p => p.status === 'active').length + ' active plans', 'neutral', () => this.setState({ dashKpiModal: 'outstanding' })),
       ),
       (() => {
         const le = this.activeLedger().filter(x => !x.udpiRef && x.category !== 'Udhar' && x.category !== 'Udhar Return' && !this._isPlanLedgerEntry(x));
