@@ -992,21 +992,23 @@ export default class App extends React.Component {
     let lent = 0, borrowed = 0, runBal = 0;
     entries.forEach(u => { if (u.direction === 'lent' && !u.returned) lent += u.amount - (u.returnedAmount || 0); if (u.direction === 'borrowed' && !u.returned) borrowed += u.amount - (u.returnedAmount || 0); });
     const balance = lent - borrowed;
-    const titleText = customTitle && customTitle.trim() ? customTitle.trim() : ('Udhar Statement — ' + personName);
+    let titleText = customTitle && customTitle.trim() ? customTitle.trim() : ('Statement — ' + personName);
+    titleText = titleText.replace(/^\*+|\*+$/g, '').trim();
+
     const rows = entries.map(u => {
       const amt = u.amount - (u.returnedAmount || 0);
       if (!u.returned) { if (u.direction === 'lent') runBal += amt; else runBal -= amt; }
       const timeStr = this._entryTime(u);
-      const dateDisplay = u.date + (timeStr ? '<br><small style="color:#64748b">' + timeStr + '</small>' : '');
-      return '<tr><td>' + dateDisplay + '</td><td>' + (u.note || (u.direction === 'lent' ? 'Gave' : 'Got')) + '</td><td>' + (u.category || '-') + '</td><td style="color:' + (u.direction === 'lent' ? '#dc2626' : '#059669') + ';font-weight:700">' + (u.direction === 'lent' ? '-' : '+') + this.fmtPKR(u.amount) + '</td><td>' + (u.returned ? '✓ Settled' : this.fmtPKR(runBal)) + '</td><td>' + (u.dueDate || '-') + '</td></tr>';
+      const dateDisplay = u.date + (timeStr ? '<br><small style="color:#000000;font-weight:600">' + timeStr + '</small>' : '');
+      return '<tr><td>' + dateDisplay + '</td><td style="font-weight:600">' + (u.note || (u.direction === 'lent' ? 'Gave' : 'Got')) + '</td><td>' + (u.category || '-') + '</td><td style="color:#000000;font-weight:800">' + (u.direction === 'lent' ? 'GAVE ' : 'GOT ') + this.fmtPKR(u.amount) + '</td><td style="font-weight:700">' + (u.returned ? 'Settled' : this.fmtPKR(runBal)) + '</td><td>' + (u.dueDate || '-') + '</td></tr>';
     }).join('');
-    const noteHtml = customNote && customNote.trim() ? '<div style="margin-top:8px;padding:8px 12px;background:#f1f5f9;border-left:3px solid #0f172a;border-radius:4px;font-size:12px;color:#334155"><strong>Note / Details:</strong> ' + customNote.trim() + '</div>' : '';
-    const html = '<!DOCTYPE html><html><head><title>' + titleText + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;padding:24px;color:#1e293b;max-width:800px;margin:0 auto}h1{font-size:22px;margin-bottom:4px}h2{font-size:14px;color:#64748b;margin-bottom:12px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:16px;margin-bottom:20px}.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}.summary div{background:#f8fafc;border-radius:8px;padding:12px;text-align:center}.summary .label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:700}.summary .val{font-size:20px;font-weight:800;margin-top:4px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#0f172a;color:white;padding:8px 10px;text-align:left;font-weight:700;font-size:11px}td{padding:8px 10px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f8fafc}.footer{margin-top:20px;padding-top:12px;border-top:2px solid #0f172a;display:flex;justify-content:space-between;font-size:11px;color:#64748b}@media print{body{padding:12px}button{display:none !important}}</style></head><body>' +
-      '<div class="header"><div><h1>' + shopName + '</h1><h2>' + titleText + '</h2>' + noteHtml + '</div><div style="text-align:right;font-size:12px;color:#64748b"><div>Date: ' + this.todayStr() + '</div><div>Entries: ' + entries.length + '</div></div></div>' +
-      '<div class="summary"><div><div class="label">Total Gave</div><div class="val" style="color:#dc2626">' + this.fmtPKR(entries.filter(u => u.direction === 'lent').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Total Got</div><div class="val" style="color:#059669">' + this.fmtPKR(entries.filter(u => u.direction === 'borrowed').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Balance</div><div class="val" style="color:' + (balance > 0 ? '#dc2626' : '#059669') + '">' + this.fmtPKR(Math.abs(balance)) + '</div><div style="font-size:10px;color:#64748b">' + (balance > 0 ? 'Receivable' : balance < 0 ? 'Payable' : 'Clear') + '</div></div></div>' +
+    const noteHtml = customNote && customNote.trim() ? '<div style="margin-top:8px;padding:8px 12px;background:#f3f4f6;border-left:4px solid #000000;border-radius:4px;font-size:13px;color:#000000;font-weight:600"><strong>Note:</strong> ' + customNote.trim() + '</div>' : '';
+    const html = '<!DOCTYPE html><html><head><title>' + titleText + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;padding:24px;color:#000000;max-width:800px;margin:0 auto}h1{font-size:22px;margin-bottom:4px;font-weight:800;color:#000000}h2{font-size:15px;color:#000000;margin-bottom:12px;font-weight:700}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #000000;padding-bottom:16px;margin-bottom:20px}.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}.summary div{background:#f3f4f6;border:1.5px solid #000000;border-radius:8px;padding:12px;text-align:center}.summary .label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#000000;font-weight:800}.summary .val{font-size:20px;font-weight:900;margin-top:4px;color:#000000}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#000000;color:white;padding:8px 10px;text-align:left;font-weight:800;font-size:11px}td{padding:8px 10px;border-bottom:1px solid #d1d5db;color:#000000}tr:nth-child(even){background:#f9fafb}.footer{margin-top:20px;padding-top:12px;border-top:2px solid #000000;display:flex;justify-content:space-between;font-size:11px;color:#000000;font-weight:600}@media print{body{padding:12px}button{display:none !important}}</style></head><body>' +
+      '<div class="header"><div><h1>' + shopName + '</h1><h2>' + titleText + '</h2>' + noteHtml + '</div><div style="text-align:right;font-size:12px;color:#000000;font-weight:600"><div>Date: ' + this.todayStr() + '</div><div>Entries: ' + entries.length + '</div></div></div>' +
+      '<div class="summary"><div><div class="label">Total Gave</div><div class="val">' + this.fmtPKR(entries.filter(u => u.direction === 'lent').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Total Got</div><div class="val">' + this.fmtPKR(entries.filter(u => u.direction === 'borrowed').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Balance</div><div class="val">' + this.fmtPKR(Math.abs(balance)) + '</div><div style="font-size:11px;color:#000000;font-weight:700;margin-top:2px">' + (balance > 0 ? 'Receivable' : balance < 0 ? 'Payable' : 'Clear') + '</div></div></div>' +
       '<table><thead><tr><th>Date & Time</th><th>Description</th><th>Category</th><th>Amount</th><th>Balance</th><th>Due Date</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '<div class="footer"><span>Generated by ' + shopName + ' · Udhar Book</span><span>Printed on ' + new Date().toLocaleString() + '</span></div>' +
-      '<div style="text-align:center;margin-top:16px"><button onclick="window.print()" style="padding:10px 24px;border-radius:8px;background:#0f172a;color:white;font-weight:700;border:none;cursor:pointer;font-size:13px">🖨 Print / Save PDF</button></div></body></html>';
+      '<div style="text-align:center;margin-top:16px"><button onclick="window.print()" style="padding:10px 24px;border-radius:8px;background:#000000;color:white;font-weight:800;border:none;cursor:pointer;font-size:13px">Print / Save PDF</button></div></body></html>';
     const w = window.open('', '_blank');
     if (w) { w.document.write(html); w.document.close(); }
     else alert('Popup blocked. Please allow popups for this site.');
@@ -1087,16 +1089,21 @@ export default class App extends React.Component {
       if (cmp !== 0) return cmp;
       return (a.time || '').localeCompare(b.time || '');
     });
-    const shopName = (this.state.settings || {}).shopName || (this.state.settings || {}).businessName || 'Aqsat';
-    const title = customTitle && customTitle.trim() ? customTitle.trim() : ('📄 Statement — ' + personName);
+    const shopName = (this.state.settings || {}).shopName || (this.state.settings || {}).businessName || '';
 
-    let text = title + '\n';
-    if (shopName) text += '🏪 ' + shopName + '\n';
-    if (customNote && customNote.trim()) {
-      text += '📝 Note: ' + customNote.trim() + '\n';
+    let rawTitle = customTitle && customTitle.trim() ? customTitle.trim() : ('STATEMENT — ' + personName);
+    rawTitle = rawTitle.replace(/^\*+|\*+$/g, '').trim();
+    let text = '*' + rawTitle + '*\n';
+
+    if (shopName) {
+      text += '*Shop:* ' + shopName + '\n';
     }
-    text += '📅 ' + new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) + '\n';
-    text += '━━━━━━━━━━━━━━━━━━━━━━━\n';
+    if (customNote && customNote.trim()) {
+      text += '*Note:* ' + customNote.trim() + '\n';
+    }
+    const todayDate = new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' });
+    text += '*Date:* ' + todayDate + '\n';
+    text += '---------------------------------\n';
 
     let runBal = 0;
     sorted.forEach(u => {
@@ -1105,22 +1112,33 @@ export default class App extends React.Component {
       const timeStr = this._entryTime(u);
       const dateDisplay = u.date + (timeStr ? ' ' + timeStr : '');
       const noteStr = u.note ? ' (' + u.note + ')' : '';
+      const dirTag = isLent ? '*GAVE:* ' : '*GOT:* ';
 
       if (isLent) {
         runBal += amt;
-        text += dateDisplay + ' | 🔴 GAVE ' + this.fmtPKR(u.amount) + noteStr;
       } else {
         runBal -= amt;
-        text += dateDisplay + ' | 🟢 GOT ' + this.fmtPKR(u.amount) + noteStr;
       }
-      if (u.returned) text += ' ✓ Settled';
-      else if (u.returnedAmount > 0) text += ' (partial ' + this.fmtPKR(u.returnedAmount) + ')';
-      text += ' | Bal: ' + this.fmtPKR(runBal) + '\n';
+
+      let line = dateDisplay + ' | ' + dirTag + this.fmtPKR(u.amount) + noteStr;
+      if (u.returned) {
+        line += ' *(Settled)*';
+      } else if (u.returnedAmount > 0) {
+        line += ' *(Paid ' + this.fmtPKR(u.returnedAmount) + ')*';
+      }
+      line += ' | *Bal:* ' + this.fmtPKR(runBal);
+      text += line + '\n';
     });
 
-    text += '━━━━━━━━━━━━━━━━━━━━━━━\n';
-    text += '💰 *Balance: ' + this.fmtPKR(Math.abs(runBal)) + '*\n';
-    text += runBal > 0 ? '📌 آپ کے ذمے ہے / You owe us\n' : runBal < 0 ? '📌 ہمارے ذمے ہے / We owe you\n' : '✓ All clear / حساب برابر ہے\n';
+    text += '---------------------------------\n';
+    text += '*TOTAL BALANCE: ' + this.fmtPKR(Math.abs(runBal)) + '*\n';
+    if (runBal > 0) {
+      text += '*Status:* You owe us (آپ کے ذمے ہے)\n';
+    } else if (runBal < 0) {
+      text += '*Status:* We owe you (ہمارے ذمے ہے)\n';
+    } else {
+      text += '*Status:* All settled (حساب برابر ہے)\n';
+    }
     return text;
   }
 
@@ -4700,10 +4718,10 @@ export default class App extends React.Component {
             }, '↺ Reset / ری سیٹ'),
           ),
           h('textarea', {
-            rows: 8,
+            rows: 9,
             value: m.message,
             onChange: e => this.setState({ udharStatementModal: { ...m, message: e.target.value, isManualEdit: true } }),
-            style: { width: '100%', border: '1.5px solid #ece8dc', borderRadius: 12, padding: '12px', fontSize: 12, fontFamily: 'monospace', background: '#faf9f5', outline: 'none', resize: 'vertical', lineHeight: 1.5 }
+            style: { width: '100%', border: '2px solid #000000', borderRadius: 10, padding: '12px 14px', fontSize: 13, fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 600, color: '#000000', background: '#ffffff', outline: 'none', resize: 'vertical', lineHeight: 1.6 }
           }),
         ),
 
