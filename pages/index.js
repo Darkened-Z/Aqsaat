@@ -995,6 +995,13 @@ export default class App extends React.Component {
     let titleText = customTitle && customTitle.trim() ? customTitle.trim() : ('Statement — ' + personName);
     titleText = titleText.replace(/^\*+|\*+$/g, '').trim();
 
+    const rawPhone = this._getUdharPersonPhone(personName) || '';
+    const waPhone = this._waPhone(rawPhone);
+    const waMsg = this.buildUdharStatementText(personName, customNote, customTitle);
+    const waUrl = waPhone
+      ? 'https://wa.me/' + waPhone + '?text=' + encodeURIComponent(waMsg)
+      : 'https://wa.me/?text=' + encodeURIComponent(waMsg);
+
     const rows = entries.map(u => {
       const amt = u.amount - (u.returnedAmount || 0);
       if (!u.returned) { if (u.direction === 'lent') runBal += amt; else runBal -= amt; }
@@ -1003,15 +1010,25 @@ export default class App extends React.Component {
       return '<tr><td>' + dateDisplay + '</td><td style="font-weight:600">' + (u.note || (u.direction === 'lent' ? 'Gave' : 'Got')) + '</td><td>' + (u.category || '-') + '</td><td style="color:#000000;font-weight:800">' + (u.direction === 'lent' ? 'GAVE ' : 'GOT ') + this.fmtPKR(u.amount) + '</td><td style="font-weight:700">' + (u.returned ? 'Settled' : this.fmtPKR(runBal)) + '</td><td>' + (u.dueDate || '-') + '</td></tr>';
     }).join('');
     const noteHtml = customNote && customNote.trim() ? '<div style="margin-top:8px;padding:8px 12px;background:#f3f4f6;border-left:4px solid #000000;border-radius:4px;font-size:13px;color:#000000;font-weight:600"><strong>Note:</strong> ' + customNote.trim() + '</div>' : '';
-    const html = '<!DOCTYPE html><html><head><title>' + titleText + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;padding:24px;color:#000000;max-width:800px;margin:0 auto}h1{font-size:22px;margin-bottom:4px;font-weight:800;color:#000000}h2{font-size:15px;color:#000000;margin-bottom:12px;font-weight:700}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #000000;padding-bottom:16px;margin-bottom:20px}.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}.summary div{background:#f3f4f6;border:1.5px solid #000000;border-radius:8px;padding:12px;text-align:center}.summary .label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#000000;font-weight:800}.summary .val{font-size:20px;font-weight:900;margin-top:4px;color:#000000}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#000000;color:white;padding:8px 10px;text-align:left;font-weight:800;font-size:11px}td{padding:8px 10px;border-bottom:1px solid #d1d5db;color:#000000}tr:nth-child(even){background:#f9fafb}.footer{margin-top:20px;padding-top:12px;border-top:2px solid #000000;display:flex;justify-content:space-between;font-size:11px;color:#000000;font-weight:600}@media print{body{padding:12px}button{display:none !important}}</style></head><body>' +
-      '<div class="header"><div><h1>' + shopName + '</h1><h2>' + titleText + '</h2>' + noteHtml + '</div><div style="text-align:right;font-size:12px;color:#000000;font-weight:600"><div>Date: ' + this.todayStr() + '</div><div>Entries: ' + entries.length + '</div></div></div>' +
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>' + titleText + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;padding:16px 20px 40px;color:#000000;max-width:820px;margin:0 auto;background:#ffffff}h1{font-size:22px;margin-bottom:4px;font-weight:800;color:#000000}h2{font-size:15px;color:#000000;margin-bottom:12px;font-weight:700}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #000000;padding-bottom:16px;margin-bottom:20px}.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}.summary div{background:#f3f4f6;border:1.5px solid #000000;border-radius:8px;padding:12px;text-align:center}.summary .label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#000000;font-weight:800}.summary .val{font-size:20px;font-weight:900;margin-top:4px;color:#000000}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#000000;color:white;padding:8px 10px;text-align:left;font-weight:800;font-size:11px}td{padding:8px 10px;border-bottom:1px solid #d1d5db;color:#000000}tr:nth-child(even){background:#f9fafb}.footer{margin-top:20px;padding-top:12px;border-top:2px solid #000000;display:flex;justify-content:space-between;font-size:11px;color:#000000;font-weight:600}.no-print{}@media print{.no-print,button,.action-bar{display:none !important}body{padding:12px !important}}.action-bar{position:sticky;top:0;background:#ffffff;padding:10px 0 14px;margin-bottom:16px;border-bottom:2px solid #000000;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;z-index:1000}.btn-back{padding:9px 16px;border-radius:8px;background:#111827;color:#ffffff;font-weight:800;border:none;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px;text-decoration:none}.btn-back:hover{background:#000000}.btn-wa{padding:9px 16px;border-radius:8px;background:#25D366;color:#ffffff;font-weight:800;border:none;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px;text-decoration:none;box-shadow:0 2px 6px rgba(37,211,102,0.3)}.btn-wa:hover{background:#1eb855}.btn-print{padding:9px 16px;border-radius:8px;background:#000000;color:#ffffff;font-weight:800;border:none;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px}.btn-print:hover{background:#1f2937}</style></head><body>' +
+      '<div class="action-bar no-print"><button type="button" onclick="goBack()" class="btn-back">← Back / واپس جائیں</button><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><a href="' + waUrl + '" target="_blank" class="btn-wa">💬 WhatsApp / بھیجیں</a><button type="button" onclick="window.print()" class="btn-print">🖨 Print / PDF</button></div></div>' +
+      '<div class="header"><div><h1>' + shopName + '</h1><h2>' + titleText + '</h2>' + noteHtml + '</div><div style="text-align:right;font-size:12px;color:#000000;font-weight:600"><div>Date: ' + this.todayStr() + '</div><div>Entries: ' + entries.length + '</div>' + (rawPhone ? '<div>Phone: ' + rawPhone + '</div>' : '') + '</div></div>' +
       '<div class="summary"><div><div class="label">Total Gave</div><div class="val">' + this.fmtPKR(entries.filter(u => u.direction === 'lent').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Total Got</div><div class="val">' + this.fmtPKR(entries.filter(u => u.direction === 'borrowed').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Balance</div><div class="val">' + this.fmtPKR(Math.abs(balance)) + '</div><div style="font-size:11px;color:#000000;font-weight:700;margin-top:2px">' + (balance > 0 ? 'Receivable' : balance < 0 ? 'Payable' : 'Clear') + '</div></div></div>' +
       '<table><thead><tr><th>Date & Time</th><th>Description</th><th>Category</th><th>Amount</th><th>Balance</th><th>Due Date</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '<div class="footer"><span>Generated by ' + shopName + ' · Udhar Book</span><span>Printed on ' + new Date().toLocaleString() + '</span></div>' +
-      '<div style="text-align:center;margin-top:16px"><button onclick="window.print()" style="padding:10px 24px;border-radius:8px;background:#000000;color:white;font-weight:800;border:none;cursor:pointer;font-size:13px">Print / Save PDF</button></div></body></html>';
-    const w = window.open('', '_blank');
-    if (w) { w.document.write(html); w.document.close(); }
-    else alert('Popup blocked. Please allow popups for this site.');
+      '<div class="no-print" style="text-align:center;margin-top:24px;padding-top:16px;border-top:2px solid #000000;display:flex;justify-content:center;gap:10px;flex-wrap:wrap"><button type="button" onclick="goBack()" class="btn-back">← Back / واپس جائیں</button><a href="' + waUrl + '" target="_blank" class="btn-wa">💬 Send via WhatsApp / واٹس ایپ پر بھیجیں</a><button type="button" onclick="window.print()" class="btn-print">🖨 Print / Save PDF</button></div>' +
+      '<script>function goBack(){try{if(window.opener&&!window.opener.closed){window.close();return;}}catch(e){}if(window.history.length>1){window.history.back();}else{try{window.close();}catch(e){}window.location.href=window.location.origin||"/";}}window.addEventListener("keydown",function(e){if(e.key==="Escape")goBack();});</script>' +
+      '</body></html>';
+    let w = null;
+    try { w = window.open('', '_blank'); } catch(e) {}
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    } else {
+      document.open();
+      document.write(html);
+      document.close();
+    }
   };
   exportUdharCSV = () => {
     const entries = this.activeUdpiEntries();
@@ -1941,12 +1958,21 @@ export default class App extends React.Component {
       });
       html += '</tbody></table>';
     }
+    html += '<div class="no-print" style="margin-top:24px;padding-top:16px;border-top:2px solid #ece8dc;display:flex;justify-content:space-between;align-items:center"><button type="button" onclick="goBack()" style="padding:10px 18px;border-radius:8px;background:#111827;color:#fff;font-weight:700;border:none;cursor:pointer">← Back / واپس جائیں</button><button type="button" onclick="window.print()" style="padding:10px 18px;border-radius:8px;background:#0f6b4b;color:#fff;font-weight:700;border:none;cursor:pointer">🖨 Print</button></div>';
+    html += '<script>function goBack(){try{if(window.opener&&!window.opener.closed){window.close();return;}}catch(e){}if(window.history.length>1){window.history.back();}else{try{window.close();}catch(e){}window.location.href=window.location.origin||"/";}}window.addEventListener("keydown",function(e){if(e.key==="Escape")goBack();});</script>';
     html += '</body></html>';
 
-    const w = window.open('', '_blank');
-    w.document.write(html);
-    w.document.close();
-    setTimeout(() => w.print(), 400);
+    let w = null;
+    try { w = window.open('', '_blank'); } catch(e) {}
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      setTimeout(() => w.print(), 400);
+    } else {
+      document.open();
+      document.write(html);
+      document.close();
+    }
   }
 
   toggleDark = () => {
