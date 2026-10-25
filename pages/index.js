@@ -154,7 +154,7 @@ export default class App extends React.Component {
     ledgerMonthFilter: '',
     ledgerSearch: '',
     recurringModal: { open: false, editId: null, type: 'expense', amount: '', accountId: '', category: '', note: '', day: 1 },
-    udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: this.todayStr(), dueDate: '', category: '', photo: null },
+    udpiModal: { open: false, editId: null, direction: 'lent', amount: '', person: '', accountId: '', note: '', date: this.todayStr(), time: '', dueDate: '', category: '', photo: null },
     udharCategoryFilter: '',
     installmentAutoSending: false,
     installmentMenu: null,
@@ -181,6 +181,7 @@ export default class App extends React.Component {
     dashKpiModal: null,
     dashKpiTab: 'due',
     ledgerDetailModal: null,
+    udharStatementModal: null,
     staff: [],
     staffModal: { open: false, editId: null, name: '', phone: '', role: '', salary: '', joinDate: '' },
     staffView: null,
@@ -781,10 +782,13 @@ export default class App extends React.Component {
       this.requirePin(() => {
         const u = this.activeUdpiEntries().find(x => x.id === editId);
         if (!u) return;
-        this.setState({ udpiModal: { open: true, editId, direction: u.direction, amount: String(u.amount), person: u.person, accountId: u.accountId, note: u.note || '', date: u.date, dueDate: u.dueDate || '', category: u.category || '', photo: u.photo || null } });
+        const existingTime = u.time || this._idTime24(u.id) || '';
+        this.setState({ udpiModal: { open: true, editId, direction: u.direction, amount: String(u.amount), person: u.person, accountId: u.accountId, note: u.note || '', date: u.date, time: existingTime, dueDate: u.dueDate || '', category: u.category || '', photo: u.photo || null } });
       });
     } else {
-      this.setState({ udpiModal: { open: true, editId: null, direction: 'lent', amount: '', person: prefillPerson || '', accountId: accs.length > 0 ? accs[0].id : '', note: '', date: this.todayStr(), dueDate: '', category: '', photo: null } });
+      const now = new Date();
+      const nowTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      this.setState({ udpiModal: { open: true, editId: null, direction: 'lent', amount: '', person: prefillPerson || '', accountId: accs.length > 0 ? accs[0].id : '', note: '', date: this.todayStr(), time: nowTime, dueDate: '', category: '', photo: null } });
     }
   };
   closeUdpiModal = () => this.setState({ udpiModal: { ...this.state.udpiModal, open: false } });
@@ -797,17 +801,20 @@ export default class App extends React.Component {
     const udpiEntries = [...(this.state.udpiEntries || [])];
     const ledger = [...(this.state.ledger || [])];
     const person = m.person.trim();
+    const now = new Date();
+    const nowTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const timeVal = m.time || nowTime;
     if (m.editId) {
       const idx = udpiEntries.findIndex(x => x.id === m.editId);
       if (idx >= 0) {
         const old = udpiEntries[idx];
-        udpiEntries[idx] = { ...old, direction: m.direction, amount, person, accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || old.photo || null };
+        udpiEntries[idx] = { ...old, direction: m.direction, amount, person, accountId: m.accountId, note: m.note, date: m.date, time: timeVal, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || old.photo || null };
         const li = ledger.findIndex(l => l.udpiRef === m.editId);
         if (li >= 0) ledger[li] = { ...ledger[li], type: m.direction === 'lent' ? 'expense' : 'income', amount, accountId: m.accountId, date: m.date, note: (m.direction === 'lent' ? 'Gave' : 'Got') + ' — ' + person + (m.note ? ' (' + m.note + ')' : ''), category: 'Udhar' };
       }
     } else {
       const udId = 'ud_' + Date.now().toString(36);
-      udpiEntries.unshift({ id: udId, direction: m.direction, amount, person, accountId: m.accountId, note: m.note, date: m.date, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || null, returned: false, returnedDate: '', returnedAmount: 0, partialReturns: [] });
+      udpiEntries.unshift({ id: udId, direction: m.direction, amount, person, accountId: m.accountId, note: m.note, date: m.date, time: timeVal, dueDate: m.dueDate || '', category: m.category || '', photo: m.photo || null, returned: false, returnedDate: '', returnedAmount: 0, partialReturns: [] });
       ledger.unshift({ id: 'le_' + Date.now().toString(36), type: m.direction === 'lent' ? 'expense' : 'income', amount, accountId: m.accountId, category: 'Udhar', note: (m.direction === 'lent' ? 'Gave' : 'Got') + ' — ' + person + (m.note ? ' (' + m.note + ')' : ''), date: m.date, udpiRef: udId });
     }
     this.setState({ udpiEntries, ledger, udpiModal: { ...m, open: false } });
@@ -855,28 +862,7 @@ export default class App extends React.Component {
     return c ? c.phone : null;
   };
   shareUdharStatement = (personName) => {
-    const entries = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase());
-    entries.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    let lent = 0, borrowed = 0;
-    entries.forEach(u => { if (u.direction === 'lent' && !u.returned) lent += u.amount; else if (u.direction === 'borrowed' && !u.returned) borrowed += u.amount; });
-    const balance = lent - borrowed;
-    const shopName = this.state.settings.shopName || 'Shop';
-    let msg = '📋 *' + shopName + ' — Account Statement*\n';
-    msg += '👤 ' + personName + '\n';
-    msg += '📅 ' + new Date().toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }) + '\n';
-    msg += '━━━━━━━━━━━━━━━\n';
-    entries.forEach(u => {
-      const isLent = u.direction === 'lent';
-      const status = u.returned ? ' ✓' : (u.returnedAmount > 0 ? ' (partial ' + this.fmtPKR(u.returnedAmount) + ')' : '');
-      msg += (isLent ? '🔴 Gave' : '🟢 Got') + ' ' + this.fmtPKR(u.amount) + ' — ' + u.date + (u.note ? ' (' + u.note + ')' : '') + status + '\n';
-    });
-    msg += '━━━━━━━━━━━━━━━\n';
-    msg += '💰 *Balance: ' + this.fmtPKR(Math.abs(balance)) + '*\n';
-    msg += balance > 0 ? '📌 آپ کے ذمے ہے / You owe us' : balance < 0 ? '📌 ہمارے ذمے ہے / We owe you' : '✓ All clear / برابر';
-    const phone = this._getUdharPersonPhone(personName);
-    const waNum = this._waPhone(phone);
-    const url = waNum ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(msg) : 'https://wa.me/?text=' + encodeURIComponent(msg);
-    window.open(url, '_blank');
+    this.openStatementModal(personName);
   };
   deleteUdpiEntry = (id) => {
     this.requirePin(() => {
@@ -995,22 +981,30 @@ export default class App extends React.Component {
       prompt('Copy this report:', text);
     }
   };
-  printUdharStatement = (personName) => {
+  printUdharStatement = (personName, customNote = '', customTitle = '') => {
     const entries = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase());
-    entries.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    entries.sort((a, b) => {
+      const cmp = (a.date || '').localeCompare(b.date || '');
+      if (cmp !== 0) return cmp;
+      return (a.time || '').localeCompare(b.time || '');
+    });
     const shopName = (this.state.settings || {}).shopName || 'Aqsat';
     let lent = 0, borrowed = 0, runBal = 0;
     entries.forEach(u => { if (u.direction === 'lent' && !u.returned) lent += u.amount - (u.returnedAmount || 0); if (u.direction === 'borrowed' && !u.returned) borrowed += u.amount - (u.returnedAmount || 0); });
     const balance = lent - borrowed;
+    const titleText = customTitle && customTitle.trim() ? customTitle.trim() : ('Udhar Statement — ' + personName);
     const rows = entries.map(u => {
       const amt = u.amount - (u.returnedAmount || 0);
       if (!u.returned) { if (u.direction === 'lent') runBal += amt; else runBal -= amt; }
-      return '<tr><td>' + u.date + '</td><td>' + (u.note || (u.direction === 'lent' ? 'Gave' : 'Got')) + '</td><td>' + (u.category || '-') + '</td><td style="color:' + (u.direction === 'lent' ? '#dc2626' : '#059669') + ';font-weight:700">' + (u.direction === 'lent' ? '-' : '+') + this.fmtPKR(u.amount) + '</td><td>' + (u.returned ? '✓ Settled' : this.fmtPKR(runBal)) + '</td><td>' + (u.dueDate || '-') + '</td></tr>';
+      const timeStr = this._entryTime(u);
+      const dateDisplay = u.date + (timeStr ? '<br><small style="color:#64748b">' + timeStr + '</small>' : '');
+      return '<tr><td>' + dateDisplay + '</td><td>' + (u.note || (u.direction === 'lent' ? 'Gave' : 'Got')) + '</td><td>' + (u.category || '-') + '</td><td style="color:' + (u.direction === 'lent' ? '#dc2626' : '#059669') + ';font-weight:700">' + (u.direction === 'lent' ? '-' : '+') + this.fmtPKR(u.amount) + '</td><td>' + (u.returned ? '✓ Settled' : this.fmtPKR(runBal)) + '</td><td>' + (u.dueDate || '-') + '</td></tr>';
     }).join('');
-    const html = '<!DOCTYPE html><html><head><title>Statement — ' + personName + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;padding:24px;color:#1e293b;max-width:800px;margin:0 auto}h1{font-size:22px;margin-bottom:4px}h2{font-size:14px;color:#64748b;margin-bottom:20px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:16px;margin-bottom:20px}.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}.summary div{background:#f8fafc;border-radius:8px;padding:12px;text-align:center}.summary .label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:700}.summary .val{font-size:20px;font-weight:800;margin-top:4px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#0f172a;color:white;padding:8px 10px;text-align:left;font-weight:700;font-size:11px}td{padding:8px 10px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f8fafc}.footer{margin-top:20px;padding-top:12px;border-top:2px solid #0f172a;display:flex;justify-content:space-between;font-size:11px;color:#64748b}@media print{body{padding:12px}button{display:none !important}}</style></head><body>' +
-      '<div class="header"><div><h1>' + shopName + '</h1><h2>Udhar Statement — ' + personName + '</h2></div><div style="text-align:right;font-size:12px;color:#64748b"><div>Date: ' + this.todayStr() + '</div><div>Entries: ' + entries.length + '</div></div></div>' +
+    const noteHtml = customNote && customNote.trim() ? '<div style="margin-top:8px;padding:8px 12px;background:#f1f5f9;border-left:3px solid #0f172a;border-radius:4px;font-size:12px;color:#334155"><strong>Note / Details:</strong> ' + customNote.trim() + '</div>' : '';
+    const html = '<!DOCTYPE html><html><head><title>' + titleText + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;padding:24px;color:#1e293b;max-width:800px;margin:0 auto}h1{font-size:22px;margin-bottom:4px}h2{font-size:14px;color:#64748b;margin-bottom:12px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:16px;margin-bottom:20px}.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}.summary div{background:#f8fafc;border-radius:8px;padding:12px;text-align:center}.summary .label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:700}.summary .val{font-size:20px;font-weight:800;margin-top:4px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#0f172a;color:white;padding:8px 10px;text-align:left;font-weight:700;font-size:11px}td{padding:8px 10px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f8fafc}.footer{margin-top:20px;padding-top:12px;border-top:2px solid #0f172a;display:flex;justify-content:space-between;font-size:11px;color:#64748b}@media print{body{padding:12px}button{display:none !important}}</style></head><body>' +
+      '<div class="header"><div><h1>' + shopName + '</h1><h2>' + titleText + '</h2>' + noteHtml + '</div><div style="text-align:right;font-size:12px;color:#64748b"><div>Date: ' + this.todayStr() + '</div><div>Entries: ' + entries.length + '</div></div></div>' +
       '<div class="summary"><div><div class="label">Total Gave</div><div class="val" style="color:#dc2626">' + this.fmtPKR(entries.filter(u => u.direction === 'lent').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Total Got</div><div class="val" style="color:#059669">' + this.fmtPKR(entries.filter(u => u.direction === 'borrowed').reduce((s, u) => s + u.amount, 0)) + '</div></div><div><div class="label">Balance</div><div class="val" style="color:' + (balance > 0 ? '#dc2626' : '#059669') + '">' + this.fmtPKR(Math.abs(balance)) + '</div><div style="font-size:10px;color:#64748b">' + (balance > 0 ? 'Receivable' : balance < 0 ? 'Payable' : 'Clear') + '</div></div></div>' +
-      '<table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>Balance</th><th>Due Date</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<table><thead><tr><th>Date & Time</th><th>Description</th><th>Category</th><th>Amount</th><th>Balance</th><th>Due Date</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '<div class="footer"><span>Generated by ' + shopName + ' · Udhar Book</span><span>Printed on ' + new Date().toLocaleString() + '</span></div>' +
       '<div style="text-align:center;margin-top:16px"><button onclick="window.print()" style="padding:10px 24px;border-radius:8px;background:#0f172a;color:white;font-weight:700;border:none;cursor:pointer;font-size:13px">🖨 Print / Save PDF</button></div></body></html>';
     const w = window.open('', '_blank');
@@ -1085,38 +1079,84 @@ export default class App extends React.Component {
     alert('Interest Calculation for ' + personName + '\nRate: ' + rateStr + '% per month\n\n' + details + '\n━━━━━━━━━━━━━━━━━━━\nTotal Interest: ' + this.fmtPKR(totalInterest) + '\nPrincipal + Interest: ' + this.fmtPKR(entries.reduce((s, u) => s + (u.amount - (u.returnedAmount || 0)), 0) + totalInterest));
   };
 
-  generateUdharStatement = (personName) => {
+  buildUdharStatementText(personName, customNote = '', customTitle = '') {
     const entries = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase());
-    if (entries.length === 0) { alert('No entries found.'); return ''; }
-    const sorted = [...entries].sort((a, b) => a.date > b.date ? 1 : -1);
-    let text = '📄 Statement — ' + personName + '\n';
-    text += '━'.repeat(30) + '\n';
+    if (entries.length === 0) return '';
+    const sorted = [...entries].sort((a, b) => {
+      const cmp = (a.date || '').localeCompare(b.date || '');
+      if (cmp !== 0) return cmp;
+      return (a.time || '').localeCompare(b.time || '');
+    });
+    const shopName = (this.state.settings || {}).shopName || (this.state.settings || {}).businessName || 'Aqsat';
+    const title = customTitle && customTitle.trim() ? customTitle.trim() : ('📄 Statement — ' + personName);
+
+    let text = title + '\n';
+    if (shopName) text += '🏪 ' + shopName + '\n';
+    if (customNote && customNote.trim()) {
+      text += '📝 Note: ' + customNote.trim() + '\n';
+    }
+    text += '📅 ' + new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) + '\n';
+    text += '━━━━━━━━━━━━━━━━━━━━━━━\n';
+
     let runBal = 0;
     sorted.forEach(u => {
       const amt = u.amount - (u.returnedAmount || 0);
-      if (u.direction === 'lent') { runBal += amt; text += u.date + ' | GAVE ' + this.fmtPKR(u.amount); }
-      else { runBal -= amt; text += u.date + ' | GOT ' + this.fmtPKR(u.amount); }
-      if (u.returned) text += ' ✓';
+      const isLent = u.direction === 'lent';
+      const timeStr = this._entryTime(u);
+      const dateDisplay = u.date + (timeStr ? ' ' + timeStr : '');
+      const noteStr = u.note ? ' (' + u.note + ')' : '';
+
+      if (isLent) {
+        runBal += amt;
+        text += dateDisplay + ' | 🔴 GAVE ' + this.fmtPKR(u.amount) + noteStr;
+      } else {
+        runBal -= amt;
+        text += dateDisplay + ' | 🟢 GOT ' + this.fmtPKR(u.amount) + noteStr;
+      }
+      if (u.returned) text += ' ✓ Settled';
       else if (u.returnedAmount > 0) text += ' (partial ' + this.fmtPKR(u.returnedAmount) + ')';
       text += ' | Bal: ' + this.fmtPKR(runBal) + '\n';
     });
-    text += '━'.repeat(30) + '\n';
-    text += 'Balance: ' + this.fmtPKR(runBal) + '\n';
-    text += 'Generated: ' + this.todayStr();
+
+    text += '━━━━━━━━━━━━━━━━━━━━━━━\n';
+    text += '💰 *Balance: ' + this.fmtPKR(Math.abs(runBal)) + '*\n';
+    text += runBal > 0 ? '📌 آپ کے ذمے ہے / You owe us\n' : runBal < 0 ? '📌 ہمارے ذمے ہے / We owe you\n' : '✓ All clear / حساب برابر ہے\n';
     return text;
+  }
+
+  generateUdharStatement = (personName, customNote = '', customTitle = '') => {
+    return this.buildUdharStatementText(personName, customNote, customTitle);
   };
+
+  openStatementModal = (personName) => {
+    const phone = this._getUdharPersonPhone(personName) || '';
+    const customTitle = 'Statement — ' + personName;
+    const customNote = '';
+    const message = this.buildUdharStatementText(personName, customNote, customTitle);
+    this.setState({
+      udharStatementModal: {
+        open: true,
+        personName,
+        phone,
+        customTitle,
+        customNote,
+        message,
+        isManualEdit: false,
+        copied: false,
+      }
+    });
+  };
+
+  closeStatementModal = () => {
+    this.setState({ udharStatementModal: null });
+  };
+
   shareStatementWhatsApp = (personName) => {
-    const text = this.generateUdharStatement(personName);
-    if (!text) return;
-    const phone = this._getUdharPersonPhone(personName);
-    const waNum = this._waPhone(phone);
-    window.open(waNum ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(text) : 'https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+    this.openStatementModal(personName);
   };
+
   copyStatement = (personName) => {
-    const text = this.generateUdharStatement(personName);
-    if (!text) return;
-    if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => alert('Statement copied! / بیان کاپی ہوگیا!'));
-    else alert(text);
+    this.openStatementModal(personName);
   };
   remindViaWhatsApp = (personName) => {
     const entries = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase() && u.direction === 'lent' && !u.returned);
@@ -3804,6 +3844,33 @@ export default class App extends React.Component {
     return d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true });
   }
 
+  _idTime24(id) {
+    if (!id) return '';
+    const part = id.replace(/^[a-z]+_/, '');
+    const ms = parseInt(part, 36);
+    if (!isFinite(ms) || ms < 1e12) return '';
+    const d = new Date(ms);
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  _entryTime(u) {
+    if (!u) return '';
+    if (u.time) {
+      const parts = String(u.time).split(':');
+      if (parts.length >= 2) {
+        const hour = parseInt(parts[0], 10);
+        const mins = parts[1].slice(0, 2);
+        if (!isNaN(hour)) {
+          const ampm = hour >= 12 ? 'PM' : 'AM';
+          const h12 = hour % 12 || 12;
+          return String(h12).padStart(2, '0') + ':' + mins + ' ' + ampm;
+        }
+      }
+      return u.time;
+    }
+    return this._idTime(u.id);
+  }
+
   _renderTxList(txList, accs, showAccount) {
     const h = this.h;
     if (txList.length === 0) return [h('div', { key: 'empty', style: { padding: '14px 0', color: '#7a7663', fontSize: 13 } }, 'No transactions recorded yet.')];
@@ -3841,7 +3908,7 @@ export default class App extends React.Component {
           ),
           h('div', { style: { textAlign: 'right', flexShrink: 0 } },
             h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: isLent ? '#b91c1c' : '#3b82f6' } }, (isLent ? '- ' : '+ ') + this.fmtPKR(u.amount)),
-            h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(u.date) + (this._idTime(u.id) ? ' · ' + this._idTime(u.id) : '')),
+            h('div', { style: { fontSize: 10, color: '#7a7663' } }, this.fmtDate(u.date) + (this._entryTime(u) ? ' · ' + this._entryTime(u) : '')),
           ),
         );
       }
@@ -4500,6 +4567,165 @@ export default class App extends React.Component {
     );
   }
 
+
+  renderUdharStatementModal() {
+    const h = this.h;
+    const m = this.state.udharStatementModal;
+    if (!m || !m.open) return null;
+
+    const setM = (key, val) => {
+      const updated = { ...m, [key]: val };
+      if ((key === 'customTitle' || key === 'customNote') && !m.isManualEdit) {
+        updated.message = this.buildUdharStatementText(
+          m.personName,
+          key === 'customNote' ? val : m.customNote,
+          key === 'customTitle' ? val : m.customTitle
+        );
+      }
+      this.setState({ udharStatementModal: updated });
+    };
+
+    const handleReset = () => {
+      const fresh = this.buildUdharStatementText(m.personName, m.customNote, m.customTitle);
+      this.setState({
+        udharStatementModal: { ...m, message: fresh, isManualEdit: false }
+      });
+    };
+
+    const handleSendWhatsApp = () => {
+      const waNum = this._waPhone(m.phone);
+      const url = waNum
+        ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(m.message)
+        : 'https://wa.me/?text=' + encodeURIComponent(m.message);
+      window.open(url, '_blank');
+    };
+
+    const handleCopy = () => {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(m.message).then(() => {
+          this.setState({ udharStatementModal: { ...m, copied: true } });
+          setTimeout(() => {
+            if (this.state.udharStatementModal) {
+              this.setState({ udharStatementModal: { ...this.state.udharStatementModal, copied: false } });
+            }
+          }, 2000);
+        });
+      } else {
+        alert('Statement copied!');
+      }
+    };
+
+    const handlePrint = () => {
+      this.printUdharStatement(m.personName, m.customNote, m.customTitle);
+    };
+
+    const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 13, background: '#fdfcf8', outline: 'none' };
+
+    return h('div', {
+      onClick: e => { if (e.target === e.currentTarget) this.closeStatementModal(); },
+      style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9995, padding: 16 }
+    },
+      h('div', {
+        onClick: e => e.stopPropagation(),
+        style: { background: '#ffffff', borderRadius: 20, padding: 22, width: '100%', maxWidth: 540, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }
+      },
+        // Header
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid #f2eee2', paddingBottom: 12 } },
+          h('div', {},
+            h('div', { style: { fontSize: 17, fontWeight: 800, color: '#16211c' } }, '📄 Send Statement / اسٹیٹمنٹ'),
+            h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663', marginTop: 1 } }, 'نوٹ یا تفصیل لکھیں اور واٹس ایپ پر بھیجیں'),
+          ),
+          h('button', {
+            onClick: () => this.closeStatementModal(),
+            style: { width: 32, height: 32, borderRadius: '50%', background: '#f4f1e6', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer' }
+          }, '✕'),
+        ),
+
+        // Person & Phone Row
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 } },
+          h('div', {},
+            h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 4 } }, 'Person / نام'),
+            h('div', { style: { padding: '10px 12px', background: '#f4f1e6', borderRadius: 10, fontSize: 13, fontWeight: 700, color: '#16211c' } }, m.personName),
+          ),
+          h('div', {},
+            h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 4 } }, 'WhatsApp Phone / فون نمبر'),
+            h('input', {
+              type: 'text',
+              value: m.phone,
+              onChange: e => setM('phone', e.target.value),
+              placeholder: '03001234567',
+              style: inpStyle
+            }),
+          ),
+        ),
+
+        // Statement Title input
+        h('div', { style: { marginBottom: 12 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 } },
+            h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f' } }, 'Statement Title / عنوان'),
+            h('div', { className: 'ur', style: { fontSize: 10, color: '#7a7663' } }, 'اسٹیٹمنٹ کا ہیڈر'),
+          ),
+          h('input', {
+            type: 'text',
+            value: m.customTitle,
+            onChange: e => setM('customTitle', e.target.value),
+            placeholder: 'e.g. Statement — ' + m.personName + ' (iPhone etc)',
+            style: inpStyle
+          }),
+        ),
+
+        // Custom Note / Items input
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 } },
+            h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f' } }, 'Custom Note / Items / اضافی تفصیل یا سامان'),
+            h('div', { className: 'ur', style: { fontSize: 10, color: '#7a7663' } }, 'یہ نوٹ اسٹیٹمنٹ میں شامل ہوگا'),
+          ),
+          h('input', {
+            type: 'text',
+            value: m.customNote,
+            onChange: e => setM('customNote', e.target.value),
+            placeholder: 'مثلاً: Babar ali khan meta saleka iPhone etc / Note ya saman...',
+            style: inpStyle
+          }),
+        ),
+
+        // Message Preview / Editor
+        h('div', { style: { marginBottom: 16 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 } },
+            h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f' } }, 'Message Preview / پیغام (آپ ترمیم بھی کر سکتے ہیں)'),
+            h('button', {
+              onClick: handleReset,
+              title: 'Reset to auto-generated text',
+              style: { background: 'none', border: 'none', color: '#0f6b4b', fontSize: 11, fontWeight: 700, cursor: 'pointer' }
+            }, '↺ Reset / ری سیٹ'),
+          ),
+          h('textarea', {
+            rows: 8,
+            value: m.message,
+            onChange: e => this.setState({ udharStatementModal: { ...m, message: e.target.value, isManualEdit: true } }),
+            style: { width: '100%', border: '1.5px solid #ece8dc', borderRadius: 12, padding: '12px', fontSize: 12, fontFamily: 'monospace', background: '#faf9f5', outline: 'none', resize: 'vertical', lineHeight: 1.5 }
+          }),
+        ),
+
+        // Action Buttons
+        h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+          h('button', {
+            onClick: handleSendWhatsApp,
+            style: { flex: 2, minWidth: 160, padding: '12px 16px', borderRadius: 12, background: '#25D366', color: '#ffffff', fontWeight: 800, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 4px 14px rgba(37,211,102,.35)' }
+          }, '💬 Send WhatsApp / بھیجیں'),
+          h('button', {
+            onClick: handleCopy,
+            style: { flex: 1, minWidth: 110, padding: '12px 14px', borderRadius: 12, background: m.copied ? '#dcfce7' : '#f4f1e6', color: m.copied ? '#15803d' : '#3a4a3f', fontWeight: 700, fontSize: 13, border: '1px solid ' + (m.copied ? '#86efac' : '#ece8dc'), cursor: 'pointer' }
+          }, m.copied ? '✓ Copied!' : '📋 Copy'),
+          h('button', {
+            onClick: handlePrint,
+            style: { padding: '12px 14px', borderRadius: 12, background: '#f4f1e6', color: '#3a4a3f', fontWeight: 700, fontSize: 13, border: '1px solid #ece8dc', cursor: 'pointer' }
+          }, '🖨 PDF'),
+        ),
+      )
+    );
+  }
+
   renderUdpiModal() {
     const h = this.h;
     const m = this.state.udpiModal;
@@ -4542,9 +4768,13 @@ export default class App extends React.Component {
             h('input', { type: 'date', value: m.date, onChange: e => setM('date', e.target.value), style: inpStyle }),
           ),
           h('div', {},
-            h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Due Date ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'واپسی تاریخ')),
-            h('input', { type: 'date', value: m.dueDate || '', onChange: e => setM('dueDate', e.target.value), style: inpStyle }),
+            h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Time ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'وقت')),
+            h('input', { type: 'time', value: m.time || '', onChange: e => setM('time', e.target.value), style: inpStyle }),
           ),
+        ),
+        h('div', { style: { marginBottom: 14 } },
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Due Date (Optional) ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'واپسی تاریخ')),
+          h('input', { type: 'date', value: m.dueDate || '', onChange: e => setM('dueDate', e.target.value), style: inpStyle }),
         ),
         h('div', { style: { marginBottom: 14 } },
           h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Note ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'نوٹ')),
@@ -4576,8 +4806,16 @@ export default class App extends React.Component {
     );
   }
 
-  _parseUdharEntryMs(id, dateStr) {
-    if (!id && !dateStr) return 0;
+  _parseUdharEntryMs(id, dateStr, timeStr) {
+    if (dateStr) {
+      if (timeStr) {
+        const dt = new Date(dateStr + 'T' + timeStr + ':00').getTime();
+        if (!isNaN(dt)) return dt;
+      }
+      const d = new Date(dateStr + 'T12:00:00').getTime();
+      if (!isNaN(d)) return d;
+    }
+    if (!id) return 0;
     const parts = (id || '').split('_');
     for (let i = parts.length - 1; i >= 0; i--) {
       const p = parts[i];
@@ -4586,10 +4824,6 @@ export default class App extends React.Component {
         const dateMs = dateStr ? new Date(dateStr + 'T12:00:00').getTime() : 0;
         return (dateMs && Math.abs(dateMs - ms) > 86400000 * 2) ? dateMs : Math.max(ms, dateMs);
       }
-    }
-    if (dateStr) {
-      const d = new Date(dateStr + 'T12:00:00').getTime();
-      if (!isNaN(d)) return d;
     }
     return 0;
   }
@@ -4615,7 +4849,7 @@ export default class App extends React.Component {
     entries.forEach(u => {
       const person = (u.person || '').trim();
       if (!person) return;
-      const mainMs = this._parseUdharEntryMs(u.id, u.date);
+      const mainMs = this._parseUdharEntryMs(u.id, u.date, u.time);
       const isMainIn24h = (mainMs >= cutoff && mainMs <= now + 3600000) || u.date === today;
       if (isMainIn24h) {
         txList.push({
@@ -4636,7 +4870,7 @@ export default class App extends React.Component {
       }
 
       (u.partialReturns || []).forEach(pr => {
-        const prMs = this._parseUdharEntryMs(pr.id, pr.date);
+        const prMs = this._parseUdharEntryMs(pr.id, pr.date, pr.time);
         const isPrIn24h = (prMs >= cutoff && prMs <= now + 3600000) || pr.date === today;
         if (isPrIn24h) {
           txList.push({
@@ -5474,9 +5708,9 @@ export default class App extends React.Component {
         h('button', { onClick: () => this.toggleUdharPin(personName), style: { padding: '5px 10px', borderRadius: 8, background: isPinned ? '#fef3c7' : '#e6eae5', color: isPinned ? '#b45309' : '#8b978f', fontSize: 10, fontWeight: 700, border: 'none' } }, isPinned ? '📌 Unpin' : '📌 Pin'),
         phone ? h('a', { href: 'https://wa.me/' + this._waPhone(phone) + '?text=' + waMsg, target: '_blank', style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, textDecoration: 'none' } }, '💬 Manual') : h('button', { onClick: () => this.remindViaWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#25D366', color: 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Manual'),
         h('button', { onClick: () => this.sendSingleReminder(personName), disabled: this.state.udharAutoSending, style: { padding: '5px 10px', borderRadius: 8, background: this.state.udharAutoSending ? '#e6eae5' : '#0f6b4f', color: this.state.udharAutoSending ? '#8b978f' : 'white', fontWeight: 700, fontSize: 10, border: 'none' } }, this.state.udharAutoSending ? '⏳...' : '🤖 Auto'),
-        h('button', { onClick: () => this.copyStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none' } }, '📋 Statement'),
-        h('button', { onClick: () => this.printUdharStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none' } }, '🖨 PDF'),
-        h('button', { onClick: () => this.shareStatementWhatsApp(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e8f5e9', color: '#0f6b4f', fontWeight: 700, fontSize: 10, border: 'none' } }, '💬 Share'),
+        h('button', { onClick: () => this.openStatementModal(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none', cursor: 'pointer' } }, '📋 Statement'),
+        h('button', { onClick: () => this.printUdharStatement(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 10, border: 'none', cursor: 'pointer' } }, '🖨 PDF'),
+        h('button', { onClick: () => this.openStatementModal(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#e8f5e9', color: '#0f6b4f', fontWeight: 700, fontSize: 10, border: 'none', cursor: 'pointer' } }, '💬 Share'),
         h('button', { onClick: () => this.deleteAllUdpiForPerson(personName), style: { padding: '5px 10px', borderRadius: 8, background: '#fef2f2', color: '#c0392b', fontWeight: 700, fontSize: 10, border: 'none' } }, '🗑 Delete All'),
         h('button', { onClick: () => this.setUdharReminder(personName), style: { padding: '5px 10px', borderRadius: 8, background: meta.reminderDate ? '#fef3c7' : '#e6eae5', color: meta.reminderDate ? '#b45309' : '#8b978f', fontWeight: 700, fontSize: 10, border: 'none' } }, meta.reminderDate ? '⏰ ' + meta.reminderDate : '⏰ Reminder'),
         h('button', { onClick: () => {
@@ -5619,7 +5853,7 @@ export default class App extends React.Component {
                 h('div', { style: { flex: 1, minWidth: 0 } },
                   h('div', { style: { fontSize: 13, fontWeight: 600, color: '#16211c' } }, u.note || (isLent ? 'Gave / دیا' : 'Got / لیا')),
                   h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#8b978f', marginTop: 2, flexWrap: 'wrap' } },
-                    new Date(u.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }) + (this._idTime(u.id) ? ' ' + this._idTime(u.id) : ''),
+                    new Date(u.date + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }) + (this._entryTime(u) ? ' ' + this._entryTime(u) : ''),
                     acc ? ' · ' + acc.emoji + ' ' + acc.name : '',
                     u.category ? h('span', { style: { fontSize: 9, fontWeight: 600, color: u.category === 'business' ? '#2563eb' : u.category === 'family' ? '#7c3aed' : u.category === 'emergency' ? '#b45309' : '#0891b2', background: u.category === 'business' ? '#dbeafe' : u.category === 'family' ? '#ede9fe' : u.category === 'emergency' ? '#fef3c7' : '#cffafe', padding: '1px 5px', borderRadius: 4 } }, u.category === 'business' ? '💼' : u.category === 'family' ? '👨‍👩‍👧' : u.category === 'emergency' ? '🚨' : '👤') : null,
                     u.photo ? h('span', { style: { fontSize: 9, fontWeight: 600, color: '#8b978f' } }, '📷') : null,
@@ -5674,6 +5908,7 @@ export default class App extends React.Component {
       ),
       this.renderUdpiModal(),
       this.renderInvoiceModal(),
+      this.renderUdharStatementModal(),
     );
   }
 
@@ -7376,6 +7611,7 @@ export default class App extends React.Component {
         {this.state.deletePlanModal.open  && this.renderDeleteModal()}
         {this.state.editPlanModal.open    && this.renderEditModal()}
         {this.state.pinModal.open         && this.renderPinModal()}
+        {this.state.udharStatementModal && this.renderUdharStatementModal()}
 
         {/* Mobile hamburger menu drawer */}
         {this.state.menuOpen && (
