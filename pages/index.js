@@ -193,10 +193,18 @@ export default class App extends React.Component {
     if (typeof window === 'undefined') return;
 
     const hostname = window.location.hostname;
-    // Demo runs on its own Vercel project, whose generated hostnames are
-    // aqsat-next-*.vercel.app and do not contain the word "demo". The live shop
-    // is aqsaat / udharbook, so neither can match this.
-    const isDemoHost = hostname.includes('demo') || hostname.includes('aqsat-next');
+    const pathname = window.location.pathname || '';
+    const search = window.location.search || '';
+    const hash = window.location.hash || '';
+    // Demo mode: accessible via /demo route, ?demo=1, #demo, or demo hosts.
+    // In demo mode, live client data and PIN lock are bypassed; sample data is loaded safely.
+    const isDemoHost = (this.props && this.props.forceDemo) ||
+      hostname.includes('demo') ||
+      hostname.includes('aqsat-next') ||
+      pathname === '/demo' ||
+      pathname.startsWith('/demo') ||
+      search.includes('demo') ||
+      hash.includes('demo');
     if (isDemoHost) {
       this._isDemo = true;
       const demo = this._generateDemoData();
