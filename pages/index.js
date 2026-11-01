@@ -2364,10 +2364,20 @@ export default class App extends React.Component {
               ),
               h('div', { style: { textAlign: 'right', flexShrink: 0 } },
                 h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#0f6b4b' } }, this.fmtPKR(r.s.amount)),
-                h('button', {
-                  onClick: (e) => { e.stopPropagation(); closeKpiModal(); this.openPayment(r.pl.id, r.s.n); },
-                  style: { marginTop: 4, padding: '4px 10px', borderRadius: 6, background: '#0f6b4b', color: '#fff', fontWeight: 700, fontSize: 10, border: 'none', cursor: 'pointer' }
-                }, 'Collect'),
+                h('div', { style: { display: 'flex', gap: 5, marginTop: 4, justifyContent: 'flex-end', alignItems: 'center' } },
+                  c && c.phone ? h('a', {
+                    href: this.waPlanLink(c, p, r.pl, r.s),
+                    target: '_blank',
+                    rel: 'noopener',
+                    onClick: (e) => e.stopPropagation(),
+                    title: 'Send reminder via WhatsApp',
+                    style: { padding: '4px 8px', borderRadius: 6, background: '#dcfce7', color: '#15803d', fontWeight: 700, fontSize: 12, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }
+                  }, '💬') : null,
+                  h('button', {
+                    onClick: (e) => { e.stopPropagation(); closeKpiModal(); this.openPayment(r.pl.id, r.s.n); },
+                    style: { padding: '4px 10px', borderRadius: 6, background: '#0f6b4b', color: '#fff', fontWeight: 700, fontSize: 10, border: 'none', cursor: 'pointer' }
+                  }, 'Collect'),
+                ),
               ),
             );
           },
@@ -2397,7 +2407,17 @@ export default class App extends React.Component {
               ),
               h('div', { style: { textAlign: 'right', flexShrink: 0 } },
                 h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#a26a10' } }, this.fmtPKR(r.s.amount)),
-                h('div', { style: { fontSize: 10, color: '#7a7663', marginTop: 1 } }, 'Upcoming'),
+                h('div', { style: { display: 'flex', gap: 5, marginTop: 4, justifyContent: 'flex-end', alignItems: 'center' } },
+                  c && c.phone ? h('a', {
+                    href: this.waPlanLink(c, p, r.pl, r.s),
+                    target: '_blank',
+                    rel: 'noopener',
+                    onClick: (e) => e.stopPropagation(),
+                    title: 'Send reminder via WhatsApp',
+                    style: { padding: '4px 8px', borderRadius: 6, background: '#dcfce7', color: '#15803d', fontWeight: 700, fontSize: 12, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }
+                  }, '💬') : null,
+                  h('div', { style: { fontSize: 10, color: '#7a7663' } }, 'Upcoming'),
+                ),
               ),
             );
           },
@@ -2431,10 +2451,20 @@ export default class App extends React.Component {
               ),
               h('div', { style: { textAlign: 'right', flexShrink: 0 } },
                 h('div', { className: 'mono', style: { fontWeight: 800, fontSize: 14, color: '#a4362b' } }, this.fmtPKR(r.s.amount)),
-                h('button', {
-                  onClick: (e) => { e.stopPropagation(); closeKpiModal(); this.openPayment(r.pl.id, r.s.n); },
-                  style: { marginTop: 4, padding: '4px 10px', borderRadius: 6, background: '#a4362b', color: '#fff', fontWeight: 700, fontSize: 10, border: 'none', cursor: 'pointer' }
-                }, 'Collect'),
+                h('div', { style: { display: 'flex', gap: 5, marginTop: 4, justifyContent: 'flex-end', alignItems: 'center' } },
+                  c && c.phone ? h('a', {
+                    href: this.waPlanLink(c, p, r.pl, r.s),
+                    target: '_blank',
+                    rel: 'noopener',
+                    onClick: (e) => e.stopPropagation(),
+                    title: 'Send reminder via WhatsApp',
+                    style: { padding: '4px 8px', borderRadius: 6, background: '#dcfce7', color: '#15803d', fontWeight: 700, fontSize: 12, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }
+                  }, '💬') : null,
+                  h('button', {
+                    onClick: (e) => { e.stopPropagation(); closeKpiModal(); this.openPayment(r.pl.id, r.s.n); },
+                    style: { padding: '4px 10px', borderRadius: 6, background: '#a4362b', color: '#fff', fontWeight: 700, fontSize: 10, border: 'none', cursor: 'pointer' }
+                  }, 'Collect'),
+                ),
               ),
             );
           },
@@ -2736,7 +2766,16 @@ export default class App extends React.Component {
                 ),
                 h('div', { style: { textAlign: 'right', flexShrink: 0 } },
                   h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13 } }, this.fmtPKR(row.s.amount)),
-                  h('button', { onClick: () => this.openPayment(row.pl.id, row.s.n), style: { marginTop: 2, background: '#0f6b4b', color: 'white', padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 600 } }, 'Collect →'),
+                  h('div', { style: { display: 'flex', gap: 4, marginTop: 2, justifyContent: 'flex-end', alignItems: 'center' } },
+                    row.c && row.c.phone ? h('a', {
+                      href: this.waPlanLink(row.c, row.p, row.pl, row.s),
+                      target: '_blank',
+                      rel: 'noopener',
+                      title: 'Send reminder via WhatsApp',
+                      style: { background: '#dcfce7', color: '#15803d', padding: '3px 7px', borderRadius: 6, fontSize: 11, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }
+                    }, '💬') : null,
+                    h('button', { onClick: () => this.openPayment(row.pl.id, row.s.n), style: { background: '#0f6b4b', color: 'white', padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 600 } }, 'Collect →'),
+                  ),
                 ),
               )),
         ]),
@@ -2753,7 +2792,16 @@ export default class App extends React.Component {
                 ),
                 h('div', { style: { textAlign: 'right', flexShrink: 0 } },
                   h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, color: '#a4362b' } }, this.fmtPKR(row.s.amount)),
-                  h('button', { onClick: () => this.openPayment(row.pl.id, row.s.n), style: { marginTop: 2, background: '#fdecea', color: '#a4362b', padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 600 } }, 'Follow up →'),
+                  h('div', { style: { display: 'flex', gap: 4, marginTop: 2, justifyContent: 'flex-end', alignItems: 'center' } },
+                    row.c && row.c.phone ? h('a', {
+                      href: this.waPlanLink(row.c, row.p, row.pl, row.s),
+                      target: '_blank',
+                      rel: 'noopener',
+                      title: 'Send reminder via WhatsApp',
+                      style: { background: '#dcfce7', color: '#15803d', padding: '3px 7px', borderRadius: 6, fontSize: 11, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }
+                    }, '💬') : null,
+                    h('button', { onClick: () => this.openPayment(row.pl.id, row.s.n), style: { background: '#fdecea', color: '#a4362b', padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 600 } }, 'Follow up →'),
+                  ),
                 ),
               )),
         ]),
@@ -2773,7 +2821,16 @@ export default class App extends React.Component {
                   h('div', { style: { fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, row.c.name),
                   h('div', { style: { fontSize: 11, color: '#7a7663' } }, 'in ' + row.diff + 'd · ' + row.p.name),
                 ),
-                h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13, flexShrink: 0 } }, this.fmtPKR(row.s.amount)),
+                h('div', { style: { textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 } },
+                  h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 13 } }, this.fmtPKR(row.s.amount)),
+                  row.c && row.c.phone ? h('a', {
+                    href: this.waPlanLink(row.c, row.p, row.pl, row.s),
+                    target: '_blank',
+                    rel: 'noopener',
+                    title: 'Send reminder via WhatsApp',
+                    style: { background: '#dcfce7', color: '#15803d', padding: '2px 7px', borderRadius: 6, fontSize: 11, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }
+                  }, '💬') : null,
+                ),
               )),
         ]),
         this.card([
