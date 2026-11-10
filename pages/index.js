@@ -1063,7 +1063,7 @@ export default class App extends React.Component {
     URL.revokeObjectURL(url);
   };
   handleUdharPhoto = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files && e.target.files[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) { alert('Photo too large (max 2MB)\nتصویر بہت بڑی ہے'); return; }
     const reader = new FileReader();
@@ -1071,6 +1071,7 @@ export default class App extends React.Component {
       this.setState({ udpiModal: { ...this.state.udpiModal, photo: reader.result } });
     };
     reader.readAsDataURL(file);
+    try { e.target.value = ''; } catch (_) {}
   };
   shareUdharBookWhatsApp = () => {
     const parties = this._getUdharParties();
@@ -4900,15 +4901,19 @@ export default class App extends React.Component {
           ),
         ),
         h('div', { style: { marginBottom: 14 } },
-          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Receipt / Photo ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'رسید')),
-          h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
-            h('label', { style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', border: '1.5px dashed #ece8dc', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#7a7663', display: 'inline-flex', alignItems: 'center', gap: 4 } },
-              '📷 ', m.photo ? 'Change Photo' : 'Add Photo',
+          h('div', { style: { fontSize: 12, fontWeight: 600, color: '#3a4a3f', marginBottom: 6 } }, 'Receipt / Photo ', h('span', { className: 'ur', style: { color: '#7a7663', fontWeight: 400 } }, 'رسید / تصویر')),
+          h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+            h('label', { style: { padding: '8px 14px', borderRadius: 10, background: '#eaf5ee', border: '1.5px dashed #0f6b4b', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#0f6b4b', display: 'inline-flex', alignItems: 'center', gap: 6 } },
+              '🖼 Gallery',
+              h('input', { type: 'file', accept: 'image/*', onChange: (e) => this.handleUdharPhoto(e), style: { display: 'none' } }),
+            ),
+            h('label', { style: { padding: '8px 14px', borderRadius: 10, background: '#f4f1e6', border: '1.5px dashed #ece8dc', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#3a4a3f', display: 'inline-flex', alignItems: 'center', gap: 6 } },
+              '📷 Camera',
               h('input', { type: 'file', accept: 'image/*', capture: 'environment', onChange: (e) => this.handleUdharPhoto(e), style: { display: 'none' } }),
             ),
-            m.photo ? h('div', { style: { position: 'relative' } },
-              h('img', { src: m.photo, style: { width: 48, height: 48, borderRadius: 8, objectFit: 'cover', border: '1px solid #ece8dc' } }),
-              h('button', { onClick: () => setM('photo', null), style: { position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', background: '#b91c1c', color: 'white', fontSize: 10, fontWeight: 800, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' } }, '✕'),
+            m.photo ? h('div', { style: { position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: 4 } },
+              h('img', { src: m.photo, onClick: () => window.open(m.photo, '_blank'), title: 'Click to view photo', style: { width: 44, height: 44, borderRadius: 8, objectFit: 'cover', border: '1.5px solid #0f6b4b', cursor: 'pointer' } }),
+              h('button', { type: 'button', onClick: () => setM('photo', null), title: 'Remove photo', style: { position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: '#b91c1c', color: 'white', fontSize: 11, fontWeight: 800, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.25)' } }, '✕'),
             ) : null,
           ),
         ),
