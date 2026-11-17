@@ -231,7 +231,9 @@ export default class App extends React.Component {
     const pin = localStorage.getItem('aqsat_pin') || '';
     const udharHost = hostname.includes('udhar') || hostname.includes('hisaab');
     const forceUdhar = udharHost || window.location.hash === '#udharbook';
-    this.setState({ darkMode: dm, savedPin: pin, pinLocked: udharHost ? false : !!pin, ...(forceUdhar ? { route: 'udharbook' } : {}) }, this.initAuth);
+    // Username login already gates entry, so no separate PIN lock on startup.
+    // (savedPin still guards sensitive actions via requirePin.)
+    this.setState({ darkMode: dm, savedPin: pin, pinLocked: false, ...(forceUdhar ? { route: 'udharbook' } : {}) }, this.initAuth);
     this._onVisibility = () => {
       if (document.visibilityState === 'visible') this._refetchCloud();
     };
