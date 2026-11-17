@@ -8,7 +8,10 @@ class Prefs(ctx: Context) {
 
     var deviceId: String?  get() = sp.getString("deviceId", null);  set(v) = sp.edit().putString("deviceId", v).apply()
     var secret: String?    get() = sp.getString("secret", null);    set(v) = sp.edit().putString("secret", v).apply()
-    var baseUrl: String?   get() = sp.getString("baseUrl", null);   set(v) = sp.edit().putString("baseUrl", v).apply()
+    // Falls back to the compiled-in shop URL when not set by enrollment.
+    var baseUrl: String?
+        get() = sp.getString("baseUrl", null) ?: BuildConfig.APP_BASE_URL.ifBlank { null }
+        set(v) = sp.edit().putString("baseUrl", v).apply()
 
     val enrolled: Boolean get() = deviceId != null && secret != null && baseUrl != null
 

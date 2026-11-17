@@ -9,12 +9,29 @@ export default class Devices extends React.Component {
     authUser: undefined, email: '', password: '', authErr: '', busy: false,
     devices: null, error: '', enroll: null, enrollBusy: false,
     form: { label: '', planId: '', customerId: '', graceDays: '' },
+    qrCfg: { apkUrl: '', checksum: '', ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
   };
 
   async componentDidMount() {
+    try { const s = JSON.parse(localStorage.getItem('devicelock_qrcfg') || '{}'); if (s && typeof s === 'object') this.setState(st => ({ qrCfg: { ...st.qrCfg, ...s } })); } catch (e) {}
     const { data: { session } } = await supabase.auth.getSession();
     if (session) this.onAuthed(session.user); else this.setState({ authUser: null });
   }
+
+  showQr = async () => {
+    const { apkUrl, checksum, ssid, wifiPass } = this.state.qrCfg;
+    if (!apkUrl || !checksum) { alert('APK URL and signature checksum are required'); return; }
+    try { localStorage.setItem('devicelock_qrcfg', JSON.stringify(this.state.qrCfg)); } catch (e) {}
+    this.setState({ qrBusy: true });
+    try {
+      const t = await this.token();
+      const q = new URLSearchParams({ apkUrl, checksum, ssid: ssid || '', wifiPass: wifiPass || '' }).toString();
+      const resp = await fetch('/api/device/provision-qr?' + q, { headers: { Authorization: 'Bearer ' + t } });
+      if (!resp.ok) throw new Error((await resp.json()).error || 'qr failed');
+      this.setState({ qrImg: (await resp.json()).qr });
+    } catch (e) { alert(e.message); }
+    this.setState({ qrBusy: false });
+  };
   onAuthed = (user) => { this.setState({ authUser: user }); this.load(); };
 
   token = async () => {
@@ -130,11 +147,24 @@ export default class Devices extends React.Component {
           <button onClick={this.enroll} disabled={this.state.enrollBusy} style={{ padding: '10px 16px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>{this.state.enrollBusy ? 'Creating…' : '+ Create enrollment'}</button>
           {enroll ? (
             <div style={{ marginTop: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: C.green, marginBottom: 6 }}>Paste this into the phone app (Device Lock → Enroll), then set Device Owner by USB:</div>
-              <div style={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-all', background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, padding: 10, userSelect: 'all' }}>{enroll.enrollString}</div>
-              <button onClick={() => { navigator.clipboard && navigator.clipboard.writeText(enroll.enrollString); }} style={{ marginTop: 8, padding: '6px 12px', borderRadius: 8, background: '#fff', border: '1px solid ' + C.line, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>Copy</button>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.green, marginBottom: 4 }}>On the phone (after scanning the provisioning QR), open Device Lock and type this code:</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 30, fontWeight: 800, letterSpacing: 4, color: C.ink, textAlign: 'center', padding: '6px 0' }}>{enroll.claimCode}</div>
+              <div style={{ fontSize: 11, color: C.mut }}>One-time, expires in 24h. PC fallback string: <span style={{ fontFamily: 'monospace', wordBreak: 'break-all', userSelect: 'all' }}>{enroll.enrollString}</span></div>
             </div>
           ) : null}
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, padding: 16, marginBottom: 18 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Provisioning QR (set up once, no PC)</div>
+          <div style={{ fontSize: 12, color: C.mut, marginBottom: 10 }}>On a factory-reset phone, tap the first welcome screen 6 times, then scan this. Same QR for every phone.</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <input placeholder="APK download URL (https)" value={this.state.qrCfg.apkUrl} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, apkUrl: e.target.value } })} style={fi} />
+            <input placeholder="APK signature checksum" value={this.state.qrCfg.checksum} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, checksum: e.target.value } })} style={fi} />
+            <input placeholder="Wi-Fi SSID (optional)" value={this.state.qrCfg.ssid} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, ssid: e.target.value } })} style={fi} />
+            <input placeholder="Wi-Fi password (optional)" value={this.state.qrCfg.wifiPass} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, wifiPass: e.target.value } })} style={fi} />
+          </div>
+          <button onClick={this.showQr} disabled={this.state.qrBusy} style={{ padding: '10px 16px', borderRadius: 10, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>{this.state.qrBusy ? 'Building…' : 'Show provisioning QR'}</button>
+          {this.state.qrImg ? <div style={{ textAlign: 'center', marginTop: 12 }}><img src={this.state.qrImg} alt="Provisioning QR" style={{ width: 300, height: 300, borderRadius: 12, border: '1px solid ' + C.line }} /></div> : null}
         </div>
 
         {error ? <div style={{ color: C.red, marginBottom: 12 }}>{error}</div> : null}

@@ -8,6 +8,8 @@ create table if not exists public.devices (
   customer_id text,
   label       text,                         -- free text, e.g. "Samsung A15 — IMEI ...."
   secret      text not null,                -- per-device HMAC secret (checkin auth + unlock codes)
+  claim_code  text,                         -- short one-time code the phone uses to pull its secret
+  claimed     boolean not null default false,
   status      text not null default 'active',   -- active | released | lost
   lock_mode   text not null default 'auto',     -- auto | force_lock | force_unlock
   grace_days  int,                          -- overrides shop default grace before hard lock

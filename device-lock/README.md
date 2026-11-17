@@ -27,15 +27,46 @@ gradle wrapper        # once, to generate the wrapper
 ```
 APK: `app/build/outputs/apk/release/app-release.apk` (debug-signed; fine for sideloading).
 
-## Enroll a phone (counter flow)
-1. On the Devices page (`/devices` on your Aqsat URL), sign in, fill the plan/customer, **Create enrollment**, copy the string (`deviceId|secret|https://yourapp`).
-2. Factory-reset the phone. **Do not add a Google account** during setup.
-3. Developer options → USB debugging → connect USB.
-4. `adb install app-release.apk`, open the app, paste the string, tap **Enroll**.
-5. Run `provision/enroll-device.bat` (or `adb shell dpm set-device-owner com.warraich.devicelock/.AdminReceiver`).
+## One-time setup (no PC needed again after this)
+1. Build & **sign** the APK, host it at a public HTTPS URL (GitHub release, Supabase Storage, anywhere downloadable).
+2. Get its signature checksum (base64url of the signing cert's SHA-256):
+   ```
+   keytool -list -printcert -jarfile app-release.apk
+   # take the SHA-256, or compute PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM
+   ```
+   (See Android's "Checksum of the device policy controller" docs — it's the signing cert hash, base64url, no padding.)
+3. On `/devices`, in **Provisioning QR**, paste the APK URL + checksum (+ optional shop Wi-Fi). It remembers them. This QR is the same for every phone.
+4. Set `buildConfigField APP_BASE_URL` in `app/build.gradle` to your real Aqsat URL and rebuild, so phones only need the short code.
+
+## Enroll a phone — counter flow, NO PC
+1. On `/devices`: **Create enrollment** (plan/customer) → note the 7-char **code**.
+2. **Factory-reset** the phone. On the first "Hi there" welcome screen, **tap it 6 times** → a QR scanner opens.
+3. Scan the **Provisioning QR**. The phone joins Wi-Fi, downloads the APK, and makes it Device Owner by itself.
+4. Device Lock opens → type the 7-char **code** → tap Enroll. Done.
+
+### PC fallback (if a phone won't QR-provision)
+Use `provision/enroll-device.bat`: `adb install`, open app, paste the `deviceId|secret|url` fallback string from `/devices`, then `adb shell dpm set-device-owner com.warraich.devicelock/.AdminReceiver`.
 
 ## Manage
 `/devices`: force-lock, force-unlock (ignore overdue), auto, mark lost, release, delete, and today's unlock code per phone. Everything else is automatic from the plan's overdue state.
+
+## Factory Reset Protection (close the recovery-wipe gap)
+`DISALLOW_FACTORY_RESET` only blocks reset from Settings. A recovery-mode wipe can
+still strip Device Owner on many phones. To survive that, the app arms FRP with your
+**shop** Google account via `setFactoryResetProtectionPolicy` — set automatically on
+every phone, no Google sign-in at the counter, and it does **not** need the customer
+to add any account.
+
+Setup:
+1. Make one **dedicated shop Google account** (never a customer's — a wipe would then lock *them* out).
+2. Get its **account ID** (obfuscated Gaia ID, not the email). One way: sign that account in on any Android phone, then read the id with Google's People API `people/me?personFields=metadata` (the `id` under a Google `source`), or use any "Gaia ID" lookup against the signed-in account. It's a long numeric string.
+3. Put it in `app/build.gradle` → `buildConfigField FRP_ACCOUNT_IDS` (comma-separate for several), rebuild.
+
+Caveats (be honest with yourself):
+- **Android 11+ only.** Older phones keep just the Settings-level block.
+- **OEM-dependent.** Honoured on AOSP/Pixel and many recent phones; Samsung One UI and some Vivo/Oppo may ignore the AOSP policy or need their own scheme. Where unsupported it silently no-ops — test per model and don't assume it's armed.
+- On **Release** the app clears the FRP policy so the paid-off phone is clean.
+- This is the shop account securing a financed phone, with signed consent — not capturing or touching the customer's own Google account.
 
 ## Config
 - `applicationId` / package: `com.warraich.devicelock` (change in `app/build.gradle` + `set-device-owner` arg if you rebrand).

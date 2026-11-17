@@ -54,6 +54,7 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         val dpm = applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
         if (lm.isDeviceOwner()) {
             // Hand the phone fully back to the customer: drop restrictions and ownership.
+            lm.clearFrpPolicy()
             runCatching {
                 val admin = AdminReceiver.component(applicationContext)
                 for (r in listOf(

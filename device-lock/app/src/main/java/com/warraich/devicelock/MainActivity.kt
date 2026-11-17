@@ -46,26 +46,41 @@ class MainActivity : AppCompatActivity() {
 
     private fun enrollBlock(): LinearLayout {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        box.addView(TextView(this).apply { text = "Paste enrollment string from the Devices page:"; textSize = 14f })
-        val input = EditText(this).apply {
-            hint = "deviceId|secret|https://your-app-url"
+        box.addView(TextView(this).apply {
+            text = "Enter the enrollment code from the Devices page:"; textSize = 14f
+        })
+        val code = EditText(this).apply {
+            hint = "e.g. K7M2PQR"
+            filters = arrayOf(android.text.InputFilter.AllCaps(), android.text.InputFilter.LengthFilter(7))
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
         }
-        box.addView(input)
+        box.addView(code)
         box.addView(Button(this).apply {
             text = "Enroll this phone"
             setOnClickListener {
-                val parts = input.text.toString().trim().split("|")
-                if (parts.size != 3 || parts.any { it.isBlank() }) {
-                    Toast.makeText(this@MainActivity, "Invalid string", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+                val c = code.text.toString().trim()
+                if (c.length < 6) { Toast.makeText(this@MainActivity, "Enter the code", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+                val base = p.baseUrl
+                if (base.isNullOrBlank()) { Toast.makeText(this@MainActivity, "App has no server URL compiled in", Toast.LENGTH_LONG).show(); return@setOnClickListener }
+                isEnabled = false
+                CoroutineScope(Dispatchers.Main).launch {
+                    val r = withContext(Dispatchers.IO) { Api.claim(base, c) }
+                    if (r.ok) {
+                        p.saveEnrollment(r.deviceId, r.secret, r.baseUrl)
+                        CheckinWorker.schedule(this@MainActivity)
+                        LockManager(this@MainActivity).applyOwnerPolicies()
+                        checkNow()
+                        render()
+                    } else {
+                        isEnabled = true
+                        Toast.makeText(this@MainActivity, "Enroll failed: ${r.error}", Toast.LENGTH_LONG).show()
+                    }
                 }
-                p.saveEnrollment(parts[0], parts[1], parts[2])
-                CheckinWorker.schedule(this@MainActivity)
-                LockManager(this@MainActivity).applyOwnerPolicies()
-                checkNow()
-                render()
             }
+        })
+        box.addView(TextView(this).apply {
+            text = "Device Owner must already be set (via the provisioning QR)."
+            textSize = 12f; setPadding(0, pad(10), 0, 0)
         })
         return box
     }
