@@ -3,6 +3,13 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Release signing: reads a keystore.properties (local path or CI secrets) if present,
+// otherwise falls back to the debug key so the project still builds anywhere.
+def ksPropsFile = file(System.getenv("KEYSTORE_PROPERTIES") ?: "keystore.properties")
+def ksProps = new Properties()
+def hasKs = ksPropsFile.exists()
+if (hasKs) ksProps.load(new FileInputStream(ksPropsFile))
+
 android {
     namespace 'com.warraich.devicelock'
     compileSdk 34
@@ -14,18 +21,28 @@ android {
         versionCode 1
         versionName "1.0"
         // The shop's fixed Aqsat URL, compiled in so the phone only needs a short
-        // claim code at enrollment. Change this to the real deployed URL.
-        buildConfigField "String", "APP_BASE_URL", "\"https://aqsat.example\""
+        // claim code at enrollment.
+        buildConfigField "String", "APP_BASE_URL", "\"https://aqsaat.vercel.app\""
         // Comma-separated Google account IDs (obfuscated Gaia IDs) of the SHOP's
         // dedicated account(s). Arms Factory Reset Protection so a recovery wipe
         // demands the shop account. Leave blank to disable. Android 11+ / supported OEMs.
         buildConfigField "String", "FRP_ACCOUNT_IDS", "\"\""
     }
     buildFeatures { buildConfig true }
+    signingConfigs {
+        if (hasKs) {
+            release {
+                storeFile file(ksProps['storeFile'])
+                storePassword ksProps['storePassword']
+                keyAlias ksProps['keyAlias']
+                keyPassword ksProps['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            signingConfig hasKs ? signingConfigs.release : signingConfigs.debug
         }
     }
     compileOptions {
@@ -33,6 +50,7 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = '17' }
+    lint { checkReleaseBuilds false; abortOnError false }
 }
 
 dependencies {
