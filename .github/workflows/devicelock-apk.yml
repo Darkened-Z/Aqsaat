@@ -1,0 +1,79 @@
+name: Build Device Lock APK
+
+# Builds and signs the Device Owner APK and publishes it to a GitHub Release.
+# Trigger by pushing a tag like devicelock-v1.1.0, or run manually with a version.
+on:
+  push:
+    tags: ['devicelock-v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag (e.g. devicelock-v1.0.1)'
+        required: true
+        default: devicelock-v1.0.1
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: device-lock
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Restore keystore
+        run: echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/devicelock.keystore"
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+
+      - name: Write keystore.properties
+        run: |
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$RUNNER_TEMP/devicelock.keystore" "$KSPW" "$ALIAS" "$KEYPW" > keystore.properties
+        env:
+          KSPW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEYPW: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Build signed APK
+        run: ./gradlew :app:assembleRelease --no-daemon --console=plain
+
+      - name: Compute provisioning checksum
+        id: ck
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort | tail -1)
+          HEX=$("$BT/apksigner" verify --print-certs "$APK" | grep -i 'certificate SHA-256 digest' | grep -oE '[0-9a-f]{64}')
+          CK=$(echo "$HEX" | xxd -r -p | base64 -w0 | tr '+/' '-_' | tr -d '=')
+          echo "checksum=$CK" >> "$GITHUB_OUTPUT"
+          cp "$APK" "$RUNNER_TEMP/device-lock.apk"
+          {
+            echo "### Device Lock APK built"
+            echo "Provisioning signature checksum:"
+            echo '```'
+            echo "$CK"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          name: Device Lock ${{ github.event.inputs.version || github.ref_name }}
+          files: ${{ runner.temp }}/device-lock.apk
+          body: |
+            Signed Device Owner APK for the Aqsaat installment phone-lock.
+
+            Paste into `/devices` → Provisioning QR:
+            - APK URL: this release's `device-lock.apk` asset
+            - Signature checksum: `${{ steps.ck.outputs.checksum }}`
