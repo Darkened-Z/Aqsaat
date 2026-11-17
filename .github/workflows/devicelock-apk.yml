@@ -29,7 +29,8 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      # The ubuntu runner ships the Android SDK (ANDROID_SDK_ROOT set); AGP uses it
+      # and auto-fetches compileSdk/build-tools as needed, so no setup-android step.
 
       - name: Restore keystore
         run: echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/devicelock.keystore"
