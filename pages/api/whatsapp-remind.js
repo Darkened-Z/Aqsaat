@@ -1,20 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin, SHOP_ID, requireMember } from '../../lib/serverAuth';
 const wa = require('../../lib/whatsapp');
-
-const SHOP_ID = 'aqsat-main';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await requireMember(req, res))) return;
 
   const status = wa.getStatus();
   if (status.status !== 'ready') {
     return res.status(503).json({ error: 'WhatsApp not connected. Open Settings → WhatsApp to scan QR.', status: status.status });
   }
 
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  const supabase = createClient('https://ujxrxbzglcsyppwoazll.supabase.co', serviceKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-
-  const { data: shop } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
+  const { data: shop } = await supabaseAdmin.from('shops').select('data').eq('id', SHOP_ID).single();
   if (!shop) return res.status(404).json({ error: 'Shop data not found' });
 
   const d = shop.data;
@@ -54,11 +50,7 @@ export default async function handler(req, res) {
         let phone = meta.phone || null;
         if (!phone) {
           const pLower = p.name.trim().toLowerCase();
-          const customer = customers.find(c => {
-            if (!c.name || !c.phone) return false;
-            const cn = c.name.trim().toLowerCase();
-            return cn === pLower || cn.startsWith(pLower) || pLower.startsWith(cn);
-          });
+          const customer = customers.find(c => c.name && c.phone && c.name.trim().toLowerCase() === pLower);
           if (customer && customer.phone) phone = customer.phone;
         }
         if (phone) {
