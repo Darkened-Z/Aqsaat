@@ -2159,6 +2159,26 @@ export default class App extends React.Component {
     this.setState({ plans: this.state.plans.map(pl => pl.id !== planId ? pl : { ...pl, reportMonth: month || null }) });
   };
 
+  // Handover gate: a financed phone may only be marked handed over once its
+  // device-lock record exists and is provisioned, so none leaves un-enrolled.
+  markHandover = async (planId) => {
+    try {
+      const resp = await this.apiFetch('/api/device/for-plan?planId=' + encodeURIComponent(planId));
+      const r = await resp.json().catch(() => ({}));
+      if (!resp.ok) { alert('Could not verify device lock: ' + (r.error || resp.status)); return; }
+      if (!r.enrolled) {
+        alert('Phone is not enrolled in Device Lock yet.\nEnroll it on the Devices page first, then mark handover.\n\nفون ابھی ڈیوائس لاک میں رجسٹر نہیں ہوا۔ پہلے Devices صفحہ پر رجسٹر کریں۔');
+        return;
+      }
+      this.setState({ plans: this.state.plans.map(pl => pl.id === planId ? { ...pl, handedOver: true, handoverAt: this.todayStr() } : pl) });
+    } catch (e) {
+      alert('Could not reach the server to verify the device. Try again when online.');
+    }
+  };
+  undoHandover = (planId) => {
+    this.requirePin(() => this.setState({ plans: this.state.plans.map(pl => pl.id === planId ? { ...pl, handedOver: false, handoverAt: null } : pl) }));
+  };
+
   openEditPlan = (planId) => {
     const pl = this.state.plans.find(p => p.id === planId);
     if (!pl) return;
@@ -3100,6 +3120,13 @@ export default class App extends React.Component {
           st.lateFees > 0 ? h('div', { style: { marginTop: 4, fontSize: 11, color: '#a4362b', fontWeight: 600 } }, '+ ', h('span', { className: 'mono' }, this.fmtPKR(st.lateFees)), ' late fees') : null,
         ),
       ),
+      pl.status !== 'completed' ? h('div', { style: { marginTop: 14, padding: '10px 12px', borderRadius: 10, background: pl.handedOver ? '#eaf5ee' : '#fef3c7', border: '1px solid ' + (pl.handedOver ? '#bbf7d0' : '#f0e0b0'), display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+        h('div', { style: { flex: 1, minWidth: 160, fontSize: 12, fontWeight: 600, color: pl.handedOver ? '#0f6b4b' : '#7a5a10' } },
+          pl.handedOver ? ('🔒 Phone handed over' + (pl.handoverAt ? ' · ' + this.fmtDate(pl.handoverAt) : '')) : '⚠ Not handed over — enroll Device Lock first'),
+        pl.handedOver
+          ? h('button', { onClick: () => this.undoHandover(pl.id), style: { background: '#fff', color: '#7a7663', padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1px solid #ece8dc', cursor: 'pointer' } }, 'Undo')
+          : h('button', { onClick: () => this.markHandover(pl.id), style: { background: '#0f6b4b', color: '#fff', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer' } }, '✓ Mark handed over'),
+      ) : null,
       h('div', { style: { marginTop: 16 } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6, color: '#5a6a5f' } },
           h('span', {}, this.fmtPKR(st.paidAmount) + ' paid of ' + this.fmtPKR(st.total)),
