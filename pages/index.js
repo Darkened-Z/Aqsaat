@@ -144,10 +144,11 @@ export default class App extends React.Component {
     newAccount: { name: '', nameUr: '', emoji: '💰', balance: '' },
     syncStatus: 'loading', // 'loading' | 'synced' | 'syncing' | 'offline' | 'error'
     authUser: undefined, // undefined = checking, null = signed out
-    loginEmail: '',
+    loginUser: '',
     loginPassword: '',
     loginError: '',
     loginBusy: false,
+    loginRemember: true,
     syncError: '',
     ledger: null,
     udpiEntries: null,
@@ -291,8 +292,15 @@ export default class App extends React.Component {
     // Stored session whose token refresh failed offline: keep working from the
     // local copy; the client refreshes the token and sync resumes once online.
     if (error && localStorage.getItem('aqsat_data')) { this.startSession({ offline: true }); return; }
-    this.setState({ authUser: null });
+    // Prefill a login saved on this device.
+    let saved = null; try { saved = JSON.parse(localStorage.getItem('aqsat_login') || 'null'); } catch (e) {}
+    this.setState({ authUser: null, loginUser: (saved && saved.u) || '', loginPassword: (saved && saved.p) || '', loginRemember: !!saved });
   };
+
+  // Supabase needs an email + a 6+ char password. We present a username and let
+  // short shop passwords through by mapping both behind the scenes.
+  _loginEmail = (u) => { const s = (u || '').trim().toLowerCase(); return s.includes('@') ? s : s + '@aqsaat.local'; };
+  _loginPass = (p) => p + '.Aqsat9';
 
   startSession = (user) => {
     this.setState({ authUser: user }, () => this.initSupabaseSync());
@@ -300,12 +308,16 @@ export default class App extends React.Component {
   };
 
   signIn = async () => {
-    const { loginEmail, loginPassword } = this.state;
-    if (!loginEmail.trim() || !loginPassword) { this.setState({ loginError: 'Enter email and password / ای میل اور پاس ورڈ درج کریں' }); return; }
+    const { loginUser, loginPassword, loginRemember } = this.state;
+    if (!loginUser.trim() || !loginPassword) { this.setState({ loginError: 'Enter username and password / یوزر نیم اور پاس ورڈ درج کریں' }); return; }
     this.setState({ loginBusy: true, loginError: '' });
-    const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail.trim(), password: loginPassword });
-    if (error) { this.setState({ loginBusy: false, loginError: error.message }); return; }
-    this.setState({ loginBusy: false, loginPassword: '' });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: this._loginEmail(loginUser), password: this._loginPass(loginPassword) });
+    if (error) { this.setState({ loginBusy: false, loginError: 'Wrong username or password / غلط یوزر نیم یا پاس ورڈ' }); return; }
+    try {
+      if (loginRemember) localStorage.setItem('aqsat_login', JSON.stringify({ u: loginUser.trim(), p: loginPassword }));
+      else localStorage.removeItem('aqsat_login');
+    } catch (e) {}
+    this.setState({ loginBusy: false });
     this.startSession(data.user);
   };
 
@@ -7523,7 +7535,7 @@ export default class App extends React.Component {
 
   renderLogin() {
     const h = this.h;
-    const { loginEmail, loginPassword, loginError, loginBusy } = this.state;
+    const { loginUser, loginPassword, loginError, loginBusy, loginRemember } = this.state;
     const inp = { width: '100%', border: '1.5px solid #ece8dc', borderRadius: 12, padding: '12px 14px', fontSize: 15, background: '#fdfcf8', outline: 'none', boxSizing: 'border-box', marginBottom: 10 };
     const onKey = e => { if (e.key === 'Enter') this.signIn(); };
     return h('div', { style: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef', padding: 16 } },
@@ -7532,8 +7544,12 @@ export default class App extends React.Component {
         h('div', { style: { width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 24, margin: '0 auto 12px' } }, 'A'),
         h('div', { style: { fontSize: 20, fontWeight: 800, textAlign: 'center', color: '#1a2b1f' } }, 'Aqsat'),
         h('div', { style: { fontSize: 13, color: '#7a7663', textAlign: 'center', marginBottom: 20 } }, 'Sign in to your shop / سائن ان کریں'),
-        h('input', { type: 'email', autoComplete: 'username', placeholder: 'Email', value: loginEmail, onChange: e => this.setState({ loginEmail: e.target.value, loginError: '' }), onKeyDown: onKey, style: inp }),
+        h('input', { type: 'text', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false, autoComplete: 'username', placeholder: 'Username / یوزر نیم', value: loginUser, onChange: e => this.setState({ loginUser: e.target.value, loginError: '' }), onKeyDown: onKey, style: inp }),
         h('input', { type: 'password', autoComplete: 'current-password', placeholder: 'Password / پاس ورڈ', value: loginPassword, onChange: e => this.setState({ loginPassword: e.target.value, loginError: '' }), onKeyDown: onKey, style: inp }),
+        h('label', { style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#5a6a5f', marginBottom: 12, cursor: 'pointer', userSelect: 'none' } },
+          h('input', { type: 'checkbox', checked: loginRemember, onChange: e => this.setState({ loginRemember: e.target.checked }), style: { width: 16, height: 16 } }),
+          'Save login on this device / اس ڈیوائس پر محفوظ کریں',
+        ),
         loginError ? h('div', { style: { color: '#b91c1c', fontSize: 13, fontWeight: 600, marginBottom: 10, textAlign: 'center' } }, loginError) : null,
         h('button', { onClick: this.signIn, disabled: loginBusy, style: { width: '100%', padding: 13, borderRadius: 12, background: loginBusy ? '#7a7663' : '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 15, border: 'none', cursor: loginBusy ? 'wait' : 'pointer' } }, loginBusy ? 'Signing in…' : 'Sign in'),
       ),
