@@ -29,7 +29,8 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      # The ubuntu runner ships the Android SDK (ANDROID_SDK_ROOT set); AGP uses it
+      # and auto-fetches compileSdk/build-tools as needed, so no setup-android step.
 
       - name: Restore keystore
         run: echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/devicelock.keystore"
@@ -39,7 +40,7 @@ jobs:
       - name: Write keystore.properties
         run: |
           printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
-            "$RUNNER_TEMP/devicelock.keystore" "$KSPW" "$ALIAS" "$KEYPW" > keystore.properties
+            "$RUNNER_TEMP/devicelock.keystore" "$KSPW" "$ALIAS" "$KEYPW" > "$RUNNER_TEMP/keystore.properties"
         env:
           KSPW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -47,6 +48,8 @@ jobs:
 
       - name: Build signed APK
         run: ./gradlew :app:assembleRelease --no-daemon --console=plain
+        env:
+          KEYSTORE_PROPERTIES: ${{ runner.temp }}/keystore.properties
 
       - name: Compute provisioning checksum
         id: ck
