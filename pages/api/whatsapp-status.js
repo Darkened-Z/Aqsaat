@@ -1,7 +1,10 @@
+import { requireMember } from '../../lib/serverAuth';
 const wa = require('../../lib/whatsapp');
 const QRCode = require('qrcode');
 
 export default async function handler(req, res) {
+  if (!(await requireMember(req, res))) return;
+
   if (req.method === 'GET') {
     const status = wa.getStatus();
     const qrRaw = wa.getQR();

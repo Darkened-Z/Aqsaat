@@ -1,0 +1,13 @@
+<resources>
+    <style name="Theme.DeviceLock" parent="Theme.AppCompat.DayNight">
+        <item name="colorPrimary">#0f6b4b</item>
+        <item name="colorPrimaryDark">#0b4f37</item>
+        <item name="colorAccent">#14a374</item>
+    </style>
+
+    <!-- Lock screen: no title bar, cannot be dismissed casually. -->
+    <style name="Theme.DeviceLock.Lock" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:statusBarColor">#0b4f37</item>
+    </style>
+</resources>

@@ -1,6 +1,5 @@
 import React from 'react';
 import Head from 'next/head';
-import { supabase, SHOP_ID } from '../lib/supabase';
 
 function fmtPKR(n) {
   if (n == null || isNaN(n)) return 'Rs 0';
@@ -36,46 +35,22 @@ export default class Portal extends React.Component {
     }
   }
 
-  normalizePhone(raw) {
-    return (raw || '').replace(/[^0-9]/g, '');
-  }
-
-  matchesPhone(target, query) {
-    if (!target || target.length < 7 || !query || query.length < 7) return false;
-    const t10 = target.slice(-10);
-    const q10 = query.slice(-10);
-    return target === query || t10 === q10 || target.endsWith(q10) || query.endsWith(t10);
-  }
-
   lookup = async () => {
-    const phone = this.normalizePhone(this.state.phone);
-    if (phone.length < 7) {
-      this.setState({ error: 'Please enter a valid phone number (at least 7 digits) / درست فون نمبر درج کریں' });
+    const phone = (this.state.phone || '').replace(/[^0-9]/g, '');
+    if (phone.length < 10) {
+      this.setState({ error: 'Please enter your full phone number / مکمل فون نمبر درج کریں' });
       return;
     }
     this.setState({ loading: true, error: '', found: false });
     try {
-      const { data, error } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
-      if (error) throw error;
-      const d = data.data;
-      const customers = (d.customers || []).filter(c => !c._deleted);
-      const plans = (d.plans || []).filter(p => !p._deleted);
-      const products = (d.products || []).filter(p => !p._deleted);
-      const settings = d.settings || {};
-
-      const customer = customers.find(c => {
-        const cp = this.normalizePhone(c.phone || '');
-        const ca = this.normalizePhone(c.altPhone || '');
-        return this.matchesPhone(cp, phone) || (ca && this.matchesPhone(ca, phone));
-      });
-
-      if (!customer) {
-        this.setState({ loading: false, error: 'No account found with this number / اس نمبر سے کوئی اکاؤنٹ نہیں ملا', found: false });
+      const resp = await fetch('/api/portal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+      if (!resp.ok) throw new Error('lookup failed');
+      const r = await resp.json();
+      if (!r.found) {
+        this.setState({ loading: false, settings: r.settings || {}, error: 'No account found with this number / اس نمبر سے کوئی اکاؤنٹ نہیں ملا', found: false });
         return;
       }
-
-      const myPlans = plans.filter(p => p.customerId === customer.id);
-      this.setState({ loading: false, customer, plans: myPlans, products, settings, found: true, error: '' });
+      this.setState({ loading: false, customer: r.customer, plans: r.plans, products: r.products, settings: r.settings, found: true, error: '' });
     } catch (e) {
       this.setState({ loading: false, error: 'Connection error. Please try again. / دوبارہ کوشش کریں' });
     }

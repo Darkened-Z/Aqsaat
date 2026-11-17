@@ -143,6 +143,11 @@ export default class App extends React.Component {
     addAccountOpen: false,
     newAccount: { name: '', nameUr: '', emoji: '💰', balance: '' },
     syncStatus: 'loading', // 'loading' | 'synced' | 'syncing' | 'offline' | 'error'
+    authUser: undefined, // undefined = checking, null = signed out
+    loginEmail: '',
+    loginPassword: '',
+    loginError: '',
+    loginBusy: false,
     syncError: '',
     ledger: null,
     udpiEntries: null,
@@ -223,11 +228,9 @@ export default class App extends React.Component {
 
     const dm  = localStorage.getItem('aqsat_dark') === '1';
     const pin = localStorage.getItem('aqsat_pin') || '';
-    const forceUdhar = hostname.includes('udhar') || hostname.includes('hisaab') || window.location.hash === '#udharbook';
-    this.setState({ darkMode: dm, savedPin: pin, pinLocked: forceUdhar ? false : !!pin, ...(forceUdhar ? { route: 'udharbook' } : {}) }, () => {
-      this.initSupabaseSync();
-    });
-    fetch('/api/whatsapp-status').then(r => r.json()).then(d => this.setState({ waStatus: d.status || 'disconnected' })).catch(() => {});
+    const udharHost = hostname.includes('udhar') || hostname.includes('hisaab');
+    const forceUdhar = udharHost || window.location.hash === '#udharbook';
+    this.setState({ darkMode: dm, savedPin: pin, pinLocked: udharHost ? false : !!pin, ...(forceUdhar ? { route: 'udharbook' } : {}) }, this.initAuth);
     this._onVisibility = () => {
       if (document.visibilityState === 'visible') this._refetchCloud();
     };
@@ -236,6 +239,8 @@ export default class App extends React.Component {
     // Offline is a normal state in a shop, not an error. Edits keep working
     // against localStorage; this just flushes them the moment we are back.
     this._onOnline = () => {
+      if (!this.state.authUser) return;
+      if (!this._syncChannel) { this.initSupabaseSync(); return; }
       this.setState({ syncStatus: 'syncing' });
       this._refetchCloud();
       if (this._pendingSync) this.pushToSupabase();
@@ -269,12 +274,63 @@ export default class App extends React.Component {
 
   componentWillUnmount() {
     if (this._syncChannel) supabase.removeChannel(this._syncChannel);
+    if (this._authSub) this._authSub.unsubscribe();
     clearTimeout(this._syncTimer);
     if (this._onVisibility) document.removeEventListener('visibilitychange', this._onVisibility);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
     if (this._onOffline) window.removeEventListener('offline', this._onOffline);
     if (this._onKeydown) window.removeEventListener('keydown', this._onKeydown);
   }
+
+  initAuth = async () => {
+    this._authSub = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') this._clearSession();
+    }).data.subscription;
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (session) { this.startSession(session.user); return; }
+    // Stored session whose token refresh failed offline: keep working from the
+    // local copy; the client refreshes the token and sync resumes once online.
+    if (error && localStorage.getItem('aqsat_data')) { this.startSession({ offline: true }); return; }
+    this.setState({ authUser: null });
+  };
+
+  startSession = (user) => {
+    this.setState({ authUser: user }, () => this.initSupabaseSync());
+    this.apiFetch('/api/whatsapp-status').then(r => r.json()).then(d => this.setState({ waStatus: d.status || 'disconnected' })).catch(() => {});
+  };
+
+  signIn = async () => {
+    const { loginEmail, loginPassword } = this.state;
+    if (!loginEmail.trim() || !loginPassword) { this.setState({ loginError: 'Enter email and password / ای میل اور پاس ورڈ درج کریں' }); return; }
+    this.setState({ loginBusy: true, loginError: '' });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail.trim(), password: loginPassword });
+    if (error) { this.setState({ loginBusy: false, loginError: error.message }); return; }
+    this.setState({ loginBusy: false, loginPassword: '' });
+    this.startSession(data.user);
+  };
+
+  signOut = async () => {
+    const warn = this._pendingSync ? '\n\n⚠️ Some changes have not synced yet and will be lost.' : '';
+    if (!confirm('Sign out of this device?' + warn + '\nاس ڈیوائس سے سائن آؤٹ کریں؟')) return;
+    await supabase.auth.signOut();
+  };
+
+  _clearSession = () => {
+    if (this._syncChannel) { supabase.removeChannel(this._syncChannel); this._syncChannel = null; }
+    clearTimeout(this._syncTimer);
+    this._syncSnapshot = null;
+    this._pendingSync = false;
+    localStorage.removeItem('aqsat_data');
+    localStorage.removeItem('aqsat_pin');
+    this.setState({ authUser: null, customers: null, products: null, plans: null, ledger: null, udpiEntries: null, invoices: [], staff: [], savedPin: '', pinLocked: false });
+  };
+
+  apiFetch = async (url, opts = {}) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers = { ...(opts.headers || {}) };
+    if (session) headers.Authorization = 'Bearer ' + session.access_token;
+    return fetch(url, { ...opts, headers });
+  };
 
   _applyCloudData = (d) => {
     this._fromCloud = true;
@@ -496,8 +552,9 @@ export default class App extends React.Component {
     if (!rp) { alert('Set a 6-digit Reset PIN in Settings first.\nپہلے سیٹنگز میں 6 ہندسوں کا ری سیٹ PIN مقرر کریں۔'); return; }
     this.requireResetPin(() => {
       if (!confirm('⚠️ FINAL WARNING\nThis will permanently delete ALL customers, products, and plans.\n\nیہ تمام گاہکوں، پروڈکٹس اور پلانز کو مستقل طور پر ڈیلیٹ کر دے گا۔')) return;
-      localStorage.removeItem('aqsat_data');
-      this.setState({ customers: [], products: [], plans: [], ledger: [], udpiEntries: [], route: 'dashboard' });
+      const del = arr => (arr || []).map(r => ({ ...r, _deleted: true }));
+      const { customers, products, plans, ledger, udpiEntries } = this.state;
+      this.setState({ customers: del(customers), products: del(products), plans: del(plans), ledger: del(ledger), udpiEntries: del(udpiEntries), route: 'dashboard' });
     });
   };
   requireResetPin = (action) => {
@@ -860,13 +917,7 @@ export default class App extends React.Component {
     if (meta && meta.phone) return meta.phone;
     const pName = personName.trim().toLowerCase();
     const custs = this.state.customers || [];
-    let c = custs.find(x => x.name && x.name.trim().toLowerCase() === pName);
-    if (c && c.phone) return c.phone;
-    c = custs.find(x => {
-      if (!x.name || !x.phone) return false;
-      const xn = x.name.trim().toLowerCase();
-      return pName.startsWith(xn) || xn.startsWith(pName);
-    });
+    const c = custs.find(x => !x._deleted && x.phone && x.name && x.name.trim().toLowerCase() === pName);
     return c ? c.phone : null;
   };
   shareUdharStatement = (personName) => {
@@ -1280,7 +1331,7 @@ export default class App extends React.Component {
   };
   sendWhatsAppAPI = async (phone, message) => {
     try {
-      const resp = await fetch('/api/whatsapp-send', {
+      const resp = await this.apiFetch('/api/whatsapp-send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, message }),
       });
@@ -1293,7 +1344,7 @@ export default class App extends React.Component {
   sendAutoReminders = async () => {
     this.setState({ udharAutoSending: true });
     try {
-      const resp = await fetch('/api/whatsapp-remind', {
+      const resp = await this.apiFetch('/api/whatsapp-remind', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targets: 'auto' }),
       });
@@ -1331,14 +1382,14 @@ export default class App extends React.Component {
   };
   checkWhatsAppConfig = async () => {
     try {
-      const resp = await fetch('/api/whatsapp-status');
+      const resp = await this.apiFetch('/api/whatsapp-status');
       const data = await resp.json();
       return data.status === 'ready';
     } catch { return false; }
   };
   pollWhatsAppStatus = async () => {
     try {
-      const resp = await fetch('/api/whatsapp-status');
+      const resp = await this.apiFetch('/api/whatsapp-status');
       const data = await resp.json();
       this.setState({ waStatus: data.status, waQR: data.qr || null, waBotEnabled: data.botEnabled || false });
     } catch {}
@@ -1354,7 +1405,7 @@ export default class App extends React.Component {
   };
   connectWhatsApp = async () => {
     try {
-      await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'connect' }) });
+      await this.apiFetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'connect' }) });
       this.setState({ waModal: true });
       this.startWAPolling();
     } catch (err) { alert('Failed to start WhatsApp: ' + err.message); }
@@ -1362,21 +1413,21 @@ export default class App extends React.Component {
   disconnectWhatsApp = async () => {
     if (!confirm('Disconnect WhatsApp?\nواٹس ایپ منقطع کریں؟')) return;
     try {
-      await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'disconnect' }) });
+      await this.apiFetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'disconnect' }) });
       this.setState({ waStatus: 'disconnected', waQR: null, waModal: false });
       this.stopWAPolling();
     } catch (err) { alert('Error: ' + err.message); }
   };
   toggleWABot = async () => {
     try {
-      const resp = await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'bot-toggle', enabled: !this.state.waBotEnabled }) });
+      const resp = await this.apiFetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'bot-toggle', enabled: !this.state.waBotEnabled }) });
       const data = await resp.json();
       this.setState({ waBotEnabled: data.botEnabled });
     } catch (err) { alert('Error: ' + err.message); }
   };
   fetchBotLog = async () => {
     try {
-      const resp = await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'bot-log' }) });
+      const resp = await this.apiFetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'bot-log' }) });
       const data = await resp.json();
       this.setState({ waBotLog: data.log || [] });
     } catch {}
@@ -1385,7 +1436,7 @@ export default class App extends React.Component {
     if (!confirm('Send reminders to all overdue customers?\nتمام بقایا گاہکوں کو یاد دہانی بھیجیں؟')) return;
     this.setState({ waReminding: true });
     try {
-      const resp = await fetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send-reminders' }) });
+      const resp = await this.apiFetch('/api/whatsapp-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send-reminders' }) });
       const data = await resp.json();
       alert('Sent: ' + (data.sent || 0) + ' | Failed: ' + (data.failed || 0) + '\nبھیجے: ' + (data.sent || 0) + ' | ناکام: ' + (data.failed || 0));
     } catch (err) { alert('Error: ' + err.message); }
@@ -1851,7 +1902,7 @@ export default class App extends React.Component {
     else { prompt('Copy this link:', link); }
   };
   exportBackup = () => {
-    const data = { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], exportedAt: new Date().toISOString(), version: 2 };
+    const data = { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], invoices: this.state.invoices || [], staff: this.state.staff || [], exportedAt: new Date().toISOString(), version: 2 };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1870,7 +1921,18 @@ export default class App extends React.Component {
           const d = JSON.parse(e.target.result);
           if (!d.customers || !d.products || !d.plans) { alert('Invalid backup file'); return; }
           if (!window.confirm(`Import backup?\n\nThis will replace:\n• ${d.customers.length} customers\n• ${d.products.length} products\n• ${d.plans.length} plans\n\nCurrent data will be overwritten.`)) return;
-          this.setState({ customers: d.customers, products: d.products, plans: d.plans, settings: d.settings || this.state.settings, ledger: d.ledger || [], udpiEntries: d.udpiEntries || [] });
+          // Rows missing from the backup are soft-deleted; a plain replace would be
+          // undone by the sync merge, which keeps every cloud row not marked deleted.
+          const replace = (cur, inc) => {
+            const ids = new Set(inc.map(r => r && r.id));
+            return [...inc, ...(cur || []).filter(r => r && r.id && !ids.has(r.id)).map(r => ({ ...r, _deleted: true }))];
+          };
+          const st = this.state;
+          this.setState({
+            customers: replace(st.customers, d.customers), products: replace(st.products, d.products), plans: replace(st.plans, d.plans),
+            settings: d.settings || st.settings, ledger: replace(st.ledger, d.ledger || []), udpiEntries: replace(st.udpiEntries, d.udpiEntries || []),
+            ...(d.invoices ? { invoices: replace(st.invoices, d.invoices) } : {}), ...(d.staff ? { staff: replace(st.staff, d.staff) } : {}),
+          });
           alert('✓ Backup imported successfully!');
         } catch(e) { alert('Could not read file — make sure it is a valid Aqsat backup.'); }
       };
@@ -2095,6 +2157,26 @@ export default class App extends React.Component {
 
   setPlanReportMonth = (planId, month) => {
     this.setState({ plans: this.state.plans.map(pl => pl.id !== planId ? pl : { ...pl, reportMonth: month || null }) });
+  };
+
+  // Handover gate: a financed phone may only be marked handed over once its
+  // device-lock record exists and is provisioned, so none leaves un-enrolled.
+  markHandover = async (planId) => {
+    try {
+      const resp = await this.apiFetch('/api/device/for-plan?planId=' + encodeURIComponent(planId));
+      const r = await resp.json().catch(() => ({}));
+      if (!resp.ok) { alert('Could not verify device lock: ' + (r.error || resp.status)); return; }
+      if (!r.enrolled) {
+        alert('Phone is not enrolled in Device Lock yet.\nEnroll it on the Devices page first, then mark handover.\n\nفون ابھی ڈیوائس لاک میں رجسٹر نہیں ہوا۔ پہلے Devices صفحہ پر رجسٹر کریں۔');
+        return;
+      }
+      this.setState({ plans: this.state.plans.map(pl => pl.id === planId ? { ...pl, handedOver: true, handoverAt: this.todayStr() } : pl) });
+    } catch (e) {
+      alert('Could not reach the server to verify the device. Try again when online.');
+    }
+  };
+  undoHandover = (planId) => {
+    this.requirePin(() => this.setState({ plans: this.state.plans.map(pl => pl.id === planId ? { ...pl, handedOver: false, handoverAt: null } : pl) }));
   };
 
   openEditPlan = (planId) => {
@@ -3038,6 +3120,13 @@ export default class App extends React.Component {
           st.lateFees > 0 ? h('div', { style: { marginTop: 4, fontSize: 11, color: '#a4362b', fontWeight: 600 } }, '+ ', h('span', { className: 'mono' }, this.fmtPKR(st.lateFees)), ' late fees') : null,
         ),
       ),
+      pl.status !== 'completed' ? h('div', { style: { marginTop: 14, padding: '10px 12px', borderRadius: 10, background: pl.handedOver ? '#eaf5ee' : '#fef3c7', border: '1px solid ' + (pl.handedOver ? '#bbf7d0' : '#f0e0b0'), display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+        h('div', { style: { flex: 1, minWidth: 160, fontSize: 12, fontWeight: 600, color: pl.handedOver ? '#0f6b4b' : '#7a5a10' } },
+          pl.handedOver ? ('🔒 Phone handed over' + (pl.handoverAt ? ' · ' + this.fmtDate(pl.handoverAt) : '')) : '⚠ Not handed over — enroll Device Lock first'),
+        pl.handedOver
+          ? h('button', { onClick: () => this.undoHandover(pl.id), style: { background: '#fff', color: '#7a7663', padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1px solid #ece8dc', cursor: 'pointer' } }, 'Undo')
+          : h('button', { onClick: () => this.markHandover(pl.id), style: { background: '#0f6b4b', color: '#fff', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer' } }, '✓ Mark handed over'),
+      ) : null,
       h('div', { style: { marginTop: 16 } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6, color: '#5a6a5f' } },
           h('span', {}, this.fmtPKR(st.paidAmount) + ' paid of ' + this.fmtPKR(st.total)),
@@ -3934,6 +4023,14 @@ export default class App extends React.Component {
             h('input', { type: 'file', accept: '.json', style: { display: 'none' }, onChange: e => { this.importBackup(e.target.files[0]); e.target.value = ''; } }),
           ),
         ),
+      ]),
+      h('div', { style: { height: 16 } }),
+      this.card([
+        h('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 8 } }, 'Account'),
+        row('Signed in as', 'لاگ ان', h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+          h('span', { style: { fontSize: 13 } }, (this.state.authUser && this.state.authUser.email) || 'Offline session'),
+          h('button', { onClick: this.signOut, style: { padding: '6px 12px', borderRadius: 8, background: '#f4f1e6', color: '#3a4a3f', fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' } }, 'Sign out'),
+        )),
       ]),
       h('div', { style: { height: 16 } }),
       this.card([
@@ -7424,6 +7521,25 @@ export default class App extends React.Component {
     );
   }
 
+  renderLogin() {
+    const h = this.h;
+    const { loginEmail, loginPassword, loginError, loginBusy } = this.state;
+    const inp = { width: '100%', border: '1.5px solid #ece8dc', borderRadius: 12, padding: '12px 14px', fontSize: 15, background: '#fdfcf8', outline: 'none', boxSizing: 'border-box', marginBottom: 10 };
+    const onKey = e => { if (e.key === 'Enter') this.signIn(); };
+    return h('div', { style: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef', padding: 16 } },
+      h(Head, {}, h('title', {}, 'Sign in — Aqsat')),
+      h('div', { style: { width: '100%', maxWidth: 360, background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #ece8dc' } },
+        h('div', { style: { width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 24, margin: '0 auto 12px' } }, 'A'),
+        h('div', { style: { fontSize: 20, fontWeight: 800, textAlign: 'center', color: '#1a2b1f' } }, 'Aqsat'),
+        h('div', { style: { fontSize: 13, color: '#7a7663', textAlign: 'center', marginBottom: 20 } }, 'Sign in to your shop / سائن ان کریں'),
+        h('input', { type: 'email', autoComplete: 'username', placeholder: 'Email', value: loginEmail, onChange: e => this.setState({ loginEmail: e.target.value, loginError: '' }), onKeyDown: onKey, style: inp }),
+        h('input', { type: 'password', autoComplete: 'current-password', placeholder: 'Password / پاس ورڈ', value: loginPassword, onChange: e => this.setState({ loginPassword: e.target.value, loginError: '' }), onKeyDown: onKey, style: inp }),
+        loginError ? h('div', { style: { color: '#b91c1c', fontSize: 13, fontWeight: 600, marginBottom: 10, textAlign: 'center' } }, loginError) : null,
+        h('button', { onClick: this.signIn, disabled: loginBusy, style: { width: '100%', padding: 13, borderRadius: 12, background: loginBusy ? '#7a7663' : '#0f6b4b', color: 'white', fontWeight: 700, fontSize: 15, border: 'none', cursor: loginBusy ? 'wait' : 'pointer' } }, loginBusy ? 'Signing in…' : 'Sign in'),
+      ),
+    );
+  }
+
   renderPinLock() {
     const h = this.h;
     const pin = this.state.enteredPin;
@@ -7450,6 +7566,7 @@ export default class App extends React.Component {
 
   // ─── main layout ───
   render() {
+    if (!this._isDemo && this.state.authUser === null) return this.renderLogin();
     if (!this.state.customers) {
       return (
         <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef' }}>
