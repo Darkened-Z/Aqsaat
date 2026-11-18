@@ -1,6 +1,6 @@
 import React from 'react';
 import Head from 'next/head';
-import { supabase } from '../lib/supabase';
+import { supabase, getSessionSafe } from '../lib/supabase';
 
 const C = { green: '#0f6b4b', red: '#b91c1c', amber: '#b45309', ink: '#1a2b1f', mut: '#7a7663', line: '#ece8dc', bg: '#f7f5ef' };
 
@@ -15,7 +15,7 @@ export default class Devices extends React.Component {
 
   async componentDidMount() {
     try { const s = JSON.parse(localStorage.getItem('devicelock_qrcfg') || '{}'); if (s && typeof s === 'object') this.setState(st => ({ qrCfg: { ...st.qrCfg, ...s } })); } catch (e) {}
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await getSessionSafe();
     if (session) this.onAuthed(session.user); else this.setState({ authUser: null });
   }
 
@@ -36,7 +36,7 @@ export default class Devices extends React.Component {
   onAuthed = (user) => { this.setState({ authUser: user }); this.load(); };
 
   token = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await getSessionSafe();
     return session ? session.access_token : '';
   };
   api = async (method, body) => {
