@@ -1,9 +1,12 @@
 import '../styles/globals.css';
 import { useEffect } from 'react';
+import { useRouter } from 'next/router';
 
 export default function App({ Component, pageProps }) {
+  const router = useRouter();
   useEffect(() => {
-    window.__aqsatReady = true;
+    // The main app flags itself ready only once it is past "Loading…".
+    if (router.pathname !== '/') window.__aqsatReady = true;
     if (!('serviceWorker' in navigator)) return;
     // Register, then actively pull updates so a stale cached shell (which can
     // reference JS chunks a later deploy removed, hanging the app on a phone)
