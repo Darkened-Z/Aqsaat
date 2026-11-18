@@ -350,6 +350,14 @@ export default class App extends React.Component {
     return fetch(url, { ...opts, headers });
   };
 
+  // iPhone Safari caps localStorage at ~5MB; a full shop blob can exceed it and
+  // the throw used to leave the app on "Loading…" forever. The cloud is the
+  // source of truth, so a failed local cache write is non-fatal.
+  _saveLocal = (obj) => {
+    try { localStorage.setItem('aqsat_data', JSON.stringify(obj)); }
+    catch (e) { try { localStorage.removeItem('aqsat_data'); } catch (e2) {} }
+  };
+
   _applyCloudData = (d) => {
     this._fromCloud = true;
     this._loadedCloud = true;
@@ -367,7 +375,7 @@ export default class App extends React.Component {
     if (cloudPin) { localStorage.setItem('aqsat_pin', cloudPin); }
     const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced' };
     if (cloudPin) payload.savedPin = cloudPin;
-    localStorage.setItem('aqsat_data', JSON.stringify(merged));
+    this._saveLocal(merged);
     this._syncSnapshot = this._snapshotOf(merged);
     this.setState(payload, () => this.processRecurring());
   };
@@ -454,7 +462,7 @@ export default class App extends React.Component {
         const stamped = rawLocal ? this._stampLocalChanges(rawLocal) : null;
         const merged = stamped ? this._mergeData(stamped, data.data) : this._mergeData(this.state, data.data);
         this._fromCloud = true;
-        localStorage.setItem('aqsat_data', JSON.stringify(merged));
+        this._saveLocal(merged);
         this._syncSnapshot = this._snapshotOf(merged);
         const cloudPin = (merged.settings || {}).pin || '';
         if (cloudPin) localStorage.setItem('aqsat_pin', cloudPin);
@@ -553,7 +561,7 @@ export default class App extends React.Component {
     const localData = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], invoices: invoices || [], staff: staff || [] };
     // No connection: keep the work safely on the device and wait for 'online'.
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      try { localStorage.setItem('aqsat_data', JSON.stringify(localData)); } catch (e) {}
+      this._saveLocal(localData);
       this._pendingSync = true;
       this.setState({ syncStatus: 'offline' });
       return;
@@ -565,14 +573,14 @@ export default class App extends React.Component {
       // replace the cloud with this device's copy and destroy every row it has
       // not seen, so abort and let the next push retry.
       if (readErr) {
-        localStorage.setItem('aqsat_data', JSON.stringify(localData));
+        this._saveLocal(localData);
         this._pendingSync = true;
         this.setState({ syncStatus: 'error', syncError: readErr.message || 'sync read failed' });
         return;
       }
       const stamped = this._stampLocalChanges(localData);
       const merged = cloud?.data ? this._mergeData(stamped, cloud.data) : stamped;
-      localStorage.setItem('aqsat_data', JSON.stringify(merged));
+      this._saveLocal(merged);
       const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: merged, updated_at: new Date().toISOString() });
       if (error) {
         this._pendingSync = true;
@@ -586,7 +594,7 @@ export default class App extends React.Component {
     } catch(e) {
       // Keep the full local copy — every collection, udpiEntries included — and
       // push nothing. A partial object here used to wipe the whole Udhar Book.
-      localStorage.setItem('aqsat_data', JSON.stringify(localData));
+      this._saveLocal(localData);
       this._pendingSync = true;
       const off = typeof navigator !== 'undefined' && navigator.onLine === false;
       this.setState({ syncStatus: off ? 'offline' : 'error', syncError: off ? '' : ((e && e.message) || 'sync failed') });
@@ -7620,6 +7628,7 @@ export default class App extends React.Component {
 
   // ─── main layout ───
   render() {
+    if (typeof window !== 'undefined' && (this.state.customers || this.state.authUser === null)) window.__aqsatReady = true;
     if (!this._isDemo && this.state.authUser === null) return this.renderLogin();
     if (!this.state.customers) {
       return (
