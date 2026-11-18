@@ -9,7 +9,7 @@ export default class Devices extends React.Component {
     authUser: undefined, email: '', password: '', authErr: '', busy: false,
     devices: null, error: '', enroll: null, enrollBusy: false,
     form: { label: '', planId: '', customerId: '', graceDays: '' },
-    qrCfg: { apkUrl: '', checksum: '', ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
+    qrCfg: { apkUrl: 'https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.0.1/device-lock.apk', checksum: 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk', ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
   };
 
   async componentDidMount() {
@@ -157,6 +157,10 @@ export default class Devices extends React.Component {
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, padding: 16, marginBottom: 18 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Provisioning QR (set up once, no PC)</div>
           <div style={{ fontSize: 12, color: C.mut, marginBottom: 10 }}>On a factory-reset phone, tap the first welcome screen 6 times, then scan this. Same QR for every phone.</div>
+          <div style={{ marginBottom: 10 }}>
+            <a href="https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.0.1/device-lock.apk" target="_blank" rel="noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download lock app (APK)</a>
+            <span style={{ fontSize: 11, color: C.mut, marginLeft: 10 }}>v1.0.1 · already filled below</span>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
             <input placeholder="APK download URL (https)" value={this.state.qrCfg.apkUrl} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, apkUrl: e.target.value } })} style={fi} />
             <input placeholder="APK signature checksum" value={this.state.qrCfg.checksum} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, checksum: e.target.value } })} style={fi} />
