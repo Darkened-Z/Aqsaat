@@ -370,7 +370,11 @@ export default class App extends React.Component {
   initSupabaseSync = async () => {
     this.setState({ syncStatus: 'loading' });
     try {
-      const { data, error } = await supabase.from('shops').select('data').eq('id', SHOP_ID).single();
+      // Watchdog: a hung request on a flaky phone must not leave the app spinning
+      // forever. On timeout we throw into the catch, which falls back to the local
+      // copy (or an empty shop) so the UI always renders.
+      const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('sync timeout')), ms))]);
+      const { data, error } = await withTimeout(supabase.from('shops').select('data').eq('id', SHOP_ID).single(), 12000);
       if (error && error.code !== 'PGRST116') throw error;
 
       const cloudCount = (data?.data?.plans?.length || 0) + (data?.data?.customers?.length || 0);
