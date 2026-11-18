@@ -10,6 +10,7 @@ export default class Devices extends React.Component {
     devices: null, error: '', enroll: null, enrollBusy: false,
     form: { label: '', planId: '', customerId: '', graceDays: '' },
     qrCfg: { apkUrl: 'https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.0.1/device-lock.apk', checksum: 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk', ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
+    tab: 'all', qrOpen: false,
   };
 
   async componentDidMount() {
@@ -48,10 +49,13 @@ export default class Devices extends React.Component {
   };
 
   signIn = async () => {
-    if (!this.state.email.trim() || !this.state.password) { this.setState({ authErr: 'Enter email and password' }); return; }
+    const u = this.state.email.trim();
+    if (!u || !this.state.password) { this.setState({ authErr: 'Enter username and password' }); return; }
     this.setState({ busy: true, authErr: '' });
-    const { data, error } = await supabase.auth.signInWithPassword({ email: this.state.email.trim(), password: this.state.password });
-    if (error) { this.setState({ busy: false, authErr: error.message }); return; }
+    // Same mapping as the main app: username -> hidden email, short password padded.
+    const email = u.includes('@') ? u.toLowerCase() : u.toLowerCase() + '@aqsaat.local';
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: this.state.password + '.Aqsat9' });
+    if (error) { this.setState({ busy: false, authErr: 'Wrong username or password' }); return; }
     this.setState({ busy: false, password: '' });
     this.onAuthed(data.user);
   };
@@ -107,7 +111,7 @@ export default class Devices extends React.Component {
         <div style={{ width: '100%', maxWidth: 360, background: '#fff', borderRadius: 20, padding: 24, border: '1px solid ' + C.line }}>
           <div style={{ fontSize: 20, fontWeight: 800, textAlign: 'center' }}>Device Lock</div>
           <div style={{ fontSize: 13, color: C.mut, textAlign: 'center', marginBottom: 20 }}>Sign in with your shop account</div>
-          <input type="email" placeholder="Email" value={this.state.email} onChange={e => this.setState({ email: e.target.value, authErr: '' })} onKeyDown={onKey} style={inp} />
+          <input type="text" autoCapitalize="none" autoCorrect="off" placeholder="Username" value={this.state.email} onChange={e => this.setState({ email: e.target.value, authErr: '' })} onKeyDown={onKey} style={inp} />
           <input type="password" placeholder="Password" value={this.state.password} onChange={e => this.setState({ password: e.target.value, authErr: '' })} onKeyDown={onKey} style={inp} />
           {this.state.authErr ? <div style={{ color: C.red, fontSize: 13, fontWeight: 600, marginBottom: 10, textAlign: 'center' }}>{this.state.authErr}</div> : null}
           <button onClick={this.signIn} disabled={this.state.busy} style={{ width: '100%', padding: 13, borderRadius: 12, background: this.state.busy ? C.mut : C.green, color: '#fff', fontWeight: 700, fontSize: 15, border: 'none', cursor: 'pointer' }}>{this.state.busy ? 'Signing in…' : 'Sign in'}</button>
@@ -116,29 +120,42 @@ export default class Devices extends React.Component {
     );
   }
 
+  catOf = (d) => d.status === 'released' ? 'released' : d.status === 'lost' ? 'lost' : d.current === 'lock' ? 'locked' : 'active';
+
   renderApp() {
-    const { devices, error, enroll, form } = this.state;
+    const { devices, error, enroll, form, tab, qrOpen } = this.state;
     const fi = { border: '1px solid ' + C.line, borderRadius: 8, padding: '8px 10px', fontSize: 13, background: '#fdfcf8', outline: 'none', width: '100%', boxSizing: 'border-box' };
+    const ghost = { padding: '8px 12px', borderRadius: 10, background: '#fff', border: '1px solid ' + C.line, fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' };
     const badge = (cur) => {
-      const m = { ok: ['#eaf5ee', C.green, 'OK'], warn: ['#fef3c7', C.amber, 'WARNING'], lock: ['#fdecea', C.red, 'LOCKED'], release: ['#eef2ff', '#4338ca', 'RELEASED'] }[cur] || ['#f4f1e6', C.mut, cur];
-      return <span style={{ background: m[0], color: m[1], fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 8 }}>{m[2]}</span>;
+      const m = { ok: ['#eaf5ee', C.green, '● OK'], warn: ['#fef3c7', C.amber, '● Warning'], lock: ['#fdecea', C.red, '● Locked'], release: ['#eef2ff', '#4338ca', '● Released'] }[cur] || ['#f4f1e6', C.mut, cur];
+      return <span style={{ background: m[0], color: m[1], fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>{m[2]}</span>;
     };
-    const btn = (label, bg, col, onClick) => <button onClick={onClick} style={{ padding: '6px 10px', borderRadius: 8, background: bg, color: col, fontWeight: 600, fontSize: 12, border: '1px solid ' + C.line, cursor: 'pointer' }}>{label}</button>;
+    const btn = (label, bg, col, onClick) => <button onClick={onClick} style={{ padding: '7px 11px', borderRadius: 8, background: bg, color: col, fontWeight: 600, fontSize: 12, border: '1px solid ' + C.line, cursor: 'pointer' }}>{label}</button>;
+
+    const list = devices || [];
+    const counts = { all: list.length, active: 0, locked: 0, released: 0, lost: 0 };
+    list.forEach(d => { counts[this.catOf(d)]++; });
+    const tabs = [['all', 'All'], ['active', 'Active'], ['locked', 'Locked'], ['released', 'Released'], ['lost', 'Lost']];
+    const shown = tab === 'all' ? list : list.filter(d => this.catOf(d) === tab);
 
     return (
-      <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 16px 60px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 18 }}>
-          <div style={{ flex: 1 }}>
+      <div style={{ maxWidth: 880, margin: '0 auto', padding: '16px 16px 64px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🔒</div>
+          <div style={{ flex: 1, minWidth: 140 }}>
             <div style={{ fontSize: 20, fontWeight: 800 }}>Device Lock</div>
             <div style={{ fontSize: 12, color: C.mut }}>Enrolled phones on installment</div>
           </div>
-          <button onClick={this.load} style={{ marginRight: 8, padding: '8px 12px', borderRadius: 10, background: '#fff', border: '1px solid ' + C.line, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>↻ Refresh</button>
-          <button onClick={this.signOut} style={{ padding: '8px 12px', borderRadius: 10, background: '#f4f1e6', border: 'none', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Sign out</button>
+          <button onClick={() => { if (typeof window !== 'undefined') window.location.href = '/'; }} style={{ ...ghost, background: C.green, color: '#fff', border: 'none' }}>← Back to Aqsat</button>
+          <button onClick={this.load} style={ghost}>↻ Refresh</button>
+          <button onClick={this.signOut} style={{ ...ghost, background: '#f4f1e6', border: 'none' }}>Sign out</button>
         </div>
 
-        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, padding: 16, marginBottom: 18 }}>
+        {/* Enroll */}
+        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, padding: 16, marginBottom: 14 }}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Enroll a new phone</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, marginBottom: 10 }}>
             <input placeholder="Label (model / IMEI)" value={form.label} onChange={e => this.setState({ form: { ...form, label: e.target.value } })} style={fi} />
             <input placeholder="Plan voucher / ID (optional)" value={form.planId} onChange={e => this.setState({ form: { ...form, planId: e.target.value } })} style={fi} />
             <input placeholder="Customer ID (optional)" value={form.customerId} onChange={e => this.setState({ form: { ...form, customerId: e.target.value } })} style={fi} />
@@ -154,42 +171,69 @@ export default class Devices extends React.Component {
           ) : null}
         </div>
 
-        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, padding: 16, marginBottom: 18 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Provisioning QR (set up once, no PC)</div>
-          <div style={{ fontSize: 12, color: C.mut, marginBottom: 10 }}>On a factory-reset phone, tap the first welcome screen 6 times, then scan this. Same QR for every phone.</div>
-          <div style={{ marginBottom: 10 }}>
-            <a href="https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.0.1/device-lock.apk" target="_blank" rel="noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download lock app (APK)</a>
-            <span style={{ fontSize: 11, color: C.mut, marginLeft: 10 }}>v1.0.1 · already filled below</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-            <input placeholder="APK download URL (https)" value={this.state.qrCfg.apkUrl} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, apkUrl: e.target.value } })} style={fi} />
-            <input placeholder="APK signature checksum" value={this.state.qrCfg.checksum} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, checksum: e.target.value } })} style={fi} />
-            <input placeholder="Wi-Fi SSID (optional)" value={this.state.qrCfg.ssid} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, ssid: e.target.value } })} style={fi} />
-            <input placeholder="Wi-Fi password (optional)" value={this.state.qrCfg.wifiPass} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, wifiPass: e.target.value } })} style={fi} />
-          </div>
-          <button onClick={this.showQr} disabled={this.state.qrBusy} style={{ padding: '10px 16px', borderRadius: 10, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>{this.state.qrBusy ? 'Building…' : 'Show provisioning QR'}</button>
-          {this.state.qrImg ? <div style={{ textAlign: 'center', marginTop: 12 }}><img src={this.state.qrImg} alt="Provisioning QR" style={{ width: 300, height: 300, borderRadius: 12, border: '1px solid ' + C.line }} /></div> : null}
+        {/* Provisioning QR — collapsible */}
+        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, marginBottom: 20, overflow: 'hidden' }}>
+          <button onClick={() => this.setState({ qrOpen: !qrOpen })} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+            <span style={{ fontSize: 18 }}>⚙️</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>Provisioning QR &amp; setup</div>
+              <div style={{ fontSize: 12, color: C.mut }}>The scan code — set up once, same for every phone</div>
+            </div>
+            <span style={{ color: C.mut, fontSize: 13, transform: qrOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
+          </button>
+          {qrOpen ? (
+            <div style={{ padding: '0 16px 16px', borderTop: '1px solid ' + C.line }}>
+              <div style={{ fontSize: 12, color: C.mut, margin: '12px 0 10px' }}>On a factory-reset phone, tap the first welcome screen 6 times, then scan this QR.</div>
+              <div style={{ marginBottom: 10 }}>
+                <a href="https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.0.1/device-lock.apk" target="_blank" rel="noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download lock app (APK)</a>
+                <span style={{ fontSize: 11, color: C.mut, marginLeft: 10 }}>v1.0.1 · already filled below</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, marginBottom: 10 }}>
+                <input placeholder="APK download URL (https)" value={this.state.qrCfg.apkUrl} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, apkUrl: e.target.value } })} style={fi} />
+                <input placeholder="APK signature checksum" value={this.state.qrCfg.checksum} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, checksum: e.target.value } })} style={fi} />
+                <input placeholder="Wi-Fi SSID (optional)" value={this.state.qrCfg.ssid} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, ssid: e.target.value } })} style={fi} />
+                <input placeholder="Wi-Fi password (optional)" value={this.state.qrCfg.wifiPass} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, wifiPass: e.target.value } })} style={fi} />
+              </div>
+              <button onClick={this.showQr} disabled={this.state.qrBusy} style={{ padding: '10px 16px', borderRadius: 10, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>{this.state.qrBusy ? 'Building…' : 'Show provisioning QR'}</button>
+              {this.state.qrImg ? <div style={{ textAlign: 'center', marginTop: 12 }}><img src={this.state.qrImg} alt="Provisioning QR" style={{ width: 280, maxWidth: '100%', borderRadius: 12, border: '1px solid ' + C.line, background: '#fff' }} /></div> : null}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Devices + tabs */}
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 10 }}>Devices</div>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
+          {tabs.map(([k, lbl]) => {
+            const on = tab === k;
+            return (
+              <button key={k} onClick={() => this.setState({ tab: k })} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: on ? C.green : '#fff', color: on ? '#fff' : C.ink, border: '1px solid ' + (on ? C.green : C.line) }}>
+                {lbl}
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 10, background: on ? 'rgba(255,255,255,.22)' : '#f4f1e6', color: on ? '#fff' : C.mut }}>{counts[k]}</span>
+              </button>
+            );
+          })}
         </div>
 
         {error ? <div style={{ color: C.red, marginBottom: 12 }}>{error}</div> : null}
-        {devices === null ? <div style={{ color: C.mut }}>Loading…</div>
-          : devices.length === 0 ? <div style={{ color: C.mut, textAlign: 'center', padding: 30 }}>No devices enrolled yet.</div>
+        {devices === null ? <div style={{ color: C.mut, padding: 20 }}>Loading…</div>
+          : list.length === 0 ? <div style={{ color: C.mut, textAlign: 'center', padding: '36px 20px', background: '#fff', border: '1px dashed ' + C.line, borderRadius: 14 }}>No devices enrolled yet. Enroll one above to get started.</div>
+          : shown.length === 0 ? <div style={{ color: C.mut, textAlign: 'center', padding: '28px 20px', background: '#fff', border: '1px dashed ' + C.line, borderRadius: 14 }}>No {tab} devices.</div>
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {devices.map(d => (
-                <div key={d.id} style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 14, padding: 14 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              {shown.map(d => (
+                <div key={d.id} style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 14, padding: 15 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{d.label || d.id}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.label || d.id}</div>
                       <div style={{ fontSize: 12, color: C.mut }}>{[d.customer, d.plan].filter(Boolean).join(' · ') || '—'}</div>
                     </div>
                     {badge(d.current)}
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: C.mut, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
                     <span>Mode: <b style={{ color: C.ink }}>{d.lockMode}</b></span>
                     <span>Status: <b style={{ color: C.ink }}>{d.status}</b></span>
                     <span>Last check-in: <b style={{ color: C.ink }}>{d.lastCheckin ? new Date(d.lastCheckin).toLocaleString() : 'never'}</b></span>
-                    <span>Today's unlock code: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14 }}>{d.unlockCode}</b></span>
+                    <span>Unlock code: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14, letterSpacing: 1 }}>{d.unlockCode}</b></span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {btn('🔒 Lock', '#fdecea', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
