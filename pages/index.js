@@ -268,6 +268,10 @@ export default class App extends React.Component {
     if (typeof window === 'undefined' || this._isDemo) return;
     const { customers, products, plans, settings, ledger, udpiEntries, invoices, staff } = this.state;
     if (!customers) return;
+    // Never push until we have actually loaded the cloud once. A device that
+    // seeded an empty shop (e.g. a read that raced the login) must not sync that
+    // emptiness up before it has seen the real data.
+    if (!this._loadedCloud) return;
     if (this._fromCloud) { this._fromCloud = false; return; }
     if (customers !== prev.customers || products !== prev.products || plans !== prev.plans || settings !== prev.settings || ledger !== prev.ledger || udpiEntries !== prev.udpiEntries || invoices !== prev.invoices || staff !== prev.staff) {
       clearTimeout(this._syncTimer);
@@ -348,6 +352,7 @@ export default class App extends React.Component {
 
   _applyCloudData = (d) => {
     this._fromCloud = true;
+    this._loadedCloud = true;
     const rawLocal = this.state.customers ? { customers: this.state.customers, products: this.state.products, plans: this.state.plans, settings: this.state.settings, ledger: this.state.ledger || [], udpiEntries: this.state.udpiEntries || [], invoices: this.state.invoices || [], staff: this.state.staff || [] } : null;
     // Stamp any local edits that haven't been pushed yet so they beat the incoming
     // cloud copy in the merge — without this, a real-time event arriving before the
@@ -367,43 +372,67 @@ export default class App extends React.Component {
     this.setState(payload, () => this.processRecurring());
   };
 
+  _loadLocalInto = (extra = {}) => {
+    let localData = null;
+    try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch (e) {}
+    if (localData && localData.customers) {
+      this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], udpiEntries: localData.udpiEntries || [], invoices: localData.invoices || [], staff: localData.staff || [], ...extra });
+      return (localData.plans?.length || 0) + (localData.customers?.length || 0);
+    }
+    return 0;
+  };
+
   initSupabaseSync = async () => {
     this.setState({ syncStatus: 'loading' });
-    try {
-      // Watchdog: a hung request on a flaky phone must not leave the app spinning
-      // forever. On timeout we throw into the catch, which falls back to the local
-      // copy (or an empty shop) so the UI always renders.
-      const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('sync timeout')), ms))]);
-      const { data, error } = await withTimeout(supabase.from('shops').select('data').eq('id', SHOP_ID).single(), 12000);
-      if (error && error.code !== 'PGRST116') throw error;
+    // Attach the auth session before reading — a read that races ahead of the
+    // token gets 0 rows under RLS, which used to look like "cloud is empty".
+    try { await supabase.auth.getSession(); } catch (e) {}
 
-      const cloudCount = (data?.data?.plans?.length || 0) + (data?.data?.customers?.length || 0);
-
-      if (cloudCount > 0) {
-        // Cloud has real data — always use it, no questions asked
-        this._applyCloudData(data.data);
-      } else {
-        // Cloud is empty — check localStorage once to recover any existing data
-        let localData = null;
-        try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch(e) {}
-        const localCount = (localData?.plans?.length || 0) + (localData?.customers?.length || 0);
-        if (localCount > 0) {
-          // Push local data up to cloud and use it
-          this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], udpiEntries: localData.udpiEntries || [], invoices: localData.invoices || [], staff: localData.staff || [], syncStatus: 'synced' }, this.pushToSupabase);
-        } else {
-          this.seed();
-          this.setState({ syncStatus: 'synced' });
-        }
+    // Read with a few retries so a transient/racey failure is not mistaken for an
+    // empty shop. Returns {ok, data} on a real answer, {ok:false} on give-up.
+    const readShops = async () => {
+      for (let i = 0; i < 4; i++) {
+        try {
+          const { data, error } = await supabase.from('shops').select('data').eq('id', SHOP_ID).maybeSingle();
+          if (!error) return { ok: true, data };
+        } catch (e) {}
+        await new Promise(r => setTimeout(r, 500 * (i + 1)));
       }
-    } catch(err) {
-      let localData = null;
-      try { const raw = localStorage.getItem('aqsat_data'); if (raw) localData = JSON.parse(raw); } catch(e) {}
-      if (localData?.customers) this.setState({ customers: localData.customers || [], products: localData.products || [], plans: localData.plans || [], settings: localData.settings || this.state.settings, ledger: localData.ledger || [], udpiEntries: localData.udpiEntries || [], invoices: localData.invoices || [], staff: localData.staff || [] });
-      else this.seed();
-      this.setState({ syncStatus: 'offline', syncError: err.message || '' });
+      return { ok: false };
+    };
+
+    let res;
+    try {
+      res = await Promise.race([readShops(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 16000))]);
+    } catch (e) { res = { ok: false }; }
+
+    if (res.ok) {
+      const d = res.data && res.data.data;
+      const cloudCount = (d?.plans?.length || 0) + (d?.customers?.length || 0);
+      if (cloudCount > 0) {
+        this._applyCloudData(d);          // real cloud data wins
+      } else {
+        // Cloud genuinely has no rows. Recover a local copy if there is one,
+        // otherwise start a fresh empty shop. Safe to push from here on.
+        this._loadedCloud = true;
+        const localCount = this._loadLocalInto({ syncStatus: 'synced' });
+        if (localCount > 0) this.pushToSupabase();
+        else { this.seed(); this.setState({ syncStatus: 'synced' }); }
+      }
+    } else {
+      // Could not reach the cloud. Show the local copy if present, but DO NOT
+      // seed-empty and DO NOT allow a push (_loadedCloud stays false), then retry
+      // — this is what stops a fresh phone from displaying, or syncing, an empty shop.
+      const localCount = this._loadLocalInto();
+      if (!localCount) this.setState({ customers: [], products: [], plans: [], ledger: [], udpiEntries: [] });
+      this.setState({ syncStatus: 'offline', syncError: 'Could not load shop data. Retrying…' });
+      clearTimeout(this._loadRetry);
+      this._loadRetry = setTimeout(() => { if (!this._loadedCloud) this.initSupabaseSync(); }, 4000);
       return;
     }
+
     // Real-time: any change on any device arrives here instantly
+    if (this._syncChannel) { try { supabase.removeChannel(this._syncChannel); } catch (e) {} }
     this._syncChannel = supabase
       .channel('shop-' + SHOP_ID)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shops', filter: `id=eq.${SHOP_ID}` }, (payload) => {
@@ -518,6 +547,9 @@ export default class App extends React.Component {
   pushToSupabase = async () => {
     const { customers, products, plans, settings, ledger, udpiEntries, invoices, staff } = this.state;
     if (!customers) return;
+    // Guard: a device that never loaded the cloud must not write to it (prevents a
+    // fresh/empty device from pushing emptiness over the real shop).
+    if (!this._loadedCloud) return;
     const localData = { customers, products, plans, settings, ledger: ledger || [], udpiEntries: udpiEntries || [], invoices: invoices || [], staff: staff || [] };
     // No connection: keep the work safely on the device and wait for 'online'.
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -7639,6 +7671,7 @@ export default class App extends React.Component {
       { key: 'accounts',  label: 'Accounts',   icon: '💰', go: () => this.go('accounts') },
       { key: 'udharbook', label: 'Udhar Book', icon: '🤝', go: () => this.go('udharbook') },
       { key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
+      { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => { if (typeof window !== 'undefined') window.location.href = '/devices'; } },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -7938,9 +7971,10 @@ export default class App extends React.Component {
                   { icon: '💰', label: 'Accounts',  go: 'accounts' },
                   { icon: '🤝', label: 'Udhar Book', go: 'udharbook' },
                   { icon: '👷', label: 'Staff',      go: 'staff' },
+                  { icon: '🔒', label: 'Device Lock', go: 'devices', ext: '/devices' },
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
-                  <button key={item.go} onClick={() => { this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
+                  <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
                     <span style={{ fontSize: 20 }}>{item.icon}</span>
                     {item.label}
                     {item.badge && <span style={{ position: 'absolute', top: 8, right: 8, background: '#fce8b7', color: '#7a5100', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 10 }}>{item.badge}</span>}
