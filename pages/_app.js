@@ -3,12 +3,18 @@ import { useEffect } from 'react';
 
 export default function App({ Component, pageProps }) {
   useEffect(() => {
+    window.__aqsatReady = true;
     if (!('serviceWorker' in navigator)) return;
     // Register, then actively pull updates so a stale cached shell (which can
     // reference JS chunks a later deploy removed, hanging the app on a phone)
     // is replaced automatically and the page reloads onto the fresh build.
-    navigator.serviceWorker.register('/sw.js').then(reg => {
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(reg => {
       reg.update();
+      // Installed PWAs resume from memory without navigating, so they never
+      // re-check for a new build. Check every time the app comes back on screen.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
       reg.addEventListener('updatefound', () => {
         const nw = reg.installing;
         if (!nw) return;

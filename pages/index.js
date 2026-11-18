@@ -1,6 +1,6 @@
 import React from 'react';
 import Head from 'next/head';
-import { supabase, SHOP_ID } from '../lib/supabase';
+import { supabase, SHOP_ID, getSessionSafe } from '../lib/supabase';
 
 export default class App extends React.Component {
   _isDemo = false;
@@ -293,7 +293,7 @@ export default class App extends React.Component {
     this._authSub = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') this._clearSession();
     }).data.subscription;
-    const { data: { session }, error } = await supabase.auth.getSession();
+    const { data: { session }, error } = await getSessionSafe();
     if (session) { this.startSession(session.user); return; }
     // Stored session whose token refresh failed offline: keep working from the
     // local copy; the client refreshes the token and sync resumes once online.
@@ -344,7 +344,7 @@ export default class App extends React.Component {
   };
 
   apiFetch = async (url, opts = {}) => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await getSessionSafe();
     const headers = { ...(opts.headers || {}) };
     if (session) headers.Authorization = 'Bearer ' + session.access_token;
     return fetch(url, { ...opts, headers });
@@ -386,7 +386,7 @@ export default class App extends React.Component {
     this.setState({ syncStatus: 'loading' });
     // Attach the auth session before reading — a read that races ahead of the
     // token gets 0 rows under RLS, which used to look like "cloud is empty".
-    try { await supabase.auth.getSession(); } catch (e) {}
+    try { await getSessionSafe(); } catch (e) {}
 
     // Read with a few retries so a transient/racey failure is not mistaken for an
     // empty shop. Returns {ok, data} on a real answer, {ok:false} on give-up.
@@ -7625,7 +7625,10 @@ export default class App extends React.Component {
       return (
         <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef' }}>
           <Head><title>Aqsat — Installment Manager</title></Head>
-          <div style={{ color: '#7a7663', fontSize: 16 }}>Loading…</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#7a7663', fontSize: 16 }}>Loading…</div>
+            <a href="/?reset=1" style={{ display: 'inline-block', marginTop: 18, fontSize: 13, color: '#0f6b4b' }}>Stuck? Tap to refresh / رک گیا؟ یہاں دبائیں</a>
+          </div>
         </div>
       );
     }
