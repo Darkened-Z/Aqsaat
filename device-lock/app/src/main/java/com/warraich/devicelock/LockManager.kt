@@ -26,7 +26,26 @@ class LockManager(private val ctx: Context) {
             UserManager.DISALLOW_DEBUGGING_FEATURES,
             UserManager.DISALLOW_MODIFY_ACCOUNTS
         )) runCatching { dpm.addUserRestriction(admin, r) }
+        grantRuntimePerms()
         applyFrpPolicy()
+    }
+
+    /**
+     * As Device Owner, silently grant the permissions the feature set needs so the
+     * customer is never prompted and can't deny them: location (for recovery of a
+     * phone reported lost) and notifications (for the shop-managed disclosure).
+     */
+    private fun grantRuntimePerms() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val perms = mutableListOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) perms += android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) perms += android.Manifest.permission.POST_NOTIFICATIONS
+        for (perm in perms) runCatching {
+            dpm.setPermissionGrantState(admin, ctx.packageName, perm, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
+        }
     }
 
     /**

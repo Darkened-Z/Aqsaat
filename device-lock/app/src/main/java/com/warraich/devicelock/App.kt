@@ -9,6 +9,7 @@ class App : Application() {
         if (p.enrolled) {
             CheckinWorker.schedule(this)
             LockManager(this).applyOwnerPolicies()
+            Notify.managed(this)
         }
     }
 }
