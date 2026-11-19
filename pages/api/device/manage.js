@@ -20,21 +20,32 @@ export default async function handler(req, res) {
       lastCheckin: dev.last_checkin, lastAction: dev.last_action,
       current: evaluate(dev, d).action,
       unlockCode: unlockCode(dev.secret),
+      lat: dev.last_lat, lng: dev.last_lng, locAcc: dev.last_loc_acc, locAt: dev.last_loc_at,
+      callMode: dev.call_mode || 'open', allowNumber: dev.allow_number || '',
     }));
     return res.json({ devices: list });
   }
 
   if (req.method === 'POST') {
-    const { deviceId, action } = req.body || {};
+    const { deviceId, action, value } = req.body || {};
     if (!deviceId || !action) return res.status(400).json({ error: 'deviceId and action required' });
+    if (action === 'callshop') {
+      const num = String(value || '').trim();
+      const { error } = await supabaseAdmin.from('devices')
+        .update({ call_mode: 'shop_only', allow_number: num || null })
+        .eq('id', deviceId).eq('shop_id', SHOP_ID);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ ok: true });
+    }
     const patch = {
-      lock:    { lock_mode: 'force_lock' },
-      unlock:  { lock_mode: 'force_unlock' },
-      auto:    { lock_mode: 'auto' },
-      lost:    { status: 'lost' },
-      release: { status: 'released', lock_mode: 'force_unlock' },
-      active:  { status: 'active' },
-      delete:  { status: 'deleted' },   // soft delete; restore via 'active'
+      lock:     { lock_mode: 'force_lock' },
+      unlock:   { lock_mode: 'force_unlock' },
+      auto:     { lock_mode: 'auto' },
+      lost:     { status: 'lost' },
+      release:  { status: 'released', lock_mode: 'force_unlock', call_mode: 'open' },
+      active:   { status: 'active' },
+      delete:   { status: 'deleted' },   // soft delete; restore via 'active'
+      callopen: { call_mode: 'open' },
     }[action];
     if (action === 'purge') {
       const { error } = await supabaseAdmin.from('devices').delete().eq('id', deviceId).eq('shop_id', SHOP_ID);

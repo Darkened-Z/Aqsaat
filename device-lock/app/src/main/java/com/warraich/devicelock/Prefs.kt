@@ -25,6 +25,11 @@ class Prefs(ctx: Context) {
     var unlockUntilMs: Long  get() = sp.getLong("unlockUntilMs", 0L);  set(v) = sp.edit().putLong("unlockUntilMs", v).apply()
     var offlineLockDays: Int get() = sp.getInt("offlineLockDays", 7);  set(v) = sp.edit().putInt("offlineLockDays", v).apply()
 
+    // Call policy pushed from the server. "open" = all calls; "shop_only" = block
+    // every call except allowNumber (lost/stolen recovery).
+    var callMode: String    get() = sp.getString("callMode", "open") ?: "open"; set(v) = sp.edit().putString("callMode", v).apply()
+    var allowNumber: String get() = sp.getString("allowNumber", "") ?: "";      set(v) = sp.edit().putString("allowNumber", v).apply()
+
     fun saveEnrollment(id: String, sec: String, url: String) {
         deviceId = id; secret = sec; baseUrl = url.trimEnd('/')
         lastOkMs = System.currentTimeMillis()

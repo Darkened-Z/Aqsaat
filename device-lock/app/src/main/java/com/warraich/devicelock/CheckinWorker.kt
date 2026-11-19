@@ -18,12 +18,15 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         val p = Prefs(applicationContext)
         if (!p.enrolled) return Result.success()
 
-        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!)
+        val loc = Loc.last(applicationContext)
+        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy)
         val now = System.currentTimeMillis()
 
         if (r.reachable) {
             p.lastOkMs = now
             p.offlineLockDays = r.offlineLockDays
+            p.callMode = r.callMode
+            p.allowNumber = r.allowNumber
             when (r.action) {
                 "release" -> { releaseSelf(p); return Result.success() }
                 "lock" -> {

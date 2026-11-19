@@ -8,7 +8,9 @@ data class CheckinResult(
     val reachable: Boolean,
     val action: String = "",        // ok | warn | lock | release
     val message: String = "",
-    val offlineLockDays: Int = 7
+    val offlineLockDays: Int = 7,
+    val callMode: String = "open",  // open | shop_only
+    val allowNumber: String = ""
 )
 
 data class ClaimResult(val ok: Boolean, val deviceId: String = "", val secret: String = "", val baseUrl: String = "", val error: String = "")
@@ -33,8 +35,9 @@ object Api {
         }
     }
 
-    /** POST deviceId+secret. Network/5xx errors return reachable=false (never a wrong lock). */
-    fun checkin(baseUrl: String, deviceId: String, secret: String): CheckinResult {
+    /** POST deviceId+secret (+ last-known location). Network/5xx errors return reachable=false (never a wrong lock). */
+    fun checkin(baseUrl: String, deviceId: String, secret: String,
+                lat: Double? = null, lng: Double? = null, acc: Float? = null): CheckinResult {
         return try {
             val conn = (URL("$baseUrl/api/device/checkin").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -43,8 +46,12 @@ object Api {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
             }
-            val body = JSONObject().put("deviceId", deviceId).put("secret", secret).toString()
-            conn.outputStream.use { it.write(body.toByteArray()) }
+            val body = JSONObject().put("deviceId", deviceId).put("secret", secret)
+            if (lat != null && lng != null) {
+                body.put("lat", lat).put("lng", lng)
+                if (acc != null) body.put("acc", acc.toDouble())
+            }
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
             val ok = conn.responseCode in 200..299
             if (!ok) { conn.disconnect(); return CheckinResult(false) }
             val text = conn.inputStream.bufferedReader().use { it.readText() }
@@ -54,7 +61,9 @@ object Api {
                 reachable = true,
                 action = j.optString("action", "ok"),
                 message = j.optString("message", ""),
-                offlineLockDays = j.optInt("offlineLockDays", 7)
+                offlineLockDays = j.optInt("offlineLockDays", 7),
+                callMode = j.optString("callMode", "open"),
+                allowNumber = j.optString("allowNumber", "")
             )
         } catch (e: Exception) {
             CheckinResult(false)

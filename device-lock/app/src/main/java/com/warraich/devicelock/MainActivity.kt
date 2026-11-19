@@ -69,6 +69,8 @@ class MainActivity : AppCompatActivity() {
                         p.saveEnrollment(r.deviceId, r.secret, r.baseUrl)
                         CheckinWorker.schedule(this@MainActivity)
                         LockManager(this@MainActivity).applyOwnerPolicies()
+                        Notify.managed(this@MainActivity)
+                        requestCallScreeningRole()
                         checkNow()
                         render()
                     } else {
@@ -98,6 +100,22 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { checkNow() }
         })
         return box
+    }
+
+    /**
+     * Ask for the Call Screening role so CallGuard can block all but the shop number
+     * when a phone is marked lost. One system prompt the shop taps "Allow" to during
+     * setup. Android 10+; older phones keep the lock-screen "Call shop" path only.
+     */
+    private fun requestCallScreeningRole() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return
+        val rm = getSystemService(android.app.role.RoleManager::class.java) ?: return
+        runCatching {
+            if (rm.isRoleAvailable(android.app.role.RoleManager.ROLE_CALL_SCREENING)
+                && !rm.isRoleHeld(android.app.role.RoleManager.ROLE_CALL_SCREENING)) {
+                startActivityForResult(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_CALL_SCREENING), 7001)
+            }
+        }
     }
 
     private fun checkNow() {

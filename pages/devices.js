@@ -9,7 +9,7 @@ export default class Devices extends React.Component {
     authUser: undefined, email: '', password: '', authErr: '', busy: false,
     devices: null, error: '', enroll: null, enrollBusy: false,
     form: { label: '', planId: '', customerId: '', graceDays: '' },
-    qrCfg: { apkUrl: 'https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.0.1/device-lock.apk', checksum: 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk', ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
+    qrCfg: { apkUrl: 'https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.1.0/device-lock.apk', checksum: 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk', ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
     tab: 'all', qrOpen: false,
   };
 
@@ -69,11 +69,18 @@ export default class Devices extends React.Component {
     } catch (e) { this.setState({ error: e.message }); }
   };
 
-  act = async (deviceId, action, confirmMsg) => {
+  act = async (deviceId, action, confirmMsg, value) => {
     if (confirmMsg && !confirm(confirmMsg)) return;
-    const resp = await this.api('POST', { deviceId, action });
+    const resp = await this.api('POST', { deviceId, action, value });
     if (!resp.ok) { alert((await resp.json()).error || 'action failed'); return; }
     this.load();
+  };
+
+  setCallShop = (d) => {
+    const num = prompt('Block ALL calls on this phone except this one number (incoming and outgoing). Enter the shop number the phone may call:', d.allowNumber || '');
+    if (num === null) return;
+    if (!num.trim()) { alert('Enter a number, or use "Calls: all" to lift the block.'); return; }
+    this.act(d.id, 'callshop', null, num.trim());
   };
 
   enroll = async () => {
@@ -185,8 +192,8 @@ export default class Devices extends React.Component {
             <div style={{ padding: '0 16px 16px', borderTop: '1px solid ' + C.line }}>
               <div style={{ fontSize: 12, color: C.mut, margin: '12px 0 10px' }}>On a factory-reset phone, tap the first welcome screen 6 times, then scan this QR.</div>
               <div style={{ marginBottom: 10 }}>
-                <a href="https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.0.1/device-lock.apk" target="_blank" rel="noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download lock app (APK)</a>
-                <span style={{ fontSize: 11, color: C.mut, marginLeft: 10 }}>v1.0.1 · already filled below</span>
+                <a href="https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.1.0/device-lock.apk" target="_blank" rel="noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download lock app (APK)</a>
+                <span style={{ fontSize: 11, color: C.mut, marginLeft: 10 }}>v1.1.0 · already filled below</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, marginBottom: 10 }}>
                 <input placeholder="APK download URL (https)" value={this.state.qrCfg.apkUrl} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, apkUrl: e.target.value } })} style={fi} />
@@ -234,6 +241,12 @@ export default class Devices extends React.Component {
                     <span>Status: <b style={{ color: C.ink }}>{d.status}</b></span>
                     <span>Last check-in: <b style={{ color: C.ink }}>{d.lastCheckin ? new Date(d.lastCheckin).toLocaleString() : 'never'}</b></span>
                     <span>Unlock code: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14, letterSpacing: 1 }}>{d.unlockCode}</b></span>
+                    <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? `only ${d.allowNumber || '—'}` : 'all allowed'}</b></span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
+                    <span>📍 Last location: {d.locAt
+                      ? <><a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>{Number(d.lat).toFixed(5)}, {Number(d.lng).toFixed(5)}</a> <span style={{ color: C.mut }}>· {new Date(d.locAt).toLocaleString()}{d.locAcc ? ` · ±${Math.round(d.locAcc)}m` : ''}</span></>
+                      : <b style={{ color: C.ink }}>not reported yet</b>}</span>
                   </div>
                   {d.status === 'deleted' ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -248,6 +261,9 @@ export default class Devices extends React.Component {
                     {btn('⚠ Mark lost', '#fff7ed', C.amber, () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
                     {btn('✓ Release', '#eef2ff', '#4338ca', () => this.act(d.id, 'release', 'Release this phone (loan fully paid)? It will unlock permanently.'))}
                     {btn('🗑 Delete', '#fff', C.mut, () => this.act(d.id, 'delete', 'Move this device to Deleted? The phone stops being managed until you restore it.'))}
+                    {d.callMode === 'shop_only'
+                      ? btn('📞 Calls: all', '#eaf5ee', C.green, () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
+                      : btn('📞 Shop-only calls', '#fff7ed', C.amber, () => this.setCallShop(d))}
                   </div>
                   )}
                 </div>
