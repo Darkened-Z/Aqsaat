@@ -4,17 +4,22 @@ import { supabase, getSessionSafe } from '../lib/supabase';
 
 const C = { green: '#0f6b4b', red: '#b91c1c', amber: '#b45309', ink: '#1a2b1f', mut: '#7a7663', line: '#ece8dc', bg: '#f7f5ef' };
 
+// Self-hosted APK (direct, no redirect) + its signing-cert checksum. Must stay in
+// sync with the published app-release.apk.
+const APK_URL = 'https://aqsaat.vercel.app/device-lock.apk';
+const APK_CHECKSUM = 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk';
+
 export default class Devices extends React.Component {
   state = {
     authUser: undefined, email: '', password: '', authErr: '', busy: false,
     devices: null, error: '', enroll: null, enrollBusy: false,
     form: { label: '', planId: '', customerId: '', graceDays: '' },
-    qrCfg: { apkUrl: 'https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.1.0/device-lock.apk', checksum: 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk', ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
+    qrCfg: { apkUrl: APK_URL, checksum: APK_CHECKSUM, ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
     tab: 'all', qrOpen: false, billMonth: '', rate: 0,
   };
 
   async componentDidMount() {
-    try { const s = JSON.parse(localStorage.getItem('devicelock_qrcfg') || '{}'); if (s && typeof s === 'object') this.setState(st => ({ qrCfg: { ...st.qrCfg, ...s } })); } catch (e) {}
+    try { const s = JSON.parse(localStorage.getItem('devicelock_qrcfg') || '{}'); if (s && typeof s === 'object') this.setState(st => ({ qrCfg: { ...st.qrCfg, ...s, apkUrl: APK_URL, checksum: APK_CHECKSUM } })); } catch (e) {}
     try { const r = parseFloat(localStorage.getItem('devicelock_rate') || '0'); if (r > 0) this.setState({ rate: r }); } catch (e) {}
     const { data: { session } } = await getSessionSafe();
     if (session) this.onAuthed(session.user); else this.setState({ authUser: null });
@@ -291,8 +296,8 @@ export default class Devices extends React.Component {
             <div style={{ padding: '0 16px 16px', borderTop: '1px solid ' + C.line }}>
               <div style={{ fontSize: 12, color: C.mut, margin: '12px 0 10px' }}>On a factory-reset phone, tap the first welcome screen 6 times, then scan this QR.</div>
               <div style={{ marginBottom: 10 }}>
-                <a href="https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.1.0/device-lock.apk" target="_blank" rel="noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download lock app (APK)</a>
-                <span style={{ fontSize: 11, color: C.mut, marginLeft: 10 }}>v1.1.0 · already filled below</span>
+                <a href={APK_URL} target="_blank" rel="noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download lock app (APK)</a>
+                <span style={{ fontSize: 11, color: C.mut, marginLeft: 10 }}>v1.1.0 · hosted on aqsaat</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, marginBottom: 10 }}>
                 <input placeholder="APK download URL (https)" value={this.state.qrCfg.apkUrl} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, apkUrl: e.target.value } })} style={fi} />
