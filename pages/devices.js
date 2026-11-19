@@ -307,6 +307,12 @@ export default class Devices extends React.Component {
               </div>
               <button onClick={this.showQr} disabled={this.state.qrBusy} style={{ padding: '10px 16px', borderRadius: 10, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>{this.state.qrBusy ? 'Building…' : 'Show provisioning QR'}</button>
               {this.state.qrImg ? <div style={{ textAlign: 'center', marginTop: 12 }}><img src={this.state.qrImg} alt="Provisioning QR" style={{ width: 280, maxWidth: '100%', borderRadius: 12, border: '1px solid ' + C.line, background: '#fff' }} /></div> : null}
+
+              <div style={{ marginTop: 16, padding: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>📵 Phone won't scan / "Something went wrong"?</div>
+                <div style={{ fontSize: 12, color: C.mut, marginBottom: 8 }}>Some cheap phones (Dcode, Unisoc etc.) block QR setup. Lock them from a Windows PC instead: factory-reset the phone (no Google account), turn on USB debugging, connect the cable, then run this tool and double-click <b>LockPhone.bat</b>. The Urdu steps are inside.</div>
+                <a href="/LockPhone.zip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.amber, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download USB lock tool (PC)</a>
+              </div>
             </div>
           ) : null}
         </div>
