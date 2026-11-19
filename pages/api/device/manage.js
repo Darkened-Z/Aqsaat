@@ -29,6 +29,13 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const { deviceId, action, value } = req.body || {};
     if (!deviceId || !action) return res.status(400).json({ error: 'deviceId and action required' });
+    if (action === 'rename') {
+      const { error } = await supabaseAdmin.from('devices')
+        .update({ label: String(value || '').trim() || null })
+        .eq('id', deviceId).eq('shop_id', SHOP_ID);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ ok: true });
+    }
     if (action === 'callshop') {
       const num = String(value || '').trim();
       const { error } = await supabaseAdmin.from('devices')

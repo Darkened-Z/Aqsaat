@@ -76,6 +76,12 @@ export default class Devices extends React.Component {
     this.load();
   };
 
+  rename = (d) => {
+    const name = prompt('Name for this phone (to remember which is which):', d.label || '');
+    if (name === null) return;
+    this.act(d.id, 'rename', null, name.trim());
+  };
+
   setCallShop = (d) => {
     const num = prompt('Block ALL calls on this phone except this one number (incoming and outgoing). Enter the shop number the phone may call:', d.allowNumber || '');
     if (num === null) return;
@@ -161,9 +167,10 @@ export default class Devices extends React.Component {
 
         {/* Enroll */}
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, padding: 16, marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>Enroll a new phone</div>
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>Enroll a new phone</div>
+          <div style={{ fontSize: 12, color: C.mut, marginBottom: 10 }}>Give it a name you'll recognise later — customer + model works well (e.g. "Ali Raza — Samsung A15").</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, marginBottom: 10 }}>
-            <input placeholder="Label (model / IMEI)" value={form.label} onChange={e => this.setState({ form: { ...form, label: e.target.value } })} style={fi} />
+            <input placeholder="Name to remember (customer / model)" value={form.label} onChange={e => this.setState({ form: { ...form, label: e.target.value } })} style={fi} />
             <input placeholder="Plan voucher / ID (optional)" value={form.planId} onChange={e => this.setState({ form: { ...form, planId: e.target.value } })} style={fi} />
             <input placeholder="Customer ID (optional)" value={form.customerId} onChange={e => this.setState({ form: { ...form, customerId: e.target.value } })} style={fi} />
             <input placeholder="Grace days (blank = shop default)" value={form.graceDays} onChange={e => this.setState({ form: { ...form, graceDays: e.target.value } })} style={fi} />
@@ -231,8 +238,11 @@ export default class Devices extends React.Component {
                 <div key={d.id} style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 14, padding: 15 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.label || d.id}</div>
-                      <div style={{ fontSize: 12, color: C.mut }}>{[d.customer, d.plan].filter(Boolean).join(' · ') || '—'}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: d.label ? C.ink : C.mut }}>
+                        {d.label || 'Unnamed phone'}
+                        <button onClick={() => this.rename(d)} title="Rename" style={{ marginLeft: 8, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: C.green }}>✏️</button>
+                      </div>
+                      <div style={{ fontSize: 12, color: C.mut }}>{[d.customer, d.plan].filter(Boolean).join(' · ') || d.id}</div>
                     </div>
                     {badge(d.current)}
                   </div>
