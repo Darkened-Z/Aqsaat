@@ -10,7 +10,7 @@ export default async function handler(req, res) {
 
   const { data: device } = await supabaseAdmin
     .from('devices').select('*').eq('id', deviceId).eq('shop_id', SHOP_ID).maybeSingle();
-  if (!device || device.secret !== secret) return res.status(401).json({ error: 'unknown device' });
+  if (!device || device.secret !== secret || device.status === 'deleted') return res.status(401).json({ error: 'unknown device' });
 
   const { data: shop } = await supabaseAdmin.from('shops').select('data').eq('id', SHOP_ID).single();
   const result = evaluate(device, (shop && shop.data) || {});

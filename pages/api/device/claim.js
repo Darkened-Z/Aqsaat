@@ -10,7 +10,7 @@ export default async function handler(req, res) {
 
   const { data: device } = await supabaseAdmin
     .from('devices').select('*')
-    .eq('shop_id', SHOP_ID).eq('claim_code', code).eq('claimed', false).maybeSingle();
+    .eq('shop_id', SHOP_ID).eq('claim_code', code).eq('claimed', false).neq('status', 'deleted').maybeSingle();
   if (!device) return res.status(404).json({ error: 'invalid or used code' });
 
   if (Date.now() - new Date(device.created_at).getTime() > CLAIM_TTL_MS)
