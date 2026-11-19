@@ -22,6 +22,7 @@ export default async function handler(req, res) {
       unlockCode: unlockCode(dev.secret),
       lat: dev.last_lat, lng: dev.last_lng, locAcc: dev.last_loc_acc, locAt: dev.last_loc_at,
       callMode: dev.call_mode || 'open', allowNumber: dev.allow_number || '',
+      created: dev.created_at,
     }));
     return res.json({ devices: list });
   }
