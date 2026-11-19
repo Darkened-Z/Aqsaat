@@ -10,11 +10,12 @@ export default class Devices extends React.Component {
     devices: null, error: '', enroll: null, enrollBusy: false,
     form: { label: '', planId: '', customerId: '', graceDays: '' },
     qrCfg: { apkUrl: 'https://github.com/Darkened-Z/Aqsaat/releases/download/devicelock-v1.1.0/device-lock.apk', checksum: 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk', ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
-    tab: 'all', qrOpen: false,
+    tab: 'all', qrOpen: false, billMonth: '', rate: 0,
   };
 
   async componentDidMount() {
     try { const s = JSON.parse(localStorage.getItem('devicelock_qrcfg') || '{}'); if (s && typeof s === 'object') this.setState(st => ({ qrCfg: { ...st.qrCfg, ...s } })); } catch (e) {}
+    try { const r = parseFloat(localStorage.getItem('devicelock_rate') || '0'); if (r > 0) this.setState({ rate: r }); } catch (e) {}
     const { data: { session } } = await getSessionSafe();
     if (session) this.onAuthed(session.user); else this.setState({ authUser: null });
   }
@@ -135,6 +136,96 @@ export default class Devices extends React.Component {
 
   catOf = (d) => d.status === 'deleted' ? 'deleted' : d.status === 'released' ? 'released' : d.status === 'lost' ? 'lost' : d.current === 'lock' ? 'locked' : 'active';
 
+  setRate = (v) => {
+    const r = parseFloat(v) || 0;
+    this.setState({ rate: r });
+    try { localStorage.setItem('devicelock_rate', String(r)); } catch (e) {}
+  };
+
+  renderBilling = (list) => {
+    const now = new Date();
+    const curKey = now.toISOString().slice(0, 7);
+    const sel = this.state.billMonth || curKey;
+    const rate = this.state.rate || 0;
+
+    // Count registrations by the month each device was created (deleted excluded).
+    const billable = list.filter(d => this.catOf(d) !== 'deleted' && d.created);
+    const byMonth = {};
+    billable.forEach(d => { const k = new Date(d.created).toISOString().slice(0, 7); byMonth[k] = (byMonth[k] || 0) + 1; });
+
+    // Month list from the earliest registration up to this month, newest first.
+    const existing = Object.keys(byMonth).sort();
+    let y = existing.length ? +existing[0].slice(0, 4) : now.getFullYear();
+    let m = existing.length ? +existing[0].slice(5, 7) : now.getMonth() + 1;
+    const ey = now.getFullYear(), em = now.getMonth() + 1;
+    const months = [];
+    while (y < ey || (y === ey && m <= em)) { months.push(`${y}-${String(m).padStart(2, '0')}`); m++; if (m > 12) { m = 1; y++; } }
+    months.reverse();
+    const label = (k) => new Date(k + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    const money = (n) => 'Rs ' + Math.round(n).toLocaleString('en-US');
+
+    const selCount = byMonth[sel] || 0;
+    const total = billable.length;
+    const C2 = C;
+
+    return (
+      <div>
+        <div style={{ background: '#fff', border: '1px solid ' + C2.line, borderRadius: 16, padding: 18, marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Month</div>
+              <select value={sel} onChange={e => this.setState({ billMonth: e.target.value })} style={{ border: '1px solid ' + C2.line, borderRadius: 10, padding: '9px 12px', fontSize: 14, background: '#fdfcf8', minWidth: 170 }}>
+                {months.map(k => <option key={k} value={k}>{label(k)}{k === curKey ? ' (this month)' : ''}</option>)}
+              </select>
+            </div>
+            <button onClick={() => this.setState({ billMonth: '' })} style={{ padding: '9px 14px', borderRadius: 10, background: sel === curKey ? C2.green : '#fff', color: sel === curKey ? '#fff' : C2.ink, border: '1px solid ' + (sel === curKey ? C2.green : C2.line), fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>This month</button>
+            <div style={{ marginLeft: 'auto' }}>
+              <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Rate per device (Rs)</div>
+              <input type="number" value={rate || ''} placeholder="e.g. 100" onChange={e => this.setRate(e.target.value)} style={{ border: '1px solid ' + C2.line, borderRadius: 10, padding: '9px 12px', fontSize: 14, background: '#fdfcf8', width: 130 }} />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 14, padding: 16 }}>
+              <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Registered in {label(sel)}</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: C2.green }}>{selCount}</div>
+            </div>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: 16 }}>
+              <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Amount for {label(sel)}</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: C2.amber }}>{rate > 0 ? money(selCount * rate) : '—'}</div>
+            </div>
+            <div style={{ background: '#f8fafc', border: '1px solid ' + C2.line, borderRadius: 14, padding: 16 }}>
+              <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Total registered (all time)</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: C2.ink }}>{total}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid ' + C2.line, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', fontSize: 12, fontWeight: 700, color: C2.mut, padding: '12px 16px', borderBottom: '1px solid ' + C2.line }}>
+            <div style={{ flex: 1 }}>Month</div>
+            <div style={{ width: 90, textAlign: 'right' }}>Devices</div>
+            {rate > 0 ? <div style={{ width: 110, textAlign: 'right' }}>Amount</div> : null}
+          </div>
+          {months.map(k => (
+            <div key={k} onClick={() => this.setState({ billMonth: k })} style={{ display: 'flex', fontSize: 13.5, padding: '11px 16px', borderBottom: '1px solid ' + C2.line, cursor: 'pointer', background: k === sel ? '#f0fdf4' : '#fff' }}>
+              <div style={{ flex: 1, fontWeight: k === sel ? 700 : 500 }}>{label(k)}{k === curKey ? <span style={{ color: C2.green, fontSize: 11, marginLeft: 6 }}>this month</span> : null}</div>
+              <div style={{ width: 90, textAlign: 'right', fontWeight: 700 }}>{byMonth[k] || 0}</div>
+              {rate > 0 ? <div style={{ width: 110, textAlign: 'right', color: C2.amber, fontWeight: 700 }}>{money((byMonth[k] || 0) * rate)}</div> : null}
+            </div>
+          ))}
+          {rate > 0 ? (
+            <div style={{ display: 'flex', fontSize: 14, fontWeight: 800, padding: '13px 16px', background: '#faf8f1' }}>
+              <div style={{ flex: 1 }}>Total</div>
+              <div style={{ width: 90, textAlign: 'right' }}>{total}</div>
+              <div style={{ width: 110, textAlign: 'right', color: C2.amber }}>{money(total * rate)}</div>
+            </div>
+          ) : null}
+        </div>
+        <div style={{ fontSize: 11.5, color: C2.mut, marginTop: 10 }}>Counts every phone by the month it was registered, deleted ones excluded. The rate is saved on this computer only.</div>
+      </div>
+    );
+  };
+
   renderApp() {
     const { devices, error, enroll, form, tab, qrOpen } = this.state;
     const fi = { border: '1px solid ' + C.line, borderRadius: 8, padding: '8px 10px', fontSize: 13, background: '#fdfcf8', outline: 'none', width: '100%', boxSizing: 'border-box' };
@@ -148,7 +239,8 @@ export default class Devices extends React.Component {
     const list = devices || [];
     const counts = { all: 0, active: 0, locked: 0, released: 0, lost: 0, deleted: 0 };
     list.forEach(d => { const c = this.catOf(d); counts[c]++; if (c !== 'deleted') counts.all++; });
-    const tabs = [['all', 'All'], ['active', 'Active'], ['locked', 'Locked'], ['released', 'Released'], ['lost', 'Lost'], ['deleted', 'Deleted']];
+    counts.billing = list.filter(d => this.catOf(d) !== 'deleted').length;
+    const tabs = [['all', 'All'], ['active', 'Active'], ['locked', 'Locked'], ['released', 'Released'], ['lost', 'Lost'], ['deleted', 'Deleted'], ['billing', '💰 Billing']];
     const shown = tab === 'all' ? list.filter(d => this.catOf(d) !== 'deleted') : list.filter(d => this.catOf(d) === tab);
 
     return (
@@ -229,7 +321,8 @@ export default class Devices extends React.Component {
         </div>
 
         {error ? <div style={{ color: C.red, marginBottom: 12 }}>{error}</div> : null}
-        {devices === null ? <div style={{ color: C.mut, padding: 20 }}>Loading…</div>
+        {tab === 'billing' ? this.renderBilling(list)
+          : devices === null ? <div style={{ color: C.mut, padding: 20 }}>Loading…</div>
           : list.length === 0 ? <div style={{ color: C.mut, textAlign: 'center', padding: '36px 20px', background: '#fff', border: '1px dashed ' + C.line, borderRadius: 14 }}>No devices enrolled yet. Enroll one above to get started.</div>
           : shown.length === 0 ? <div style={{ color: C.mut, textAlign: 'center', padding: '28px 20px', background: '#fff', border: '1px dashed ' + C.line, borderRadius: 14 }}>No {tab} devices.</div>
           : (
