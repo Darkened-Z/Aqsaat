@@ -34,8 +34,9 @@ export default async function handler(req, res) {
       lost:    { status: 'lost' },
       release: { status: 'released', lock_mode: 'force_unlock' },
       active:  { status: 'active' },
+      delete:  { status: 'deleted' },   // soft delete; restore via 'active'
     }[action];
-    if (action === 'delete') {
+    if (action === 'purge') {
       const { error } = await supabaseAdmin.from('devices').delete().eq('id', deviceId).eq('shop_id', SHOP_ID);
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true });

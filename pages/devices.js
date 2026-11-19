@@ -120,7 +120,7 @@ export default class Devices extends React.Component {
     );
   }
 
-  catOf = (d) => d.status === 'released' ? 'released' : d.status === 'lost' ? 'lost' : d.current === 'lock' ? 'locked' : 'active';
+  catOf = (d) => d.status === 'deleted' ? 'deleted' : d.status === 'released' ? 'released' : d.status === 'lost' ? 'lost' : d.current === 'lock' ? 'locked' : 'active';
 
   renderApp() {
     const { devices, error, enroll, form, tab, qrOpen } = this.state;
@@ -133,10 +133,10 @@ export default class Devices extends React.Component {
     const btn = (label, bg, col, onClick) => <button onClick={onClick} style={{ padding: '7px 11px', borderRadius: 8, background: bg, color: col, fontWeight: 600, fontSize: 12, border: '1px solid ' + C.line, cursor: 'pointer' }}>{label}</button>;
 
     const list = devices || [];
-    const counts = { all: list.length, active: 0, locked: 0, released: 0, lost: 0 };
-    list.forEach(d => { counts[this.catOf(d)]++; });
-    const tabs = [['all', 'All'], ['active', 'Active'], ['locked', 'Locked'], ['released', 'Released'], ['lost', 'Lost']];
-    const shown = tab === 'all' ? list : list.filter(d => this.catOf(d) === tab);
+    const counts = { all: 0, active: 0, locked: 0, released: 0, lost: 0, deleted: 0 };
+    list.forEach(d => { const c = this.catOf(d); counts[c]++; if (c !== 'deleted') counts.all++; });
+    const tabs = [['all', 'All'], ['active', 'Active'], ['locked', 'Locked'], ['released', 'Released'], ['lost', 'Lost'], ['deleted', 'Deleted']];
+    const shown = tab === 'all' ? list.filter(d => this.catOf(d) !== 'deleted') : list.filter(d => this.catOf(d) === tab);
 
     return (
       <div style={{ maxWidth: 880, margin: '0 auto', padding: '16px 16px 64px' }}>
@@ -235,14 +235,21 @@ export default class Devices extends React.Component {
                     <span>Last check-in: <b style={{ color: C.ink }}>{d.lastCheckin ? new Date(d.lastCheckin).toLocaleString() : 'never'}</b></span>
                     <span>Unlock code: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14, letterSpacing: 1 }}>{d.unlockCode}</b></span>
                   </div>
+                  {d.status === 'deleted' ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {btn('↩ Restore', '#eaf5ee', C.green, () => this.act(d.id, 'active'))}
+                    {btn('🗑 Delete forever', '#fdecea', C.red, () => this.act(d.id, 'purge', 'Permanently delete this record? This CANNOT be undone.'))}
+                  </div>
+                  ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {btn('🔒 Lock', '#fdecea', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
                     {btn('🔓 Unlock', '#eaf5ee', C.green, () => this.act(d.id, 'unlock', 'Force-unlock (ignore overdue) this phone?'))}
                     {btn('⚙ Auto', '#f4f1e6', C.ink, () => this.act(d.id, 'auto'))}
                     {btn('⚠ Mark lost', '#fff7ed', C.amber, () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
                     {btn('✓ Release', '#eef2ff', '#4338ca', () => this.act(d.id, 'release', 'Release this phone (loan fully paid)? It will unlock permanently.'))}
-                    {btn('🗑 Delete', '#fff', C.mut, () => this.act(d.id, 'delete', 'Delete this device record? The phone will stop locking.'))}
+                    {btn('🗑 Delete', '#fff', C.mut, () => this.act(d.id, 'delete', 'Move this device to Deleted? The phone stops being managed until you restore it.'))}
                   </div>
+                  )}
                 </div>
               ))}
             </div>
