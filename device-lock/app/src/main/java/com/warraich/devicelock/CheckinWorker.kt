@@ -18,7 +18,7 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         val p = Prefs(applicationContext)
         if (!p.enrolled) return Result.success()
 
-        val loc = Loc.last(applicationContext)
+        val loc = Loc.fresh(applicationContext)
         val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy)
         val now = System.currentTimeMillis()
 
