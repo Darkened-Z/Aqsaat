@@ -178,6 +178,7 @@ export default class Devices extends React.Component {
   };
 
   enroll = async () => {
+    if (!this.state.form.planId) { alert('Link the customer\'s plan first (search above), so this phone auto-locks on overdue.'); return; }
     this.setState({ enrollBusy: true });
     try {
       const t = await this.token();
@@ -363,13 +364,13 @@ export default class Devices extends React.Component {
         {/* Enroll */}
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, padding: 16, marginBottom: 14 }}>
           <div style={{ fontWeight: 700, marginBottom: 2 }}>Enroll a new phone</div>
-          <div style={{ fontSize: 12, color: C.mut, marginBottom: 10 }}>Link the customer's plan so the phone auto-locks when they fall overdue. Then give it a name you'll recognise.</div>
+          <div style={{ fontSize: 12, color: C.mut, marginBottom: 10 }}><b style={{ color: C.red }}>Required:</b> link the customer's plan so the phone auto-locks on overdue. Then give it a name you'll recognise.</div>
           <div style={{ marginBottom: 10 }}>{this.renderPicker()}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, marginBottom: 10 }}>
             <input placeholder="Name to remember (customer / model)" value={form.label} onChange={e => this.setState({ form: { ...form, label: e.target.value } })} style={fi} />
             <input placeholder="Grace days (blank = shop default)" value={form.graceDays} onChange={e => this.setState({ form: { ...form, graceDays: e.target.value } })} style={fi} />
           </div>
-          <button onClick={this.enroll} disabled={this.state.enrollBusy} style={{ padding: '10px 16px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>{this.state.enrollBusy ? 'Creating…' : '+ Create enrollment'}</button>
+          <button onClick={this.enroll} disabled={this.state.enrollBusy || !form.planId} style={{ padding: '10px 16px', borderRadius: 10, background: (this.state.enrollBusy || !form.planId) ? C.mut : C.green, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: (this.state.enrollBusy || !form.planId) ? 'not-allowed' : 'pointer' }}>{this.state.enrollBusy ? 'Creating…' : form.planId ? '+ Create enrollment' : 'Link a plan first'}</button>
           {enroll ? (
             <div style={{ marginTop: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.green, marginBottom: 4 }}>On the phone (after scanning the provisioning QR), open Device Lock and type this code:</div>
