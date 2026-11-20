@@ -62,6 +62,15 @@ export default async function handler(req, res) {
       return res.json({ ok: true });
     }
     if (!patch) return res.status(400).json({ error: 'unknown action' });
+    if (action === 'delete') {
+      // A claimed phone that hasn't run its release would stay managed and then
+      // offline-lock once the server starts rejecting it.
+      const { data: dev } = await supabaseAdmin.from('devices').select('claimed, last_action')
+        .eq('id', deviceId).eq('shop_id', SHOP_ID).single();
+      if (dev && dev.claimed && dev.last_action !== 'release') {
+        return res.status(409).json({ error: 'Release this phone first and wait for it to check in before deleting.' });
+      }
+    }
     const { error } = await supabaseAdmin.from('devices').update(patch).eq('id', deviceId).eq('shop_id', SHOP_ID);
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ ok: true });

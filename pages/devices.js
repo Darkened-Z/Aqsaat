@@ -8,6 +8,7 @@ const C = { green: '#0f6b4b', red: '#b91c1c', amber: '#b45309', ink: '#1a2b1f', 
 // sync with the published app-release.apk.
 const APK_URL = 'https://aqsaat.vercel.app/device-lock.apk';
 const APK_CHECKSUM = 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk';
+const RATE_PER_DEVICE = 450;
 
 export default class Devices extends React.Component {
   state = {
@@ -15,14 +16,13 @@ export default class Devices extends React.Component {
     devices: null, error: '', enroll: null, enrollBusy: false,
     form: { label: '', planId: '', customerId: '', graceDays: '' },
     qrCfg: { apkUrl: APK_URL, checksum: APK_CHECKSUM, ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
-    tab: 'all', qrOpen: false, billMonth: '', rate: 0,
+    tab: 'all', qrOpen: false, billMonth: '',
     shop: null, pickQ: '',
     detail: null, payBusy: '',
   };
 
   async componentDidMount() {
     try { const s = JSON.parse(localStorage.getItem('devicelock_qrcfg') || '{}'); if (s && typeof s === 'object') this.setState(st => ({ qrCfg: { ...st.qrCfg, ...s, apkUrl: APK_URL, checksum: APK_CHECKSUM } })); } catch (e) {}
-    try { const r = parseFloat(localStorage.getItem('devicelock_rate') || '0'); if (r > 0) this.setState({ rate: r }); } catch (e) {}
     const { data: { session } } = await getSessionSafe();
     if (session) this.onAuthed(session.user); else this.setState({ authUser: null });
   }
@@ -335,6 +335,10 @@ export default class Devices extends React.Component {
   // one at a glance.
   connStatus = (d) => {
     const rel = (min) => min < 60 ? `${Math.max(1, Math.round(min))} min` : min < 1440 ? `${Math.round(min / 60)} hr` : `${Math.round(min / 1440)} day(s)`;
+    const ago = d.lastCheckin ? rel((Date.now() - new Date(d.lastCheckin).getTime()) / 60000) : '';
+    if (d.lastAction === 'release') return { c: '#4338ca', bg: '#eef2ff', t: `Released — app un-enrolled itself ${ago} ago, phone no longer managed` };
+    if (d.status === 'released') return { c: C.amber, bg: '#fffbeb', t: 'Release pending — the phone frees itself at its next check-in' };
+    if (d.status === 'deleted') return { c: C.mut, bg: '#f4f1e6', t: d.claimed ? 'Deleted while still enrolled — phone is stuck managed, restore it' : 'Deleted — never set up' };
     if (!d.lastCheckin) {
       return d.claimed
         ? { c: C.amber, bg: '#fffbeb', t: 'Set up, waiting for first check-in' }
@@ -346,17 +350,13 @@ export default class Devices extends React.Component {
     return { c: C.red, bg: '#fdecea', t: `No check-in for ${rel(min)} — app may be removed` };
   };
 
-  setRate = (v) => {
-    const r = parseFloat(v) || 0;
-    this.setState({ rate: r });
-    try { localStorage.setItem('devicelock_rate', String(r)); } catch (e) {}
-  };
+  canDelete = (d) => !d.claimed || d.lastAction === 'release';
 
   renderBilling = (list) => {
     const now = new Date();
     const curKey = now.toISOString().slice(0, 7);
     const sel = this.state.billMonth || curKey;
-    const rate = this.state.rate || 0;
+    const rate = RATE_PER_DEVICE;
 
     // Count registrations by the month each device was created (deleted excluded).
     const billable = list.filter(d => this.catOf(d) !== 'deleted' && d.created);
@@ -389,9 +389,9 @@ export default class Devices extends React.Component {
               </select>
             </div>
             <button onClick={() => this.setState({ billMonth: '' })} style={{ padding: '9px 14px', borderRadius: 10, background: sel === curKey ? C2.green : '#fff', color: sel === curKey ? '#fff' : C2.ink, border: '1px solid ' + (sel === curKey ? C2.green : C2.line), fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>This month</button>
-            <div style={{ marginLeft: 'auto' }}>
-              <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Rate per device (Rs)</div>
-              <input type="number" value={rate || ''} placeholder="e.g. 100" onChange={e => this.setRate(e.target.value)} style={{ border: '1px solid ' + C2.line, borderRadius: 10, padding: '9px 12px', fontSize: 14, background: '#fdfcf8', width: 130 }} />
+            <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+              <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Rate per device</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: C2.ink }}>{money(rate)}</div>
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
@@ -401,7 +401,7 @@ export default class Devices extends React.Component {
             </div>
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: 16 }}>
               <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Amount for {label(sel)}</div>
-              <div style={{ fontSize: 30, fontWeight: 800, color: C2.amber }}>{rate > 0 ? money(selCount * rate) : '—'}</div>
+              <div style={{ fontSize: 30, fontWeight: 800, color: C2.amber }}>{money(selCount * rate)}</div>
             </div>
             <div style={{ background: '#f8fafc', border: '1px solid ' + C2.line, borderRadius: 14, padding: 16 }}>
               <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Total registered (all time)</div>
@@ -414,24 +414,22 @@ export default class Devices extends React.Component {
           <div style={{ display: 'flex', fontSize: 12, fontWeight: 700, color: C2.mut, padding: '12px 16px', borderBottom: '1px solid ' + C2.line }}>
             <div style={{ flex: 1 }}>Month</div>
             <div style={{ width: 90, textAlign: 'right' }}>Devices</div>
-            {rate > 0 ? <div style={{ width: 110, textAlign: 'right' }}>Amount</div> : null}
+            <div style={{ width: 110, textAlign: 'right' }}>Amount</div>
           </div>
           {months.map(k => (
             <div key={k} onClick={() => this.setState({ billMonth: k })} style={{ display: 'flex', fontSize: 13.5, padding: '11px 16px', borderBottom: '1px solid ' + C2.line, cursor: 'pointer', background: k === sel ? '#f0fdf4' : '#fff' }}>
               <div style={{ flex: 1, fontWeight: k === sel ? 700 : 500 }}>{label(k)}{k === curKey ? <span style={{ color: C2.green, fontSize: 11, marginLeft: 6 }}>this month</span> : null}</div>
               <div style={{ width: 90, textAlign: 'right', fontWeight: 700 }}>{byMonth[k] || 0}</div>
-              {rate > 0 ? <div style={{ width: 110, textAlign: 'right', color: C2.amber, fontWeight: 700 }}>{money((byMonth[k] || 0) * rate)}</div> : null}
+              <div style={{ width: 110, textAlign: 'right', color: C2.amber, fontWeight: 700 }}>{money((byMonth[k] || 0) * rate)}</div>
             </div>
           ))}
-          {rate > 0 ? (
-            <div style={{ display: 'flex', fontSize: 14, fontWeight: 800, padding: '13px 16px', background: '#faf8f1' }}>
-              <div style={{ flex: 1 }}>Total</div>
-              <div style={{ width: 90, textAlign: 'right' }}>{total}</div>
-              <div style={{ width: 110, textAlign: 'right', color: C2.amber }}>{money(total * rate)}</div>
-            </div>
-          ) : null}
+          <div style={{ display: 'flex', fontSize: 14, fontWeight: 800, padding: '13px 16px', background: '#faf8f1' }}>
+            <div style={{ flex: 1 }}>Total</div>
+            <div style={{ width: 90, textAlign: 'right' }}>{total}</div>
+            <div style={{ width: 110, textAlign: 'right', color: C2.amber }}>{money(total * rate)}</div>
+          </div>
         </div>
-        <div style={{ fontSize: 11.5, color: C2.mut, marginTop: 10 }}>Counts every phone by the month it was registered, deleted ones excluded. The rate is saved on this computer only.</div>
+        <div style={{ fontSize: 11.5, color: C2.mut, marginTop: 10 }}>Counts every phone by the month it was registered, deleted ones excluded.</div>
       </div>
     );
   };
@@ -586,7 +584,11 @@ export default class Devices extends React.Component {
                     {(d.status === 'released' || d.status === 'lost') ? btn('● Activate', '#eafaf0', C.green, () => this.act(d.id, 'active', 'Bring this phone back to Active (auto-lock on overdue)?')) : null}
                     {btn('⚠ Mark lost', '#fff7ed', C.amber, () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
                     {btn('✓ Release', '#eef2ff', '#4338ca', () => this.act(d.id, 'release', 'Release this phone? This UN-ENROLLS it and removes the lock permanently — only do this when the loan is fully paid.'))}
-                    {btn('🗑 Delete', '#fff', C.mut, () => this.act(d.id, 'delete', 'Move this device to Deleted? The phone stops being managed until you restore it.'))}
+                    {this.canDelete(d)
+                      ? btn('🗑 Delete', '#fff', C.mut, () => this.act(d.id, 'delete', 'Move this device to Deleted?'))
+                      : btn('🗑 Delete', '#fff', '#c9c3b3', () => alert(d.status === 'released'
+                          ? 'Release is still pending — wait until the phone checks in and frees itself, then delete.'
+                          : 'Release this phone first. Deleting an enrolled phone leaves it stuck: it stays managed and locks itself when it can\'t reach the server.'))}
                     {d.callMode === 'shop_only'
                       ? btn('📞 Calls: all', '#eaf5ee', C.green, () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
                       : btn('📞 Shop-only calls', '#fff7ed', C.amber, () => this.setCallShop(d))}
