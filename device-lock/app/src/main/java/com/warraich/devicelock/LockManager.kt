@@ -27,6 +27,8 @@ class LockManager(private val ctx: Context) {
             UserManager.DISALLOW_MODIFY_ACCOUNTS
         )) runCatching { dpm.addUserRestriction(admin, r) }
         grantRuntimePerms()
+        // Force location services on so a fresh fix is available for recovery.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) runCatching { dpm.setLocationEnabled(admin, true) }
         applyFrpPolicy()
     }
 
