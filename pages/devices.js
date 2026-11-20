@@ -17,6 +17,7 @@ export default class Devices extends React.Component {
     qrCfg: { apkUrl: APK_URL, checksum: APK_CHECKSUM, ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
     tab: 'all', qrOpen: false, billMonth: '', rate: 0,
     shop: null, pickQ: '',
+    detail: null, payBusy: '',
   };
 
   async componentDidMount() {
@@ -80,6 +81,111 @@ export default class Devices extends React.Component {
   };
 
   clearPick = () => this.setState(st => ({ form: { ...st.form, planId: '', customerId: '' } }));
+
+  openDetail = (d) => this.setState({ detail: d });
+  closeDetail = () => this.setState({ detail: null });
+
+  payInstallment = async (planId, n) => {
+    this.setState({ payBusy: planId + ':' + n });
+    try {
+      const t = await this.token();
+      const resp = await fetch('/api/device/pay', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify({ planId, n }) });
+      if (!resp.ok) throw new Error((await resp.json()).error || 'failed');
+      await this.loadShop();
+      await this.load();
+    } catch (e) { alert(e.message); }
+    this.setState({ payBusy: '' });
+  };
+
+  renderDetail = () => {
+    const { detail, shop } = this.state;
+    if (!detail) return null;
+    const d = detail;
+    const cs = this.connStatus(d);
+    const plan = shop ? (shop.plans || []).find(p => p.id === d.planId) : null;
+    const cust = shop ? (shop.customers || []).find(c => c.id === d.customerId) : null;
+    const prod = plan && shop ? (shop.products || []).find(pr => pr.id === plan.productId) : null;
+    const today = new Date().toISOString().slice(0, 10);
+    const sched = plan ? (plan.schedule || []).slice().sort((a, b) => (a.n || 0) - (b.n || 0)) : [];
+    const unpaid = sched.filter(s => !s.paid);
+    const overdue = unpaid.filter(s => s.dueDate && s.dueDate < today);
+    const remaining = unpaid.reduce((a, s) => a + (s.amount || 0), 0);
+    const money = (n) => 'Rs ' + Math.round(n || 0).toLocaleString('en-US');
+    const btnInline = (label, col, onClick) => <button onClick={() => { onClick(); this.closeDetail(); }} style={{ padding: '8px 12px', borderRadius: 9, background: '#fff', color: col, fontWeight: 700, fontSize: 12.5, border: '1px solid ' + C.line, cursor: 'pointer' }}>{label}</button>;
+
+    const row = (s) => {
+      const isOverdue = !s.paid && s.dueDate && s.dueDate < today;
+      const st = s.paid ? ['#eafaf0', C.green, 'Paid'] : isOverdue ? ['#fdecea', C.red, 'Overdue'] : ['#fffbeb', C.amber, 'Due'];
+      return (
+        <div key={s.n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid ' + C.line }}>
+          <div style={{ width: 26, fontWeight: 700, color: C.mut, fontSize: 13 }}>#{s.n}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>{money(s.amount)}</div>
+            <div style={{ fontSize: 11.5, color: C.mut }}>Due {s.dueDate || '—'}{s.paid && s.paidDate ? ` · paid ${s.paidDate}` : ''}</div>
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, color: st[1], background: st[0], borderRadius: 10, padding: '3px 9px' }}>{st[2]}</span>
+          {!s.paid ? (
+            <button disabled={this.state.payBusy === d.planId + ':' + s.n} onClick={() => this.payInstallment(d.planId, s.n)} style={{ padding: '6px 11px', borderRadius: 8, background: C.green, color: '#fff', fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer' }}>{this.state.payBusy === d.planId + ':' + s.n ? '…' : '✓ Mark paid'}</button>
+          ) : null}
+        </div>
+      );
+    };
+
+    return (
+      <div onClick={this.closeDetail} style={{ position: 'fixed', inset: 0, background: 'rgba(20,25,20,.45)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 12px', overflowY: 'auto' }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+          <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + C.line, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>{d.label || 'Unnamed phone'}</div>
+              <div style={{ fontSize: 12, color: C.mut }}>{cust ? cust.name : d.customer || '—'}{prod ? ' · ' + prod.name : ''}</div>
+            </div>
+            <button onClick={this.closeDetail} style={{ border: 'none', background: '#f4f1e6', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', fontSize: 15 }}>✕</button>
+          </div>
+
+          <div style={{ padding: '14px 18px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: cs.bg, color: cs.c, fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 20, marginBottom: 12 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 8, background: cs.c, display: 'inline-block' }} />{cs.t}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: C.mut, marginBottom: 6 }}>
+              <span>Status: <b style={{ color: C.ink }}>{d.status}</b></span>
+              <span>Mode: <b style={{ color: C.ink }}>{d.lockMode}</b></span>
+              <span>Unlock code: <b style={{ color: C.green, fontFamily: 'monospace' }}>{d.unlockCode}</b></span>
+              <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? 'only ' + (d.allowNumber || '—') : 'all'}</b></span>
+            </div>
+            <div style={{ fontSize: 12, color: C.mut, marginBottom: 14 }}>📍 {d.locAt ? <a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>View last location</a> : 'Location not reported yet'}</div>
+
+            {!plan ? (
+              <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: 12, fontSize: 12.5, color: C.amber }}>No plan linked to this phone. Enroll it again with a plan, or it can only be locked manually.</div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                  <div style={{ flex: 1, background: overdue.length ? '#fdecea' : '#eafaf0', border: '1px solid ' + (overdue.length ? '#f6c9c4' : '#bbf7d0'), borderRadius: 12, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 11, color: C.mut }}>Overdue</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: overdue.length ? C.red : C.green }}>{overdue.length}</div>
+                  </div>
+                  <div style={{ flex: 1, background: '#f8fafc', border: '1px solid ' + C.line, borderRadius: 12, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 11, color: C.mut }}>Remaining</div>
+                    <div style={{ fontSize: 20, fontWeight: 800 }}>{money(remaining)}</div>
+                  </div>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 13, margin: '6px 0 4px' }}>Installments — {plan.voucherNo || plan.id}</div>
+                <div style={{ border: '1px solid ' + C.line, borderRadius: 12, overflow: 'hidden', maxHeight: 280, overflowY: 'auto' }}>
+                  {sched.length ? sched.map(row) : <div style={{ padding: 12, color: C.mut, fontSize: 12.5 }}>No schedule on this plan.</div>}
+                </div>
+                <div style={{ fontSize: 11, color: C.mut, marginTop: 8 }}>Marking an installment paid here records it in the app (to Cash) and stops the auto-lock. For a part payment or a different account, record it in the main app instead.</div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: '12px 18px', borderTop: '1px solid ' + C.line, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {btnInline('🔒 Lock', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
+            {btnInline('🔓 Unlock', C.green, () => this.act(d.id, 'unlock', 'Force-unlock this phone?'))}
+            {btnInline('⚙ Auto', C.ink, () => this.act(d.id, 'auto'))}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   renderPicker = () => {
     const { shop, pickQ, form } = this.state;
@@ -349,6 +455,7 @@ export default class Devices extends React.Component {
 
     return (
       <div style={{ maxWidth: 880, margin: '0 auto', padding: '16px 16px 64px' }}>
+        {this.renderDetail()}
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
           <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🔒</div>
@@ -441,7 +548,7 @@ export default class Devices extends React.Component {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: d.label ? C.ink : C.mut }}>
-                        {d.label || 'Unnamed phone'}
+                        <span onClick={() => this.openDetail(d)} style={{ cursor: 'pointer' }} title="Open details & history">{d.label || 'Unnamed phone'}</span>
                         <button onClick={() => this.rename(d)} title="Rename" style={{ marginLeft: 8, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: C.green }}>✏️</button>
                       </div>
                       <div style={{ fontSize: 12, color: C.mut }}>{[d.customer, d.plan].filter(Boolean).join(' · ') || d.id}</div>
@@ -472,6 +579,7 @@ export default class Devices extends React.Component {
                   </div>
                   ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {btn('📋 Details & history', '#eef2ff', '#4338ca', () => this.openDetail(d))}
                     {btn('🔒 Lock', '#fdecea', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
                     {btn('🔓 Unlock', '#eaf5ee', C.green, () => this.act(d.id, 'unlock', 'Force-unlock (ignore overdue) this phone?'))}
                     {btn('⚙ Auto', '#f4f1e6', C.ink, () => this.act(d.id, 'auto'))}
