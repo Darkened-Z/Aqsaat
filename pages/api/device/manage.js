@@ -22,7 +22,7 @@ export default async function handler(req, res) {
       unlockCode: unlockCode(dev.secret),
       lat: dev.last_lat, lng: dev.last_lng, locAcc: dev.last_loc_acc, locAt: dev.last_loc_at,
       callMode: dev.call_mode || 'open', allowNumber: dev.allow_number || '',
-      created: dev.created_at,
+      created: dev.created_at, claimed: dev.claimed,
     }));
     return res.json({ devices: list });
   }
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
       auto:     { lock_mode: 'auto' },
       lost:     { status: 'lost' },
       release:  { status: 'released', lock_mode: 'force_unlock', call_mode: 'open' },
-      active:   { status: 'active' },
+      active:   { status: 'active', lock_mode: 'auto' },
       delete:   { status: 'deleted' },   // soft delete; restore via 'active'
       callopen: { call_mode: 'open' },
     }[action];
