@@ -223,6 +223,22 @@ export default class Devices extends React.Component {
 
   catOf = (d) => d.status === 'deleted' ? 'deleted' : d.status === 'released' ? 'released' : d.status === 'lost' ? 'lost' : d.current === 'lock' ? 'locked' : 'active';
 
+  // Is the lock app actually alive on the phone? Based on how recently it checked
+  // in (it pings every ~6h), so the owner can tell a live phone from a dead/removed
+  // one at a glance.
+  connStatus = (d) => {
+    const rel = (min) => min < 60 ? `${Math.max(1, Math.round(min))} min` : min < 1440 ? `${Math.round(min / 60)} hr` : `${Math.round(min / 1440)} day(s)`;
+    if (!d.lastCheckin) {
+      return d.claimed
+        ? { c: C.amber, bg: '#fffbeb', t: 'Set up, waiting for first check-in' }
+        : { c: C.mut, bg: '#f4f1e6', t: 'Not set up yet — code not entered on the phone' };
+    }
+    const min = (Date.now() - new Date(d.lastCheckin).getTime()) / 60000;
+    if (min < 60 * 13) return { c: C.green, bg: '#eafaf0', t: `App active — last seen ${rel(min)} ago` };
+    if (min < 60 * 24 * 7) return { c: C.amber, bg: '#fffbeb', t: `Quiet ${rel(min)} — phone off or no internet` };
+    return { c: C.red, bg: '#fdecea', t: `No check-in for ${rel(min)} — app may be removed` };
+  };
+
   setRate = (v) => {
     const r = parseFloat(v) || 0;
     this.setState({ rate: r });
@@ -431,6 +447,11 @@ export default class Devices extends React.Component {
                     </div>
                     {badge(d.current)}
                   </div>
+                  {(() => { const cs = this.connStatus(d); return (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: cs.bg, color: cs.c, fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 20, marginBottom: 11 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 8, background: cs.c, display: 'inline-block' }} />{cs.t}
+                    </div>
+                  ); })()}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
                     <span>Mode: <b style={{ color: C.ink }}>{d.lockMode}</b></span>
                     <span>Status: <b style={{ color: C.ink }}>{d.status}</b></span>
@@ -453,8 +474,9 @@ export default class Devices extends React.Component {
                     {btn('🔒 Lock', '#fdecea', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
                     {btn('🔓 Unlock', '#eaf5ee', C.green, () => this.act(d.id, 'unlock', 'Force-unlock (ignore overdue) this phone?'))}
                     {btn('⚙ Auto', '#f4f1e6', C.ink, () => this.act(d.id, 'auto'))}
+                    {(d.status === 'released' || d.status === 'lost') ? btn('● Activate', '#eafaf0', C.green, () => this.act(d.id, 'active', 'Bring this phone back to Active (auto-lock on overdue)?')) : null}
                     {btn('⚠ Mark lost', '#fff7ed', C.amber, () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
-                    {btn('✓ Release', '#eef2ff', '#4338ca', () => this.act(d.id, 'release', 'Release this phone (loan fully paid)? It will unlock permanently.'))}
+                    {btn('✓ Release', '#eef2ff', '#4338ca', () => this.act(d.id, 'release', 'Release this phone? This UN-ENROLLS it and removes the lock permanently — only do this when the loan is fully paid.'))}
                     {btn('🗑 Delete', '#fff', C.mut, () => this.act(d.id, 'delete', 'Move this device to Deleted? The phone stops being managed until you restore it.'))}
                     {d.callMode === 'shop_only'
                       ? btn('📞 Calls: all', '#eaf5ee', C.green, () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
