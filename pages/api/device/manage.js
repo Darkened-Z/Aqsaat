@@ -23,6 +23,7 @@ export default async function handler(req, res) {
       lat: dev.last_lat, lng: dev.last_lng, locAcc: dev.last_loc_acc, locAt: dev.last_loc_at,
       callMode: dev.call_mode || 'open', allowNumber: dev.allow_number || '',
       created: dev.created_at, claimed: dev.claimed,
+      planId: dev.plan_id, customerId: dev.customer_id,
     }));
     return res.json({ devices: list });
   }
