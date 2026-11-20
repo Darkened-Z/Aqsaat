@@ -1,6 +1,6 @@
 import React from 'react';
 import Head from 'next/head';
-import { supabase, getSessionSafe } from '../lib/supabase';
+import { supabase, getSessionSafe, SHOP_ID } from '../lib/supabase';
 
 const C = { green: '#0f6b4b', red: '#b91c1c', amber: '#b45309', ink: '#1a2b1f', mut: '#7a7663', line: '#ece8dc', bg: '#f7f5ef' };
 
@@ -16,6 +16,7 @@ export default class Devices extends React.Component {
     form: { label: '', planId: '', customerId: '', graceDays: '' },
     qrCfg: { apkUrl: APK_URL, checksum: APK_CHECKSUM, ssid: '', wifiPass: '' }, qrImg: '', qrBusy: false,
     tab: 'all', qrOpen: false, billMonth: '', rate: 0,
+    shop: null, pickQ: '',
   };
 
   async componentDidMount() {
@@ -39,7 +40,88 @@ export default class Devices extends React.Component {
     } catch (e) { alert(e.message); }
     this.setState({ qrBusy: false });
   };
-  onAuthed = (user) => { this.setState({ authUser: user }); this.load(); };
+  onAuthed = (user) => { this.setState({ authUser: user }); this.load(); this.loadShop(); };
+
+  // The shop blob (customers/plans/products) so enrollment can link to a real plan
+  // by its internal id — which is what drives auto-lock on overdue.
+  loadShop = async () => {
+    try {
+      const { data } = await supabase.from('shops').select('data').eq('id', SHOP_ID).maybeSingle();
+      const d = (data && data.data) || {};
+      this.setState({ shop: { customers: d.customers || [], plans: d.plans || [], products: d.products || [] } });
+    } catch (e) {}
+  };
+
+  planResults = () => {
+    const { shop, pickQ } = this.state;
+    if (!shop || !pickQ.trim()) return [];
+    const q = pickQ.trim().toLowerCase();
+    const custById = {}; shop.customers.forEach(c => { custById[c.id] = c; });
+    const prodById = {}; shop.products.forEach(p => { prodById[p.id] = p; });
+    return shop.plans
+      .filter(p => p && !p._deleted)
+      .map(p => {
+        const c = custById[p.customerId] || {};
+        const pr = prodById[p.productId] || {};
+        const remaining = (p.schedule || []).filter(s => !s.paid).reduce((a, s) => a + (s.amount || 0), 0);
+        return { plan: p, custName: c.name || '', phone: c.phone || '', product: pr.name || '', voucher: p.voucherNo || '', status: p.status || '', remaining };
+      })
+      .filter(r => (r.custName + ' ' + r.phone + ' ' + r.product + ' ' + r.voucher).toLowerCase().includes(q))
+      .sort((a, b) => (a.status === 'active' ? 0 : 1) - (b.status === 'active' ? 0 : 1))
+      .slice(0, 8);
+  };
+
+  pickPlan = (r) => {
+    const { form } = this.state;
+    this.setState({
+      pickQ: '',
+      form: { ...form, planId: r.plan.id, customerId: r.plan.customerId || '', label: form.label || [r.custName, r.product].filter(Boolean).join(' — ') },
+    });
+  };
+
+  clearPick = () => this.setState(st => ({ form: { ...st.form, planId: '', customerId: '' } }));
+
+  renderPicker = () => {
+    const { shop, pickQ, form } = this.state;
+    const fi = { border: '1px solid ' + C.line, borderRadius: 8, padding: '8px 10px', fontSize: 13, background: '#fdfcf8', outline: 'none', width: '100%', boxSizing: 'border-box' };
+    const money = (n) => 'Rs ' + Math.round(n || 0).toLocaleString('en-US');
+
+    if (form.planId) {
+      const cust = (shop ? shop.customers : []).find(c => c.id === form.customerId);
+      const plan = (shop ? shop.plans : []).find(p => p.id === form.planId);
+      const prod = plan ? (shop.products || []).find(pr => pr.id === plan.productId) : null;
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{cust ? cust.name : form.customerId || 'Customer'}{prod ? ' · ' + prod.name : ''}</div>
+            <div style={{ fontSize: 11.5, color: C.mut }}>Linked to {plan ? (plan.voucherNo || plan.id) : form.planId} — auto-lock on overdue is ON</div>
+          </div>
+          <button onClick={this.clearPick} style={{ border: '1px solid ' + C.line, background: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: C.mut }}>Change</button>
+        </div>
+      );
+    }
+
+    const results = this.planResults();
+    return (
+      <div>
+        <input placeholder={shop ? 'Search customer name, phone or voucher to link the plan' : 'Loading plans…'} disabled={!shop} value={pickQ} onChange={e => this.setState({ pickQ: e.target.value })} style={fi} />
+        {pickQ.trim() ? (
+          <div style={{ border: '1px solid ' + C.line, borderTop: 'none', borderRadius: '0 0 8px 8px', maxHeight: 260, overflowY: 'auto', background: '#fff' }}>
+            {results.length === 0 ? <div style={{ padding: '10px 12px', fontSize: 12.5, color: C.mut }}>No match. Check the spelling, or leave unlinked (manual lock only).</div>
+              : results.map(r => (
+                <div key={r.plan.id} onClick={() => this.pickPlan(r)} style={{ padding: '9px 12px', borderBottom: '1px solid ' + C.line, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.custName || '—'}{r.phone ? ' · ' + r.phone : ''}</div>
+                    <div style={{ fontSize: 11.5, color: C.mut }}>{[r.product, r.voucher].filter(Boolean).join(' · ') || r.plan.id}{r.remaining > 0 ? ` · ${money(r.remaining)} left` : ''}</div>
+                  </div>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: r.status === 'active' ? C.green : C.mut, background: r.status === 'active' ? '#eafaf0' : '#f4f1e6', borderRadius: 10, padding: '2px 8px', whiteSpace: 'nowrap' }}>{r.status || '—'}</span>
+                </div>
+              ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   token = async () => {
     const { data: { session } } = await getSessionSafe();
@@ -105,7 +187,7 @@ export default class Devices extends React.Component {
       });
       if (!resp.ok) throw new Error((await resp.json()).error || 'enroll failed');
       const r = await resp.json();
-      this.setState({ enroll: r, form: { label: '', planId: '', customerId: '', graceDays: '' } });
+      this.setState({ enroll: r, pickQ: '', form: { label: '', planId: '', customerId: '', graceDays: '' } });
       this.load();
     } catch (e) { alert(e.message); }
     this.setState({ enrollBusy: false });
@@ -265,11 +347,10 @@ export default class Devices extends React.Component {
         {/* Enroll */}
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, padding: 16, marginBottom: 14 }}>
           <div style={{ fontWeight: 700, marginBottom: 2 }}>Enroll a new phone</div>
-          <div style={{ fontSize: 12, color: C.mut, marginBottom: 10 }}>Give it a name you'll recognise later — customer + model works well (e.g. "Ali Raza — Samsung A15").</div>
+          <div style={{ fontSize: 12, color: C.mut, marginBottom: 10 }}>Link the customer's plan so the phone auto-locks when they fall overdue. Then give it a name you'll recognise.</div>
+          <div style={{ marginBottom: 10 }}>{this.renderPicker()}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, marginBottom: 10 }}>
             <input placeholder="Name to remember (customer / model)" value={form.label} onChange={e => this.setState({ form: { ...form, label: e.target.value } })} style={fi} />
-            <input placeholder="Plan voucher / ID (optional)" value={form.planId} onChange={e => this.setState({ form: { ...form, planId: e.target.value } })} style={fi} />
-            <input placeholder="Customer ID (optional)" value={form.customerId} onChange={e => this.setState({ form: { ...form, customerId: e.target.value } })} style={fi} />
             <input placeholder="Grace days (blank = shop default)" value={form.graceDays} onChange={e => this.setState({ form: { ...form, graceDays: e.target.value } })} style={fi} />
           </div>
           <button onClick={this.enroll} disabled={this.state.enrollBusy} style={{ padding: '10px 16px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>{this.state.enrollBusy ? 'Creating…' : '+ Create enrollment'}</button>
