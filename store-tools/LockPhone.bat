@@ -3,6 +3,7 @@ setlocal enabledelayedexpansion
 title Warraich Corporation - Lock a Phone
 color 0A
 cd /d "%~dp0"
+echo "%~dp0" | find /I "%TEMP%" >nul && ( echo  Please EXTRACT the ZIP first ^(right-click ^> Extract All^), then run LockPhone.bat from that folder. & pause & exit /b )
 
 set ADB=%~dp0platform-tools\adb.exe
 set APK=%~dp0device-lock.apk
@@ -23,10 +24,11 @@ if not exist "%ADB%" (
   del pt.zip >nul 2>&1
 )
 
-REM ---- Always refresh the lock app to the latest ----
+REM ---- Refresh the lock app; keep the bundled copy if offline ----
 echo  Getting the latest lock app...
-powershell -NoProfile -Command "try{Invoke-WebRequest 'https://aqsaat.vercel.app/device-lock.apk' -OutFile 'device-lock.apk'}catch{exit 1}"
-if not exist "%APK%" ( echo  COULD NOT DOWNLOAD LOCK APP - check internet. & pause & exit /b )
+powershell -NoProfile -Command "try{Invoke-WebRequest 'https://aqsaat.vercel.app/device-lock.apk' -OutFile 'device-lock.new'}catch{exit 1}"
+if not errorlevel 1 ( move /y "device-lock.new" "%APK%" >nul ) else ( del "device-lock.new" >nul 2>&1 & echo  No internet - using the lock app included in this folder. )
+if not exist "%APK%" ( echo  LOCK APP MISSING - extract the whole ZIP, then try again. & pause & exit /b )
 
 echo(
 echo  BEFORE YOU START, THE PHONE MUST BE:
