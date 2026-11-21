@@ -28,7 +28,7 @@ REM ---- Refresh the lock app; keep the bundled copy if offline ----
 echo  Getting the latest lock app...
 powershell -NoProfile -Command "try{Invoke-WebRequest 'https://aqsaat.vercel.app/device-lock.apk' -OutFile 'device-lock.new'}catch{exit 1}"
 if not errorlevel 1 ( move /y "device-lock.new" "%APK%" >nul ) else ( del "device-lock.new" >nul 2>&1 & echo  No internet - using the lock app included in this folder. )
-if not exist "%APK%" ( echo  LOCK APP MISSING - extract the whole ZIP, then try again. & pause & exit /b )
+if not exist "%APK%" ( echo  COULD NOT DOWNLOAD LOCK APP - connect to internet and try again. & pause & exit /b )
 
 echo(
 echo  BEFORE YOU START, THE PHONE MUST BE:
