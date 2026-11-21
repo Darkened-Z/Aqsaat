@@ -1116,7 +1116,7 @@ export default class App extends React.Component {
       prompt('Copy this report:', text);
     }
   };
-  printUdharStatement = (personName, customNote = '', customTitle = '') => {
+  printUdharStatement = (personName, customNote = '', customTitle = '', phone = '') => {
     const entries = this.activeUdpiEntries().filter(u => u.person.trim().toLowerCase() === personName.toLowerCase());
     entries.sort((a, b) => {
       const cmp = (a.date || '').localeCompare(b.date || '');
@@ -1130,11 +1130,12 @@ export default class App extends React.Component {
     let titleText = customTitle && customTitle.trim() ? customTitle.trim() : ('Statement — ' + personName);
     titleText = titleText.replace(/^\*+|\*+$/g, '').trim();
 
-    const rawPhone = this._getUdharPersonPhone(personName) || '';
+    const rawPhone = (phone || '').trim() || this._getUdharPersonPhone(personName) || '';
     const custs = this.state.customers || [];
     const pName = (personName || '').trim().toLowerCase();
     const cust = custs.find(x => x.name && x.name.trim().toLowerCase() === pName) ||
-      custs.find(x => x.name && (pName.startsWith(x.name.trim().toLowerCase()) || x.name.trim().toLowerCase().startsWith(pName)));
+      custs.find(x => x.name && (pName.startsWith(x.name.trim().toLowerCase()) || x.name.trim().toLowerCase().startsWith(pName))) ||
+      (rawPhone && custs.find(x => !x._deleted && x.phone === rawPhone));
     const custAddress = cust ? [cust.address, cust.city].filter(Boolean).join(', ') : '';
 
     const isDefaultTitle = !customTitle ||
@@ -4931,9 +4932,13 @@ export default class App extends React.Component {
       });
     };
 
-    const handleSendWhatsApp = () => {
+    const rememberPhone = () => {
       const typed = (m.phone || '').trim();
       if (typed && typed !== this.getUdharMeta(m.personName).phone) this.setUdharMeta(m.personName, 'phone', typed);
+    };
+
+    const handleSendWhatsApp = () => {
+      rememberPhone();
       const waNum = this._waPhone(m.phone);
       const url = waNum
         ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(m.message)
@@ -4957,7 +4962,8 @@ export default class App extends React.Component {
     };
 
     const handlePrint = () => {
-      this.printUdharStatement(m.personName, m.customNote, m.customTitle);
+      rememberPhone();
+      this.printUdharStatement(m.personName, m.customNote, m.customTitle, m.phone);
     };
 
     const inpStyle = { width: '100%', border: '1px solid #ece8dc', borderRadius: 10, padding: '10px 12px', fontSize: 13, background: '#fdfcf8', outline: 'none' };
