@@ -975,8 +975,26 @@ export default class App extends React.Component {
     if (meta && meta.phone) return meta.phone;
     const pName = personName.trim().toLowerCase();
     const custs = this.state.customers || [];
-    const c = custs.find(x => !x._deleted && x.phone && x.name && x.name.trim().toLowerCase() === pName);
+    const live = custs.filter(x => !x._deleted && x.phone && x.name);
+    const c = live.find(x => x.name.trim().toLowerCase() === pName)
+      || live.find(x => { const n = x.name.trim().toLowerCase(); return n.length >= 4 && (pName.startsWith(n) || n.startsWith(pName)); });
     return c ? c.phone : null;
+  };
+  _statementPhoneMatches = (q) => {
+    const s = (q || '').trim().toLowerCase();
+    if (s.length < 2) return [];
+    const plans = this.state.plans || [];
+    const digits = s.replace(/\D/g, '');
+    return (this.state.customers || [])
+      .filter(c => !c._deleted && c.phone)
+      .map(c => {
+        const vch = plans.filter(p => !p._deleted && p.customerId === c.id).map(p => p.voucherNo).filter(Boolean);
+        return { c, vch };
+      })
+      .filter(({ c, vch }) => (c.name || '').toLowerCase().includes(s)
+        || (digits.length >= 3 && String(c.phone).replace(/\D/g, '').includes(digits))
+        || vch.some(v => v.toLowerCase().includes(s)))
+      .slice(0, 6);
   };
   shareUdharStatement = (personName) => {
     this.openStatementModal(personName);
@@ -4914,6 +4932,8 @@ export default class App extends React.Component {
     };
 
     const handleSendWhatsApp = () => {
+      const typed = (m.phone || '').trim();
+      if (typed && typed !== this.getUdharMeta(m.personName).phone) this.setUdharMeta(m.personName, 'phone', typed);
       const waNum = this._waPhone(m.phone);
       const url = waNum
         ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(m.message)
@@ -4978,6 +4998,31 @@ export default class App extends React.Component {
               style: inpStyle
             }),
           ),
+        ),
+
+        // Pick number from a customer / plan
+        h('div', { style: { marginBottom: 12, position: 'relative' } },
+          h('input', {
+            type: 'text',
+            value: m.pickQ || '',
+            onChange: e => this.setState({ udharStatementModal: { ...m, pickQ: e.target.value } }),
+            placeholder: '🔍 Pick number: customer name, phone or voucher / گاہک تلاش کریں',
+            style: { ...inpStyle, fontSize: 12 }
+          }),
+          (() => {
+            const hits = this._statementPhoneMatches(m.pickQ);
+            if (!m.pickQ || m.pickQ.trim().length < 2) return null;
+            return h('div', { style: { border: '1px solid #ece8dc', borderRadius: 10, marginTop: 4, background: '#fff', overflow: 'hidden' } },
+              hits.length ? hits.map(({ c, vch }) => h('div', {
+                key: c.id,
+                onClick: () => this.setState({ udharStatementModal: { ...m, phone: c.phone, pickQ: '' } }),
+                style: { padding: '8px 12px', fontSize: 12.5, cursor: 'pointer', borderBottom: '1px solid #f2eee2', display: 'flex', justifyContent: 'space-between', gap: 8 }
+              },
+                h('span', { style: { fontWeight: 700, color: '#16211c' } }, c.name, vch.length ? h('span', { style: { fontWeight: 500, color: '#7a7663' } }, ' · ' + vch.join(', ')) : null),
+                h('span', { style: { color: '#0f6b4f', fontWeight: 700, whiteSpace: 'nowrap' } }, c.phone)
+              )) : h('div', { style: { padding: '8px 12px', fontSize: 12, color: '#7a7663' } }, 'No customer found / کوئی گاہک نہیں ملا')
+            );
+          })(),
         ),
 
         // Statement Title input
