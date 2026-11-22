@@ -259,7 +259,8 @@ export default class Devices extends React.Component {
     try {
       const resp = await this.api('GET');
       if (!resp.ok) throw new Error((await resp.json()).error || 'load failed');
-      this.setState({ devices: (await resp.json()).devices, error: '' });
+      const j = await resp.json();
+      this.setState({ devices: j.devices, latestVersion: j.latestVersion, error: '' });
     } catch (e) { this.setState({ error: e.message }); }
   };
 
@@ -348,6 +349,14 @@ export default class Devices extends React.Component {
     if (min < 60 * 13) return { c: C.green, bg: '#eafaf0', t: `App active — last seen ${rel(min)} ago` };
     if (min < 60 * 24 * 7) return { c: C.amber, bg: '#fffbeb', t: `Quiet ${rel(min)} — phone off or no internet` };
     return { c: C.red, bg: '#fdecea', t: `No check-in for ${rel(min)} — app may be removed` };
+  };
+
+  appVersionLabel = (d) => {
+    const v = (code) => 'v1.' + (code - 1);
+    const latest = this.state.latestVersion;
+    if (!d.appVersion) return <b style={{ color: C.amber }}>old (no auto-update) — update once from the phone's browser</b>;
+    if (latest && d.appVersion < latest) return <b style={{ color: C.amber }}>{v(d.appVersion)} → updating to {v(latest)} at next check-in</b>;
+    return <b style={{ color: C.green }}>{v(d.appVersion)} ✓ latest</b>;
   };
 
   canDelete = (d) => !d.claimed || d.lastAction === 'release';
@@ -564,6 +573,7 @@ export default class Devices extends React.Component {
                     <span>Last check-in: <b style={{ color: C.ink }}>{d.lastCheckin ? new Date(d.lastCheckin).toLocaleString() : 'never'}</b></span>
                     <span>Unlock code: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14, letterSpacing: 1 }}>{d.unlockCode}</b></span>
                     <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? `only ${d.allowNumber || '—'}` : 'all allowed'}</b></span>
+                    {d.claimed && d.status !== 'deleted' ? <span>App: {this.appVersionLabel(d)}</span> : null}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
                     <span>📍 Last location: {d.locAt

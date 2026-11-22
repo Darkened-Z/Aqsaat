@@ -131,6 +131,10 @@ class MainActivity : AppCompatActivity() {
                     else -> { if (r.action == "ok") p.unlockUntilMs = 0L; p.lockState = if (r.action == "warn") "warn" else "none" }
                 }
                 Toast.makeText(this@MainActivity, "Server: ${r.action}", Toast.LENGTH_SHORT).show()
+                if (r.latestVersion > BuildConfig.VERSION_CODE) {
+                    Toast.makeText(this@MainActivity, "Updating app…", Toast.LENGTH_SHORT).show()
+                    Updater.installIfNewer(this@MainActivity, r.latestVersion, r.apkUrl)
+                }
             } else {
                 Toast.makeText(this@MainActivity, "Could not reach server", Toast.LENGTH_SHORT).show()
             }
