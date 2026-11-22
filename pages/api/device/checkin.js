@@ -1,11 +1,11 @@
 import { supabaseAdmin, SHOP_ID } from '../../../lib/serverAuth';
-import { evaluate, OFFLINE_LOCK_DAYS } from '../../../lib/deviceLock';
+import { evaluate, OFFLINE_LOCK_DAYS, LATEST_APP_VERSION } from '../../../lib/deviceLock';
 
 // Called by the phone app on a timer. Authenticated by the per-device secret, not
 // a user login. No member check — the device is not a signed-in person.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { deviceId, secret, lat, lng, acc } = req.body || {};
+  const { deviceId, secret, lat, lng, acc, version } = req.body || {};
   if (!deviceId || !secret) return res.status(400).json({ error: 'deviceId and secret required' });
 
   const { data: device } = await supabaseAdmin
@@ -16,6 +16,7 @@ export default async function handler(req, res) {
   const result = evaluate(device, (shop && shop.data) || {});
 
   const patch = { last_checkin: new Date().toISOString(), last_action: result.action };
+  if (Number.isInteger(version)) patch.app_version = version;
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
     patch.last_lat = lat;
     patch.last_lng = lng;
@@ -32,5 +33,7 @@ export default async function handler(req, res) {
     callMode: device.call_mode || 'open',
     allowNumber: device.allow_number || '',
     serverTime: Date.now(),
+    latestVersion: LATEST_APP_VERSION,
+    apkUrl: `https://${req.headers.host}/device-lock.apk`,
   });
 }

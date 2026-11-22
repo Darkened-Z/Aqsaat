@@ -10,7 +10,9 @@ data class CheckinResult(
     val message: String = "",
     val offlineLockDays: Int = 7,
     val callMode: String = "open",  // open | shop_only
-    val allowNumber: String = ""
+    val allowNumber: String = "",
+    val latestVersion: Int = 0,
+    val apkUrl: String = ""
 )
 
 data class ClaimResult(val ok: Boolean, val deviceId: String = "", val secret: String = "", val baseUrl: String = "", val error: String = "")
@@ -46,7 +48,7 @@ object Api {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
             }
-            val body = JSONObject().put("deviceId", deviceId).put("secret", secret)
+            val body = JSONObject().put("deviceId", deviceId).put("secret", secret).put("version", BuildConfig.VERSION_CODE)
             if (lat != null && lng != null) {
                 body.put("lat", lat).put("lng", lng)
                 if (acc != null) body.put("acc", acc.toDouble())
@@ -63,7 +65,9 @@ object Api {
                 message = j.optString("message", ""),
                 offlineLockDays = j.optInt("offlineLockDays", 7),
                 callMode = j.optString("callMode", "open"),
-                allowNumber = j.optString("allowNumber", "")
+                allowNumber = j.optString("allowNumber", ""),
+                latestVersion = j.optInt("latestVersion", 0),
+                apkUrl = j.optString("apkUrl", "")
             )
         } catch (e: Exception) {
             CheckinResult(false)

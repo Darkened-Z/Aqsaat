@@ -36,6 +36,7 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
                 "warn" -> setState(p, if (now < p.unlockUntilMs) "none" else "warn", r.message)
                 else -> { p.unlockUntilMs = 0L; setState(p, "none", "") } // ok → clear any grace
             }
+            Updater.installIfNewer(applicationContext, r.latestVersion, r.apkUrl)
         } else {
             // Offline: lock once the deadline passes, unless inside a code grace window.
             val deadline = p.lastOkMs + p.offlineLockDays.toLong() * 86_400_000L

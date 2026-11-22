@@ -1,5 +1,5 @@
 import { supabaseAdmin, SHOP_ID, requireMember } from '../../../lib/serverAuth';
-import { evaluate, unlockCode } from '../../../lib/deviceLock';
+import { evaluate, unlockCode, LATEST_APP_VERSION } from '../../../lib/deviceLock';
 
 // Owner-only. GET lists devices with live status + today's unlock code.
 // POST applies an action to one device.
@@ -24,8 +24,9 @@ export default async function handler(req, res) {
       callMode: dev.call_mode || 'open', allowNumber: dev.allow_number || '',
       created: dev.created_at, claimed: dev.claimed,
       planId: dev.plan_id, customerId: dev.customer_id,
+      appVersion: dev.app_version,
     }));
-    return res.json({ devices: list });
+    return res.json({ devices: list, latestVersion: LATEST_APP_VERSION });
   }
 
   if (req.method === 'POST') {
