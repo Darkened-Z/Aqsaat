@@ -19,6 +19,21 @@ export default async function handler(req, res) {
   await supabaseAdmin.from('devices')
     .update({ claimed: true, claim_code: null }).eq('id', device.id);
 
+  // The phone is now under lock, so the plan counts as handed over. Bump updatedAt
+  // so the app's union-by-id sync keeps this over an older local copy.
+  if (device.plan_id) {
+    const { data: shop } = await supabaseAdmin.from('shops').select('data').eq('id', SHOP_ID).single();
+    const data = (shop && shop.data) || {};
+    const plans = data.plans || [];
+    const pi = plans.findIndex(p => p && p.id === device.plan_id && !p._deleted);
+    if (pi >= 0 && !plans[pi].handedOver) {
+      const now = new Date().toISOString();
+      plans[pi] = { ...plans[pi], handedOver: true, handoverAt: now.slice(0, 10), updatedAt: now };
+      data.plans = plans;
+      await supabaseAdmin.from('shops').update({ data }).eq('id', SHOP_ID);
+    }
+  }
+
   const base = process.env.APP_BASE_URL || ('https://' + (req.headers.host || ''));
   res.json({ deviceId: device.id, secret: device.secret, baseUrl: base });
 }

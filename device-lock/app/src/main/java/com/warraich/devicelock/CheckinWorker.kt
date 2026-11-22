@@ -1,6 +1,10 @@
 package com.warraich.devicelock
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -8,72 +12,12 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
 
-/**
- * Heartbeat. Decides lock state from the server answer, or — when offline past the
- * deadline — locks on its own so a phone kept off the network doesn't escape.
- */
+/** Periodic heartbeat; the logic lives in [Checkin] so "Check now" behaves identically. */
 class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
 
     override suspend fun doWork(): Result {
-        val p = Prefs(applicationContext)
-        if (!p.enrolled) return Result.success()
-
-        val loc = Loc.fresh(applicationContext)
-        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy)
-        val now = System.currentTimeMillis()
-
-        if (r.reachable) {
-            p.lastOkMs = now
-            p.offlineLockDays = r.offlineLockDays
-            p.callMode = r.callMode
-            p.allowNumber = r.allowNumber
-            when (r.action) {
-                "release" -> { releaseSelf(p); return Result.success() }
-                "lock" -> {
-                    // A code-granted temporary unlock still holds until it expires.
-                    if (now < p.unlockUntilMs) setState(p, "none", "") else setState(p, "hard", r.message)
-                }
-                "warn" -> setState(p, if (now < p.unlockUntilMs) "none" else "warn", r.message)
-                else -> { p.unlockUntilMs = 0L; setState(p, "none", "") } // ok → clear any grace
-            }
-            Updater.installIfNewer(applicationContext, r.latestVersion, r.apkUrl)
-        } else {
-            // Offline: lock once the deadline passes, unless inside a code grace window.
-            val deadline = p.lastOkMs + p.offlineLockDays.toLong() * 86_400_000L
-            if (now > deadline && now >= p.unlockUntilMs) {
-                setState(p, "hard", "Phone could not reach the shop server. Please contact the shop.")
-            }
-        }
+        Checkin.run(applicationContext)
         return Result.success()
-    }
-
-    private fun setState(p: Prefs, state: String, msg: String) {
-        p.lockState = state
-        p.message = msg
-        if (state == "hard") LockManager(applicationContext).showLock(msg)
-    }
-
-    private fun releaseSelf(p: Prefs) {
-        val lm = LockManager(applicationContext)
-        val dpm = applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
-        if (lm.isDeviceOwner()) {
-            // Hand the phone fully back to the customer: drop restrictions and ownership.
-            lm.clearFrpPolicy()
-            runCatching {
-                val admin = AdminReceiver.component(applicationContext)
-                for (r in listOf(
-                    android.os.UserManager.DISALLOW_FACTORY_RESET,
-                    android.os.UserManager.DISALLOW_SAFE_BOOT,
-                    android.os.UserManager.DISALLOW_ADD_USER,
-                    android.os.UserManager.DISALLOW_DEBUGGING_FEATURES,
-                    android.os.UserManager.DISALLOW_MODIFY_ACCOUNTS
-                )) runCatching { dpm.clearUserRestriction(admin, r) }
-                dpm.setUninstallBlocked(admin, applicationContext.packageName, false)
-            }
-            runCatching { dpm.clearDeviceOwnerApp(applicationContext.packageName) }
-        }
-        p.clear()
-        WorkManager.getInstance(applicationContext).cancelUniqueWork(UNIQUE)
     }
 
     companion object {
@@ -85,5 +29,82 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             WorkManager.getInstance(ctx)
                 .enqueueUniquePeriodicWork(UNIQUE, ExistingPeriodicWorkPolicy.UPDATE, req)
         }
+    }
+}
+
+/**
+ * Decides lock state from the server answer, or — when offline past the deadline —
+ * locks on its own so a phone kept off the network doesn't escape.
+ */
+object Checkin {
+    suspend fun run(ctx: Context): CheckinResult? {
+        val p = Prefs(ctx)
+        if (!p.enrolled) return null
+
+        val loc = Loc.fresh(ctx)
+        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx))
+        val now = System.currentTimeMillis()
+
+        if (r.reachable) {
+            p.lastOkMs = now
+            p.offlineLockDays = r.offlineLockDays
+            p.callMode = r.callMode
+            p.allowNumber = r.allowNumber
+            when (r.action) {
+                "release" -> { releaseSelf(ctx, p); return r }
+                "lock" -> {
+                    // A code-granted temporary unlock still holds until it expires.
+                    if (now < p.unlockUntilMs) setState(ctx, p, "none", "") else setState(ctx, p, "hard", r.message)
+                }
+                "warn" -> setState(ctx, p, if (now < p.unlockUntilMs) "none" else "warn", r.message)
+                else -> { p.unlockUntilMs = 0L; setState(ctx, p, "none", "") } // ok → clear any grace
+            }
+            Updater.installIfNewer(ctx, r.latestVersion, r.apkUrl)
+        } else {
+            val deadline = p.lastOkMs + p.offlineLockDays.toLong() * 86_400_000L
+            if (now > deadline && now >= p.unlockUntilMs) {
+                setState(ctx, p, "hard", "Phone could not reach the shop server. Please contact the shop.")
+            }
+        }
+        return r
+    }
+
+    /** "fg+bg" | "fg" | "none" — tells the shop why location may be missing. */
+    private fun locPerm(ctx: Context): String {
+        val fg = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!fg) return "none"
+        val bg = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
+        return if (bg) "fg+bg" else "fg"
+    }
+
+    private fun setState(ctx: Context, p: Prefs, state: String, msg: String) {
+        p.lockState = state
+        p.message = msg
+        if (state == "hard") LockManager(ctx).showLock(msg)
+    }
+
+    private fun releaseSelf(ctx: Context, p: Prefs) {
+        val lm = LockManager(ctx)
+        val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+        if (lm.isDeviceOwner()) {
+            // Hand the phone fully back to the customer: drop restrictions and ownership.
+            lm.clearFrpPolicy()
+            runCatching {
+                val admin = AdminReceiver.component(ctx)
+                for (r in listOf(
+                    android.os.UserManager.DISALLOW_FACTORY_RESET,
+                    android.os.UserManager.DISALLOW_SAFE_BOOT,
+                    android.os.UserManager.DISALLOW_ADD_USER,
+                    android.os.UserManager.DISALLOW_DEBUGGING_FEATURES,
+                    android.os.UserManager.DISALLOW_MODIFY_ACCOUNTS
+                )) runCatching { dpm.clearUserRestriction(admin, r) }
+                dpm.setUninstallBlocked(admin, ctx.packageName, false)
+            }
+            runCatching { dpm.clearDeviceOwnerApp(ctx.packageName) }
+        }
+        p.clear()
+        WorkManager.getInstance(ctx).cancelUniqueWork(CheckinWorker.UNIQUE)
     }
 }
