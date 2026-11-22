@@ -24,7 +24,7 @@ export default async function handler(req, res) {
       callMode: dev.call_mode || 'open', allowNumber: dev.allow_number || '',
       created: dev.created_at, claimed: dev.claimed,
       planId: dev.plan_id, customerId: dev.customer_id,
-      appVersion: dev.app_version,
+      appVersion: dev.app_version, locPerm: dev.loc_perm,
     }));
     return res.json({ devices: list, latestVersion: LATEST_APP_VERSION });
   }

@@ -5,7 +5,7 @@ import { evaluate, OFFLINE_LOCK_DAYS, LATEST_APP_VERSION } from '../../../lib/de
 // a user login. No member check — the device is not a signed-in person.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { deviceId, secret, lat, lng, acc, version } = req.body || {};
+  const { deviceId, secret, lat, lng, acc, version, locPerm } = req.body || {};
   if (!deviceId || !secret) return res.status(400).json({ error: 'deviceId and secret required' });
 
   const { data: device } = await supabaseAdmin
@@ -17,6 +17,7 @@ export default async function handler(req, res) {
 
   const patch = { last_checkin: new Date().toISOString(), last_action: result.action };
   if (Number.isInteger(version)) patch.app_version = version;
+  if (['fg+bg', 'fg', 'none'].includes(locPerm)) patch.loc_perm = locPerm;
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
     patch.last_lat = lat;
     patch.last_lng = lng;

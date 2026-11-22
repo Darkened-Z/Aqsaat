@@ -120,21 +120,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkNow() {
         if (!p.enrolled) return
+        Toast.makeText(this, "Checking…", Toast.LENGTH_SHORT).show()
         CoroutineScope(Dispatchers.Main).launch {
-            val r = withContext(Dispatchers.IO) { Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!) }
-            val now = System.currentTimeMillis()
+            val r = withContext(Dispatchers.IO) { Checkin.run(this@MainActivity) } ?: return@launch
             if (r.reachable) {
-                p.lastOkMs = now
-                when (r.action) {
-                    "lock" -> if (now >= p.unlockUntilMs) { p.lockState = "hard"; p.message = r.message; LockManager(this@MainActivity).showLock(r.message) }
-                    "release" -> { Toast.makeText(this@MainActivity, "Released", Toast.LENGTH_SHORT).show() }
-                    else -> { if (r.action == "ok") p.unlockUntilMs = 0L; p.lockState = if (r.action == "warn") "warn" else "none" }
-                }
-                Toast.makeText(this@MainActivity, "Server: ${r.action}", Toast.LENGTH_SHORT).show()
-                if (r.latestVersion > BuildConfig.VERSION_CODE) {
-                    Toast.makeText(this@MainActivity, "Updating app…", Toast.LENGTH_SHORT).show()
-                    Updater.installIfNewer(this@MainActivity, r.latestVersion, r.apkUrl)
-                }
+                val msg = if (r.latestVersion > BuildConfig.VERSION_CODE) "Server: ${r.action} — updating app…" else "Server: ${r.action}"
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this@MainActivity, "Could not reach server", Toast.LENGTH_SHORT).show()
             }
