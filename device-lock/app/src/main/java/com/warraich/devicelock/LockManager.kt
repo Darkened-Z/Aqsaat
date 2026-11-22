@@ -23,9 +23,10 @@ class LockManager(private val ctx: Context) {
             UserManager.DISALLOW_FACTORY_RESET,
             UserManager.DISALLOW_SAFE_BOOT,
             UserManager.DISALLOW_ADD_USER,
-            UserManager.DISALLOW_DEBUGGING_FEATURES,
-            UserManager.DISALLOW_MODIFY_ACCOUNTS
+            UserManager.DISALLOW_DEBUGGING_FEATURES
         )) runCatching { dpm.addUserRestriction(admin, r) }
+        // Customers must be able to add their own Google account; lift it on phones set up by v1.2 or older.
+        runCatching { dpm.clearUserRestriction(admin, UserManager.DISALLOW_MODIFY_ACCOUNTS) }
         grantRuntimePerms()
         // Force location services on so a fresh fix is available for recovery.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) runCatching { dpm.setLocationEnabled(admin, true) }
