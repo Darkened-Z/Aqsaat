@@ -575,6 +575,7 @@ export default class Devices extends React.Component {
                     <span>Unlock code: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14, letterSpacing: 1 }}>{d.unlockCode}</b></span>
                     <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? `only ${d.allowNumber || '—'}` : 'all allowed'}</b></span>
                     {d.claimed && d.status !== 'deleted' ? <span>App: {this.appVersionLabel(d)}</span> : null}
+                    {d.claimed && d.status !== 'deleted' ? <span>Control: {d.instant ? <b style={{ color: C.green }}>⚡ instant</b> : <b style={{ color: C.ink }}>at next check-in (~6h)</b>}</span> : null}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
                     <span>📍 Last location: {d.locAt

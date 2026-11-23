@@ -30,6 +30,9 @@ class Prefs(ctx: Context) {
     var callMode: String    get() = sp.getString("callMode", "open") ?: "open"; set(v) = sp.edit().putString("callMode", v).apply()
     var allowNumber: String get() = sp.getString("allowNumber", "") ?: "";      set(v) = sp.edit().putString("allowNumber", v).apply()
 
+    // FCM registration token, reported to the server on every check-in.
+    var pushToken: String   get() = sp.getString("pushToken", "") ?: "";        set(v) = sp.edit().putString("pushToken", v).apply()
+
     fun saveEnrollment(id: String, sec: String, url: String) {
         deviceId = id; secret = sec; baseUrl = url.trimEnd('/')
         lastOkMs = System.currentTimeMillis()

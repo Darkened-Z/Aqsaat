@@ -39,7 +39,7 @@ object Api {
 
     /** POST deviceId+secret (+ last-known location). Network/5xx errors return reachable=false (never a wrong lock). */
     fun checkin(baseUrl: String, deviceId: String, secret: String,
-                lat: Double? = null, lng: Double? = null, acc: Float? = null, locPerm: String = ""): CheckinResult {
+                lat: Double? = null, lng: Double? = null, acc: Float? = null, locPerm: String = "", pushToken: String = ""): CheckinResult {
         return try {
             val conn = (URL("$baseUrl/api/device/checkin").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -48,7 +48,7 @@ object Api {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
             }
-            val body = JSONObject().put("deviceId", deviceId).put("secret", secret).put("version", BuildConfig.VERSION_CODE).put("locPerm", locPerm)
+            val body = JSONObject().put("deviceId", deviceId).put("secret", secret).put("version", BuildConfig.VERSION_CODE).put("locPerm", locPerm).put("pushToken", pushToken)
             if (lat != null && lng != null) {
                 body.put("lat", lat).put("lng", lng)
                 if (acc != null) body.put("acc", acc.toDouble())

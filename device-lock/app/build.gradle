@@ -10,6 +10,13 @@ def ksProps = new Properties()
 def hasKs = ksPropsFile.exists()
 if (hasKs) ksProps.load(new FileInputStream(ksPropsFile))
 
+// Firebase Cloud Messaging (instant 'check in now' pushes). Values from the Firebase
+// console's Android app config; blank = push disabled, the 6h heartbeat still works.
+def fcmPropsFile = file(System.getenv("FIREBASE_PROPERTIES") ?: "firebase.properties")
+def fcmProps = new Properties()
+if (fcmPropsFile.exists()) fcmProps.load(new FileInputStream(fcmPropsFile))
+def fcm = { String k -> '"' + (fcmProps.getProperty(k) ?: '') + '"' }
+
 android {
     namespace 'com.warraich.devicelock'
     compileSdk 34
@@ -18,8 +25,8 @@ android {
         applicationId "com.warraich.devicelock"
         minSdk 24
         targetSdk 34
-        versionCode 6
-        versionName "1.5"
+        versionCode 7
+        versionName "1.6"
         // The shop's fixed Aqsat URL, compiled in so the phone only needs a short
         // claim code at enrollment.
         buildConfigField "String", "APP_BASE_URL", "\"https://aqsaat.vercel.app\""
@@ -27,6 +34,10 @@ android {
         // dedicated account(s). Arms Factory Reset Protection so a recovery wipe
         // demands the shop account. Leave blank to disable. Android 11+ / supported OEMs.
         buildConfigField "String", "FRP_ACCOUNT_IDS", "\"\""
+        buildConfigField "String", "FCM_APP_ID", fcm("appId")
+        buildConfigField "String", "FCM_API_KEY", fcm("apiKey")
+        buildConfigField "String", "FCM_PROJECT_ID", fcm("projectId")
+        buildConfigField "String", "FCM_SENDER_ID", fcm("senderId")
     }
     buildFeatures { buildConfig true }
     signingConfigs {
@@ -58,4 +69,5 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'com.google.firebase:firebase-messaging:24.0.0'
 }

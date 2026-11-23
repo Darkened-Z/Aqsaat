@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -19,6 +20,10 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         Checkin.run(applicationContext)
         return Result.success()
     }
+
+    // Expedited (push-triggered) work runs as a foreground service before Android 12.
+    override suspend fun getForegroundInfo(): ForegroundInfo =
+        ForegroundInfo(43, Notify.working(applicationContext))
 
     companion object {
         const val UNIQUE = "devicelock-checkin"
@@ -42,7 +47,7 @@ object Checkin {
         if (!p.enrolled) return null
 
         val loc = Loc.fresh(ctx)
-        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx))
+        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx), p.pushToken)
         val now = System.currentTimeMillis()
 
         if (r.reachable) {
