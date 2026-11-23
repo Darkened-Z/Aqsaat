@@ -552,6 +552,9 @@ export default class App extends React.Component {
         // value — the blank comes from the initial React state, not a user edit.
         const c = cloud.settings || {}, l = local.settings || {};
         const merged = { ...c, ...l };
+        // By id, so an account the server adds (online payments) survives a push
+        // from a device that loaded before it existed.
+        if (l.accounts || c.accounts) merged.accounts = mergeArr(l.accounts, c.accounts);
         ['businessName', 'ownerName', 'city'].forEach(k => {
           if (!(l[k] || '').trim() && (c[k] || '').trim()) merged[k] = c[k];
         });

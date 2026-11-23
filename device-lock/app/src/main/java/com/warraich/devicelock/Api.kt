@@ -12,7 +12,9 @@ data class CheckinResult(
     val callMode: String = "open",  // open | shop_only
     val allowNumber: String = "",
     val latestVersion: Int = 0,
-    val apkUrl: String = ""
+    val apkUrl: String = "",
+    val payUrl: String = "",        // blank = online payment off / nothing due
+    val dueAmount: Int = 0
 )
 
 data class ClaimResult(val ok: Boolean, val deviceId: String = "", val secret: String = "", val baseUrl: String = "", val error: String = "")
@@ -67,7 +69,9 @@ object Api {
                 callMode = j.optString("callMode", "open"),
                 allowNumber = j.optString("allowNumber", ""),
                 latestVersion = j.optInt("latestVersion", 0),
-                apkUrl = j.optString("apkUrl", "")
+                apkUrl = j.optString("apkUrl", ""),
+                payUrl = j.optString("payUrl", ""),
+                dueAmount = j.optInt("dueAmount", 0)
             )
         } catch (e: Exception) {
             CheckinResult(false)

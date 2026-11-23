@@ -55,6 +55,8 @@ object Checkin {
             p.offlineLockDays = r.offlineLockDays
             p.callMode = r.callMode
             p.allowNumber = r.allowNumber
+            p.payUrl = r.payUrl
+            p.dueAmount = r.dueAmount
             when (r.action) {
                 "release" -> { releaseSelf(ctx, p); return r }
                 "lock" -> {

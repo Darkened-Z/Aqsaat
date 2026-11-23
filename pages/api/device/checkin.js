@@ -1,5 +1,7 @@
 import { supabaseAdmin, SHOP_ID } from '../../../lib/serverAuth';
 import { evaluate, OFFLINE_LOCK_DAYS, LATEST_APP_VERSION } from '../../../lib/deviceLock';
+import { config as payConfig } from '../../../lib/payments/jazzcash';
+import { payUrl, dueNow, planOf, confirmPendingFor } from '../../../lib/payments/online';
 
 // Called by the phone app on a timer. Authenticated by the per-device secret, not
 // a user login. No member check — the device is not a signed-in person.
@@ -12,8 +14,14 @@ export default async function handler(req, res) {
     .from('devices').select('*').eq('id', deviceId).eq('shop_id', SHOP_ID).maybeSingle();
   if (!device || device.secret !== secret || device.status === 'deleted') return res.status(401).json({ error: 'unknown device' });
 
+  // A customer who paid but closed the browser before JazzCash redirected back
+  // still gets unlocked here, before the evaluation below reads the plan.
+  await confirmPendingFor(deviceId);
   const { data: shop } = await supabaseAdmin.from('shops').select('data').eq('id', SHOP_ID).single();
-  const result = evaluate(device, (shop && shop.data) || {});
+  const shopData = (shop && shop.data) || {};
+  const result = evaluate(device, shopData);
+  // No pay link on a manual lock: paying wouldn't unlock it.
+  const pay = payConfig() && result.action !== 'release' && result.reason !== 'manual' ? dueNow(planOf(shopData, device.plan_id)) : null;
 
   const patch = { last_checkin: new Date().toISOString(), last_action: result.action };
   if (Number.isInteger(version)) patch.app_version = version;
@@ -37,5 +45,7 @@ export default async function handler(req, res) {
     serverTime: Date.now(),
     latestVersion: LATEST_APP_VERSION,
     apkUrl: `https://${req.headers.host}/device-lock.apk`,
+    payUrl: pay && pay.amount ? payUrl(req.headers.host, device) : '',
+    dueAmount: pay ? pay.amount : 0,
   });
 }

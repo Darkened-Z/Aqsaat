@@ -33,6 +33,10 @@ class Prefs(ctx: Context) {
     // FCM registration token, reported to the server on every check-in.
     var pushToken: String   get() = sp.getString("pushToken", "") ?: "";        set(v) = sp.edit().putString("pushToken", v).apply()
 
+    // Online payment link + amount for the lock screen, from the last check-in.
+    var payUrl: String      get() = sp.getString("payUrl", "") ?: "";           set(v) = sp.edit().putString("payUrl", v).apply()
+    var dueAmount: Int      get() = sp.getInt("dueAmount", 0);                  set(v) = sp.edit().putInt("dueAmount", v).apply()
+
     fun saveEnrollment(id: String, sec: String, url: String) {
         deviceId = id; secret = sec; baseUrl = url.trimEnd('/')
         lastOkMs = System.currentTimeMillis()

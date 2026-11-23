@@ -25,8 +25,8 @@ android {
         applicationId "com.warraich.devicelock"
         minSdk 24
         targetSdk 34
-        versionCode 7
-        versionName "1.6"
+        versionCode 8
+        versionName "1.7"
         // The shop's fixed Aqsat URL, compiled in so the phone only needs a short
         // claim code at enrollment.
         buildConfigField "String", "APP_BASE_URL", "\"https://aqsaat.vercel.app\""
@@ -70,4 +70,5 @@ dependencies {
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'com.google.firebase:firebase-messaging:24.0.0'
+    implementation 'com.google.zxing:core:3.5.3'
 }
