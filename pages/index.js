@@ -377,7 +377,7 @@ export default class App extends React.Component {
     if (cloudPin) payload.savedPin = cloudPin;
     this._saveLocal(merged);
     this._syncSnapshot = this._snapshotOf(merged);
-    this.setState(payload, () => this.processRecurring());
+    this.setState(payload, () => { this.processRecurring(); this._pushIfAhead(merged, d); });
   };
 
   _loadLocalInto = (extra = {}) => {
@@ -466,13 +466,25 @@ export default class App extends React.Component {
         this._syncSnapshot = this._snapshotOf(merged);
         const cloudPin = (merged.settings || {}).pin || '';
         if (cloudPin) localStorage.setItem('aqsat_pin', cloudPin);
-        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced', ...(cloudPin ? { savedPin: cloudPin } : {}) });
+        this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced', ...(cloudPin ? { savedPin: cloudPin } : {}) }, () => this._pushIfAhead(merged, data.data));
       }
     } catch(e) {}
     this._refetching = false;
   };
 
   _collections = ['customers', 'products', 'plans', 'ledger', 'udpiEntries', 'invoices', 'staff'];
+
+  // After merging a cloud copy, rows where this device is ahead (newer edit, or a
+  // row the cloud lost to another device's overwrite) would otherwise sit unsynced
+  // until the next local edit. Push them now.
+  _pushIfAhead = (merged, cloud) => {
+    if (!this._loadedCloud || !cloud) return;
+    const ahead = this._collections.some(k => {
+      const c = new Map((cloud[k] || []).filter(r => r && r.id).map(r => [r.id, r]));
+      return (merged[k] || []).some(r => r && r.id && (!c.has(r.id) || (r.updatedAt || '') > (c.get(r.id).updatedAt || '')));
+    });
+    if (ahead) { clearTimeout(this._syncTimer); this._syncTimer = setTimeout(this.pushToSupabase, 1200); }
+  };
 
   // Signature of every row as last seen in sync, so we can tell which rows this
   // device actually edited rather than assuming all of them are fresh.
@@ -566,31 +578,56 @@ export default class App extends React.Component {
       this.setState({ syncStatus: 'offline' });
       return;
     }
+    if (this._pushing) { this._pushAgain = true; return; }
+    this._pushing = true;
     this.setState({ syncStatus: 'syncing' });
     try {
-      const { data: cloud, error: readErr } = await supabase.from('shops').select('data').eq('id', SHOP_ID).maybeSingle();
-      // If the read failed we do not know what is up there. Writing anyway would
-      // replace the cloud with this device's copy and destroy every row it has
-      // not seen, so abort and let the next push retry.
-      if (readErr) {
-        this._saveLocal(localData);
-        this._pendingSync = true;
-        this.setState({ syncStatus: 'error', syncError: readErr.message || 'sync read failed' });
-        return;
-      }
       const stamped = this._stampLocalChanges(localData);
-      const merged = cloud?.data ? this._mergeData(stamped, cloud.data) : stamped;
-      this._saveLocal(merged);
-      const { error } = await supabase.from('shops').upsert({ id: SHOP_ID, data: merged, updated_at: new Date().toISOString() });
-      if (error) {
-        this._pendingSync = true;
-        this.setState({ syncStatus: 'error', syncError: error.message || '' });
-        return;
+      let merged = null;
+      // Compare-and-swap on updated_at: the write only lands if nobody else wrote
+      // since our read. Otherwise re-read, re-merge and retry, so two devices (or
+      // a server endpoint) saving at once never silently drop each other's rows.
+      for (let attempt = 0; attempt < 4 && !merged; attempt++) {
+        const { data: cloud, error: readErr } = await supabase.from('shops').select('data, updated_at').eq('id', SHOP_ID).maybeSingle();
+        // If the read failed we do not know what is up there. Writing anyway would
+        // replace the cloud with this device's copy and destroy every row it has
+        // not seen, so abort and let the next push retry.
+        if (readErr) throw new Error(readErr.message || 'sync read failed');
+        const candidate = cloud?.data ? this._mergeData(stamped, cloud.data) : stamped;
+        const ts = new Date().toISOString();
+        if (!cloud) {
+          const { error } = await supabase.from('shops').insert({ id: SHOP_ID, data: candidate, updated_at: ts });
+          if (error) throw new Error(error.message || 'sync write failed');
+          merged = candidate;
+        } else {
+          const { data: rows, error } = await supabase.from('shops').update({ data: candidate, updated_at: ts })
+            .eq('id', SHOP_ID).eq('updated_at', cloud.updated_at).select('id');
+          if (error) throw new Error(error.message || 'sync write failed');
+          if (rows && rows.length) merged = candidate;
+        }
       }
+      if (!merged) throw new Error('busy — another device kept saving; will retry');
+      this._saveLocal(merged);
       this._pendingSync = false;
       this._syncSnapshot = this._snapshotOf(merged);
+      // Edits made while this push was in flight are not in `merged`; keep them
+      // (they differ from the snapshot, so the next push stamps and sends them).
+      const cur = this.state;
+      const out = { ...merged };
+      let editedDuringPush = false;
+      this._collections.forEach(k => {
+        const before = new Map((localData[k] || []).filter(r => r && r.id).map(r => [r.id, r]));
+        const changed = (cur[k] || []).filter(r => r && r.id && before.get(r.id) !== r);
+        if (!changed.length) return;
+        editedDuringPush = true;
+        const m = new Map((merged[k] || []).map(r => [r.id, r]));
+        changed.forEach(r => m.set(r.id, r));
+        out[k] = Array.from(m.values());
+      });
+      if (cur.settings !== localData.settings) { editedDuringPush = true; out.settings = { ...merged.settings, ...cur.settings }; }
       this._fromCloud = true;
-      this.setState({ customers: merged.customers, products: merged.products, plans: merged.plans, settings: merged.settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced' });
+      this.setState({ customers: out.customers, products: out.products, plans: out.plans, settings: out.settings, ledger: out.ledger || [], udpiEntries: out.udpiEntries || [], invoices: out.invoices || [], staff: out.staff || [], syncStatus: editedDuringPush ? 'syncing' : 'synced' });
+      if (editedDuringPush) this._pushAgain = true;
     } catch(e) {
       // Keep the full local copy — every collection, udpiEntries included — and
       // push nothing. A partial object here used to wipe the whole Udhar Book.
@@ -598,6 +635,14 @@ export default class App extends React.Component {
       this._pendingSync = true;
       const off = typeof navigator !== 'undefined' && navigator.onLine === false;
       this.setState({ syncStatus: off ? 'offline' : 'error', syncError: off ? '' : ((e && e.message) || 'sync failed') });
+      if (!off) { clearTimeout(this._syncTimer); this._syncTimer = setTimeout(this.pushToSupabase, 10000); }
+    } finally {
+      this._pushing = false;
+      if (this._pushAgain) {
+        this._pushAgain = false;
+        clearTimeout(this._syncTimer);
+        this._syncTimer = setTimeout(this.pushToSupabase, 300);
+      }
     }
   };
 
@@ -1247,13 +1292,36 @@ export default class App extends React.Component {
   handleUdharPhoto = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { alert('Photo too large (max 2MB)\nتصویر بہت بڑی ہے'); return; }
-    const reader = new FileReader();
-    reader.onload = () => {
-      this.setState({ udpiModal: { ...this.state.udpiModal, photo: reader.result } });
-    };
-    reader.readAsDataURL(file);
     try { e.target.value = ''; } catch (_) {}
+    // Shrink to a receipt-readable JPEG, show it at once, then swap in a Storage
+    // link so the photo never bloats the synced shop data. Offline, the small
+    // preview is kept and saved as-is.
+    const img = new Image();
+    const src = URL.createObjectURL(file);
+    img.onload = async () => {
+      URL.revokeObjectURL(src);
+      const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const preview = c.toDataURL('image/jpeg', 0.72);
+      this.setState({ udpiModal: { ...this.state.udpiModal, photo: preview } });
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.72));
+      const url = blob && await this._uploadReceipt(blob);
+      if (url && this.state.udpiModal && this.state.udpiModal.photo === preview) {
+        this.setState({ udpiModal: { ...this.state.udpiModal, photo: url } });
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(src); alert('Could not read this photo\nتصویر نہیں کھل سکی'); };
+    img.src = src;
+  };
+  _uploadReceipt = async (blob) => {
+    try {
+      const name = Date.now().toString(36) + '-' + Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => b.toString(16).padStart(2, '0')).join('') + '.jpg';
+      const { error } = await supabase.storage.from('receipts').upload(name, blob, { contentType: 'image/jpeg' });
+      if (error) return null;
+      return supabase.storage.from('receipts').getPublicUrl(name).data.publicUrl;
+    } catch (e) { return null; }
   };
   shareUdharBookWhatsApp = () => {
     const parties = this._getUdharParties();
