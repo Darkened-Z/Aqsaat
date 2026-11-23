@@ -82,7 +82,8 @@ export default class Devices extends React.Component {
 
   clearPick = () => this.setState(st => ({ form: { ...st.form, planId: '', customerId: '' } }));
 
-  openDetail = (d) => this.setState({ detail: d });
+  openDetail = (d) => { this.setState({ detail: d }); this.loadShop(); };
+  refresh = () => { this.load(); this.loadShop(); };
   closeDetail = () => this.setState({ detail: null });
 
   payInstallment = async (planId, n) => {
@@ -471,7 +472,7 @@ export default class Devices extends React.Component {
             <div style={{ fontSize: 12, color: C.mut }}>Enrolled phones on installment</div>
           </div>
           <button onClick={() => { if (typeof window !== 'undefined') window.location.href = '/'; }} style={{ ...ghost, background: C.green, color: '#fff', border: 'none' }}>← Back to Aqsat</button>
-          <button onClick={this.load} style={ghost}>↻ Refresh</button>
+          <button onClick={this.refresh} style={ghost}>↻ Refresh</button>
           <button onClick={this.signOut} style={{ ...ghost, background: '#f4f1e6', border: 'none' }}>Sign out</button>
         </div>
 
