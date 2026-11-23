@@ -2857,15 +2857,7 @@ export default class App extends React.Component {
         if (udpiList.length === 0) return null;
         const todayS = this.todayStr();
 
-        const parseMs = (id, dateStr) => {
-          const idStr = (id || '').replace(/^ud_|^udpi_|^pr_/, '');
-          const ms = parseInt(idStr, 36);
-          const dateMs = dateStr ? new Date(dateStr + 'T12:00:00').getTime() : 0;
-          if (isFinite(ms) && ms > 1000000000000) {
-            return Math.abs(dateMs - ms) > 86400000 * 2 ? dateMs : Math.max(ms, dateMs);
-          }
-          return dateMs;
-        };
+        const parseMs = (id, dateStr, timeStr) => this._udharActionMs(id, dateStr, timeStr);
 
         const people = {};
         udpiList.forEach(u => {
@@ -2885,7 +2877,7 @@ export default class App extends React.Component {
             amount: u.amount,
             date: u.date,
             note: u.note || '',
-            ms: parseMs(u.id, u.date),
+            ms: parseMs(u.id, u.date, u.time),
             entryId: u.id,
           });
           (u.partialReturns || []).forEach(pr => {
@@ -2894,7 +2886,7 @@ export default class App extends React.Component {
               amount: pr.amount,
               date: pr.date,
               note: 'Partial payment',
-              ms: parseMs(pr.id, pr.date),
+              ms: parseMs(pr.id, pr.date, pr.time),
               entryId: u.id,
             });
           });
@@ -5489,10 +5481,24 @@ export default class App extends React.Component {
     );
   }
 
+  // Exact time of an entry so same-day entries order correctly: its own date+time,
+  // else the id's base36 creation timestamp, else noon of its date. A backdated
+  // entry (id far from its date) keeps its date.
+  _udharActionMs(id, dateStr, timeStr) {
+    if (dateStr && /^\d{1,2}:\d{2}$/.test(timeStr || '')) {
+      const t = new Date(dateStr + 'T' + timeStr.padStart(5, '0') + ':00').getTime();
+      if (!isNaN(t)) return t;
+    }
+    const ms = parseInt((id || '').replace(/^ud_|^udpi_|^pr_/, ''), 36);
+    const dateMs = dateStr ? new Date(dateStr + 'T12:00:00').getTime() : 0;
+    if (isFinite(ms) && ms > 1000000000000 && Math.abs(dateMs - ms) <= 86400000 * 2) return ms;
+    return dateMs;
+  }
+
   _getUdharParties() {
     const entries = this.activeUdpiEntries();
     const today = this.todayStr();
-    const parseMs = (id, dateStr) => this._parseUdharEntryMs(id, dateStr);
+    const parseMs = (id, dateStr, timeStr) => this._udharActionMs(id, dateStr, timeStr);
     const map = {};
     entries.forEach(u => {
       const name = u.person.trim();
@@ -5515,7 +5521,7 @@ export default class App extends React.Component {
           amount: pr.amount,
           date: pr.date,
           note: 'Partial payment',
-          ms: parseMs(pr.id, pr.date),
+          ms: parseMs(pr.id, pr.date, pr.time),
         });
       });
       if (u.returned && (u.returnedDate || '') > map[key].lastPaymentDate) map[key].lastPaymentDate = u.returnedDate || '';
@@ -5524,7 +5530,7 @@ export default class App extends React.Component {
         amount: u.amount,
         date: u.date,
         note: u.note || '',
-        ms: parseMs(u.id, u.date),
+        ms: parseMs(u.id, u.date, u.time),
       });
     });
     return Object.values(map).map(p => {
