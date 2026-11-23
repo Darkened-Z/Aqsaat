@@ -83,7 +83,7 @@ class LockActivity : AppCompatActivity() {
 
     private suspend fun checkinNow() {
         lastCheckinMs = System.currentTimeMillis()
-        withContext(Dispatchers.IO) { runCatching { Checkin.run(applicationContext) } }
+        withContext(Dispatchers.IO) { runCatching { Checkin.run(applicationContext, freshLocation = false) } }
     }
 
     /** Push-triggered or polled check-ins flip lockState; the activity follows it. */

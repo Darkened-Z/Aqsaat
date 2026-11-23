@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   const fields = checkoutFields(cfg, {
     txnRef, amount: due.amount,
     billRef: String(plan.voucherNo || plan.id).replace(/[^A-Za-z0-9]/g, '').slice(0, 20) || 'bill',
-    description: 'Installment ' + due.installments.join(','),
+    description: 'Installment ' + due.installments.join(' '),
     returnUrl: `https://${req.headers.host}/api/pay/jazzcash/return`,
     extra: { ppmpf_1: payToken(device) },
   });

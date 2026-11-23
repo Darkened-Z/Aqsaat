@@ -13,6 +13,7 @@ create table if not exists payments (
   response_msg  text,
   credit        integer not null default 0,   -- PKR received but not matched to an installment
   created_at    timestamptz not null default now(),
+  checked_at    timestamptz,                  -- last JazzCash inquiry
   paid_at       timestamptz
 );
 create index if not exists payments_plan_idx on payments (plan_id);

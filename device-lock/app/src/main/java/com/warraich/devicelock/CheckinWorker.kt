@@ -42,11 +42,12 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
  * locks on its own so a phone kept off the network doesn't escape.
  */
 object Checkin {
-    suspend fun run(ctx: Context): CheckinResult? {
+    /** [freshLocation] false = last-known fix only (lock-screen polling every minute). */
+    suspend fun run(ctx: Context, freshLocation: Boolean = true): CheckinResult? {
         val p = Prefs(ctx)
         if (!p.enrolled) return null
 
-        val loc = Loc.fresh(ctx)
+        val loc = if (freshLocation) Loc.fresh(ctx) else Loc.last(ctx)
         val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx), p.pushToken)
         val now = System.currentTimeMillis()
 
