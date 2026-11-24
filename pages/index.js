@@ -552,6 +552,12 @@ export default class App extends React.Component {
         // value — the blank comes from the initial React state, not a user edit.
         const c = cloud.settings || {}, l = local.settings || {};
         const merged = { ...c, ...l };
+        // Settings blocks written from other pages/servers carry their own
+        // updatedAt; the newer copy wins instead of whichever device pushed last.
+        Object.keys(c).forEach(k => {
+          const cv = c[k], lv = l[k];
+          if (cv && typeof cv === 'object' && !Array.isArray(cv) && cv.updatedAt && (!lv || !lv.updatedAt || cv.updatedAt > lv.updatedAt)) merged[k] = cv;
+        });
         ['businessName', 'ownerName', 'city'].forEach(k => {
           if (!(l[k] || '').trim() && (c[k] || '').trim()) merged[k] = c[k];
         });
@@ -7809,6 +7815,7 @@ export default class App extends React.Component {
       { key: 'udharbook', label: 'Udhar Book', icon: '🤝', go: () => this.go('udharbook') },
       { key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
       { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => { if (typeof window !== 'undefined') window.location.href = '/devices'; } },
+      { key: 'automation', label: 'WA Automation', icon: '🤖', go: () => { if (typeof window !== 'undefined') window.location.href = '/automation'; } },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -8109,6 +8116,7 @@ export default class App extends React.Component {
                   { icon: '🤝', label: 'Udhar Book', go: 'udharbook' },
                   { icon: '👷', label: 'Staff',      go: 'staff' },
                   { icon: '🔒', label: 'Device Lock', go: 'devices', ext: '/devices' },
+                  { icon: '🤖', label: 'WA Automation', go: 'automation', ext: '/automation' },
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
                   <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
