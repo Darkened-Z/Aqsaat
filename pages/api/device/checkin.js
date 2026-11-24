@@ -2,6 +2,7 @@ import { supabaseAdmin, SHOP_ID } from '../../../lib/serverAuth';
 import { evaluate, OFFLINE_LOCK_DAYS, LATEST_APP_VERSION } from '../../../lib/deviceLock';
 import { config as payConfig } from '../../../lib/payments/jazzcash';
 import { payUrl, dueNow, planOf, confirmPendingFor } from '../../../lib/payments/online';
+import { checkinMinutes, keepPoint, cleanFrpIds } from '../../../lib/lockPro';
 
 // Called by the phone app on a timer. Authenticated by the per-device secret, not
 // a user login. No member check — the device is not a signed-in person.
@@ -34,6 +35,11 @@ export default async function handler(req, res) {
     patch.last_loc_at = new Date().toISOString();
   }
   await supabaseAdmin.from('devices').update(patch).eq('id', deviceId);
+  if (patch.last_lat != null) {
+    const { data: last } = await supabaseAdmin.from('device_locations').select('lat, lng, at').eq('device_id', deviceId).order('at', { ascending: false }).limit(1).maybeSingle();
+    const pt = { lat: patch.last_lat, lng: patch.last_lng };
+    if (keepPoint(last, pt, device.status === 'lost')) await supabaseAdmin.from('device_locations').insert({ device_id: deviceId, ...pt, acc: patch.last_loc_acc });
+  }
 
   res.json({
     action: result.action,            // ok | warn | lock | release
@@ -47,5 +53,7 @@ export default async function handler(req, res) {
     apkUrl: `https://${req.headers.host}/device-lock.apk`,
     payUrl: pay && pay.amount ? payUrl(req.headers.host, device) : '',
     dueAmount: pay ? pay.amount : 0,
+    checkinMinutes: checkinMinutes(device),
+    frpAccountIds: cleanFrpIds(shopData.settings && shopData.settings.frp && shopData.settings.frp.accountIds).join(','),
   });
 }

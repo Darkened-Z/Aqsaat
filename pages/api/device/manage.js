@@ -7,6 +7,11 @@ import { pokeDevices } from '../../../lib/fcm';
 export default async function handler(req, res) {
   if (!(await requireMember(req, res))) return;
 
+  if (req.method === 'GET' && req.query.history) {
+    const { data } = await supabaseAdmin.from('device_locations').select('at, lat, lng, acc')
+      .eq('device_id', String(req.query.history)).order('at', { ascending: false }).limit(300);
+    return res.json({ points: data || [] });
+  }
   if (req.method === 'GET') {
     const { data: devices } = await supabaseAdmin
       .from('devices').select('*').eq('shop_id', SHOP_ID).order('created_at', { ascending: false });

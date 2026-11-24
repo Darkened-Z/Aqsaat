@@ -552,6 +552,12 @@ export default class App extends React.Component {
         // value — the blank comes from the initial React state, not a user edit.
         const c = cloud.settings || {}, l = local.settings || {};
         const merged = { ...c, ...l };
+        // Settings blocks written from other pages/servers carry their own
+        // updatedAt; the newer copy wins instead of whichever device pushed last.
+        Object.keys(c).forEach(k => {
+          const cv = c[k], lv = l[k];
+          if (cv && typeof cv === 'object' && !Array.isArray(cv) && cv.updatedAt && (!lv || !lv.updatedAt || cv.updatedAt > lv.updatedAt)) merged[k] = cv;
+        });
         // By id, so an account the server adds (online payments) survives a push
         // from a device that loaded before it existed.
         if (l.accounts || c.accounts) merged.accounts = mergeArr(l.accounts, c.accounts);

@@ -41,7 +41,7 @@ export default class Devices extends React.Component {
     } catch (e) { alert(e.message); }
     this.setState({ qrBusy: false });
   };
-  onAuthed = (user) => { this.setState({ authUser: user }); this.load(); this.loadShop(); };
+  onAuthed = (user) => { this.setState({ authUser: user }); this.load(); this.loadShop(); this.loadFrp(); };
 
   // The shop blob (customers/plans/products) so enrollment can link to a real plan
   // by its internal id — which is what drives auto-lock on overdue.
@@ -82,7 +82,52 @@ export default class Devices extends React.Component {
 
   clearPick = () => this.setState(st => ({ form: { ...st.form, planId: '', customerId: '' } }));
 
-  openDetail = (d) => { this.setState({ detail: d }); this.loadShop(); };
+  openDetail = (d) => { this.setState({ detail: d, history: null }); this.loadShop(); this.loadHistory(d.id); };
+
+  loadHistory = async (id) => {
+    try {
+      const t = await this.token();
+      const r = await fetch('/api/device/manage?history=' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + t } });
+      const j = await r.json();
+      this.setState({ history: j.points || [] }, this.drawTrail);
+    } catch (e) { this.setState({ history: [] }); }
+  };
+
+  // Leaflet + OpenStreetMap from the CDN, loaded only when a trail is shown.
+  drawTrail = async () => {
+    const pts = this.state.history || [];
+    const el = document.getElementById('trail-map');
+    if (!pts.length || !el) return;
+    if (!window.L) {
+      await new Promise((ok, fail) => {
+        const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+        const sc = document.createElement('script'); sc.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; sc.onload = ok; sc.onerror = fail; document.head.appendChild(sc);
+      }).catch(() => {});
+    }
+    const L = window.L;
+    if (!L) return;
+    if (this._trail) this._trail.remove();
+    this._trail = L.map(el);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(this._trail);
+    const ll = pts.slice().reverse().map(p => [p.lat, p.lng]);
+    L.polyline(ll, { color: C.green, weight: 3 }).addTo(this._trail);
+    pts.forEach((p, i) => L.circleMarker([p.lat, p.lng], { radius: i === 0 ? 8 : 4, color: i === 0 ? C.red : C.green, fillOpacity: 0.9 }).addTo(this._trail).bindPopup(new Date(p.at).toLocaleString() + (p.acc ? ' · ±' + Math.round(p.acc) + 'm' : '')));
+    this._trail.fitBounds(ll, { padding: [20, 20], maxZoom: 16 });
+  };
+
+  loadFrp = async () => {
+    try { const t = await this.token(); const r = await fetch('/api/device/settings', { headers: { Authorization: 'Bearer ' + t } }); const j = await r.json(); this.setState({ frpIds: (j.frpAccountIds || []).join(', ') }); } catch (e) {}
+  };
+  saveFrp = async () => {
+    try {
+      const t = await this.token();
+      const r = await fetch('/api/device/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify({ frpAccountIds: this.state.frpIds }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error);
+      this.setState({ frpIds: j.frpAccountIds.join(', ') });
+      alert(j.frpAccountIds.length ? 'Saved. Each phone arms it at its next check-in.' : 'Cleared. Phones drop factory-reset protection at their next check-in.');
+    } catch (e) { alert(e.message || 'Save failed'); }
+  };
   refresh = () => { this.load(); this.loadShop(); };
   closeDetail = () => this.setState({ detail: null });
 
@@ -154,6 +199,12 @@ export default class Devices extends React.Component {
               <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? 'only ' + (d.allowNumber || '—') : 'all'}</b></span>
             </div>
             <div style={{ fontSize: 12, color: C.mut, marginBottom: 14 }}>📍 {d.locAt ? <a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>View last location</a> : 'Location not reported yet'}</div>
+            {this.state.history && this.state.history.length ? (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>Location trail — {this.state.history.length} points{d.status === 'lost' ? ' · lost mode: every 15 min' : ''}</div>
+                <div id="trail-map" style={{ height: 240, borderRadius: 12, overflow: 'hidden', border: '1px solid ' + C.line }} />
+              </div>
+            ) : null}
 
             {!plan ? (
               <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: 12, fontSize: 12.5, color: C.amber }}>No plan linked to this phone. Enroll it again with a plan, or it can only be locked manually.</div>
@@ -493,6 +544,15 @@ export default class Devices extends React.Component {
               <div style={{ fontSize: 11, color: C.mut }}>One-time, expires in 24h. PC fallback string: <span style={{ fontFamily: 'monospace', wordBreak: 'break-all', userSelect: 'all' }}>{enroll.enrollString}</span></div>
             </div>
           ) : null}
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, marginBottom: 12, padding: '12px 16px' }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>🛡 Factory-reset protection (shop Google account)</div>
+          <div style={{ fontSize: 12, color: C.mut, margin: '4px 0 8px' }}>If someone wipes a phone from recovery mode, it will ask for this Google account before it can be used. Enter the account's numeric ID (from Google's People API, "people/<b>1234…</b>"). Android 11+, brands that support it.</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={this.state.frpIds || ''} onChange={e => this.setState({ frpIds: e.target.value })} placeholder="e.g. 112233445566778899001" style={{ flex: 1, padding: 10, borderRadius: 10, border: '1px solid ' + C.line, fontFamily: 'monospace' }} />
+            <button onClick={this.saveFrp} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: C.green, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+          </div>
         </div>
 
         {/* Provisioning QR — collapsible */}

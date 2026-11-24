@@ -14,7 +14,9 @@ data class CheckinResult(
     val latestVersion: Int = 0,
     val apkUrl: String = "",
     val payUrl: String = "",        // blank = online payment off / nothing due
-    val dueAmount: Int = 0
+    val dueAmount: Int = 0,
+    val checkinMinutes: Int = 360,  // 15 while lost / force-locked
+    val frpAccountIds: String = ""  // shop Google account IDs for factory-reset protection
 )
 
 data class ClaimResult(val ok: Boolean, val deviceId: String = "", val secret: String = "", val baseUrl: String = "", val error: String = "")
@@ -71,7 +73,9 @@ object Api {
                 latestVersion = j.optInt("latestVersion", 0),
                 apkUrl = j.optString("apkUrl", ""),
                 payUrl = j.optString("payUrl", ""),
-                dueAmount = j.optInt("dueAmount", 0)
+                dueAmount = j.optInt("dueAmount", 0),
+                checkinMinutes = j.optInt("checkinMinutes", 360),
+                frpAccountIds = j.optString("frpAccountIds", "")
             )
         } catch (e: Exception) {
             CheckinResult(false)

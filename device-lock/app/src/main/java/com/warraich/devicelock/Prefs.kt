@@ -37,6 +37,10 @@ class Prefs(ctx: Context) {
     var payUrl: String      get() = sp.getString("payUrl", "") ?: "";           set(v) = sp.edit().putString("payUrl", v).apply()
     var dueAmount: Int      get() = sp.getInt("dueAmount", 0);                  set(v) = sp.edit().putInt("dueAmount", v).apply()
 
+    // Heartbeat interval the server asked for, and the FRP accounts last applied.
+    var checkinMinutes: Int get() = sp.getInt("checkinMinutes", 360);         set(v) = sp.edit().putInt("checkinMinutes", v).apply()
+    var frpIds: String      get() = sp.getString("frpIds", "") ?: "";           set(v) = sp.edit().putString("frpIds", v).apply()
+
     fun saveEnrollment(id: String, sec: String, url: String) {
         deviceId = id; secret = sec; baseUrl = url.trimEnd('/')
         lastOkMs = System.currentTimeMillis()

@@ -28,8 +28,8 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
     companion object {
         const val UNIQUE = "devicelock-checkin"
 
-        fun schedule(ctx: Context) {
-            val req = PeriodicWorkRequestBuilder<CheckinWorker>(6, TimeUnit.HOURS)
+        fun schedule(ctx: Context, minutes: Int = Prefs(ctx).checkinMinutes) {
+            val req = PeriodicWorkRequestBuilder<CheckinWorker>(minutes.coerceAtLeast(15).toLong(), TimeUnit.MINUTES)
                 .build()
             WorkManager.getInstance(ctx)
                 .enqueueUniquePeriodicWork(UNIQUE, ExistingPeriodicWorkPolicy.UPDATE, req)
@@ -58,6 +58,12 @@ object Checkin {
             p.allowNumber = r.allowNumber
             p.payUrl = r.payUrl
             p.dueAmount = r.dueAmount
+            // Lost / force-locked phones report every 15 min instead of every 6 h.
+            if (r.checkinMinutes != p.checkinMinutes) {
+                p.checkinMinutes = r.checkinMinutes
+                CheckinWorker.schedule(ctx, r.checkinMinutes)
+            }
+            if (r.frpAccountIds != p.frpIds && LockManager(ctx).applyFrpPolicy(r.frpAccountIds)) p.frpIds = r.frpAccountIds
             when (r.action) {
                 "release" -> { releaseSelf(ctx, p); return r }
                 "lock" -> {
