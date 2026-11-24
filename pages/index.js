@@ -1,6 +1,7 @@
 import React from 'react';
 import Head from 'next/head';
 import { supabase, SHOP_ID, getSessionSafe } from '../lib/supabase';
+import { diffShop } from '../lib/auditDiff';
 
 export default class App extends React.Component {
   _isDemo = false;
@@ -310,6 +311,7 @@ export default class App extends React.Component {
 
   startSession = (user) => {
     this.setState({ authUser: user }, () => this.initSupabaseSync());
+    this.apiFetch('/api/staff/me').then(r => r.ok ? r.json() : null).then(me => { if (me) this.setState({ me }); }).catch(() => {});
     this.apiFetch('/api/whatsapp-status').then(r => r.json()).then(d => this.setState({ waStatus: d.status || 'disconnected' })).catch(() => {});
   };
 
@@ -340,7 +342,17 @@ export default class App extends React.Component {
     this._pendingSync = false;
     localStorage.removeItem('aqsat_data');
     localStorage.removeItem('aqsat_pin');
-    this.setState({ authUser: null, customers: null, products: null, plans: null, ledger: null, udpiEntries: null, invoices: [], staff: [], savedPin: '', pinLocked: false });
+    this.setState({ authUser: null, customers: null, products: null, plans: null, ledger: null, udpiEntries: null, invoices: [], staff: [], savedPin: '', pinLocked: false, me: null });
+  };
+
+  _isSalesman = () => !!(this.state.me && this.state.me.role === 'salesman');
+
+  // Report what a save changed. The server takes the actor from the login token.
+  _postAudit = (before, after) => {
+    try {
+      const entries = diffShop(before, after);
+      if (entries.length) this.apiFetch('/api/audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries }) }).catch(() => {});
+    } catch (e) {}
   };
 
   apiFetch = async (url, opts = {}) => {
@@ -584,6 +596,7 @@ export default class App extends React.Component {
     try {
       const stamped = this._stampLocalChanges(localData);
       let merged = null;
+      let cloudBefore = null;
       // Compare-and-swap on updated_at: the write only lands if nobody else wrote
       // since our read. Otherwise re-read, re-merge and retry, so two devices (or
       // a server endpoint) saving at once never silently drop each other's rows.
@@ -603,10 +616,11 @@ export default class App extends React.Component {
           const { data: rows, error } = await supabase.from('shops').update({ data: candidate, updated_at: ts })
             .eq('id', SHOP_ID).eq('updated_at', cloud.updated_at).select('id');
           if (error) throw new Error(error.message || 'sync write failed');
-          if (rows && rows.length) merged = candidate;
+          if (rows && rows.length) { merged = candidate; cloudBefore = cloud.data; }
         }
       }
       if (!merged) throw new Error('busy — another device kept saving; will retry');
+      if (cloudBefore) this._postAudit(cloudBefore, merged);
       this._saveLocal(merged);
       this._pendingSync = false;
       this._syncSnapshot = this._snapshotOf(merged);
@@ -1751,6 +1765,8 @@ export default class App extends React.Component {
   }
 
   requirePin = (action) => {
+    // Salesman logins never get past an owner gate on their own.
+    if (!this.state.savedPin && this._isSalesman()) { alert('Owner only — ask the owner to do this.\nیہ صرف مالک کر سکتا ہے۔'); return; }
     if (!this.state.savedPin) { action(); return; }
     this.setState({ pinModal: { open: true, callback: action, error: '' }, pinModalInput: '' });
   };
@@ -1783,7 +1799,7 @@ export default class App extends React.Component {
 
   go = (route, params = {}) => {
     const guarded = ['settings', 'newplan'];
-    if (guarded.includes(route) && this.state.savedPin) {
+    if (guarded.includes(route) && (this.state.savedPin || (route === 'settings' && this._isSalesman()))) {
       this.requirePin(() => { this.setState({ route, routeParams: params }); if (typeof window !== 'undefined') window.scrollTo(0, 0); });
       return;
     }
@@ -7809,6 +7825,7 @@ export default class App extends React.Component {
       { key: 'udharbook', label: 'Udhar Book', icon: '🤝', go: () => this.go('udharbook') },
       { key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
       { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => { if (typeof window !== 'undefined') window.location.href = '/devices'; } },
+      ...(this._isSalesman() ? [] : [{ key: 'audit', label: 'Staff & Audit', icon: '🛡️', go: () => { if (typeof window !== 'undefined') window.location.href = '/audit'; } }]),
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -8109,6 +8126,7 @@ export default class App extends React.Component {
                   { icon: '🤝', label: 'Udhar Book', go: 'udharbook' },
                   { icon: '👷', label: 'Staff',      go: 'staff' },
                   { icon: '🔒', label: 'Device Lock', go: 'devices', ext: '/devices' },
+                  ...(this._isSalesman() ? [] : [{ icon: '🛡️', label: 'Staff & Audit', go: 'audit', ext: '/audit' }]),
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
                   <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
