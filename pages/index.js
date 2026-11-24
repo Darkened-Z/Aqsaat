@@ -311,7 +311,11 @@ export default class App extends React.Component {
 
   startSession = (user) => {
     this.setState({ authUser: user }, () => this.initSupabaseSync());
-    this.apiFetch('/api/staff/me').then(r => r.ok ? r.json() : null).then(me => { if (me) this.setState({ me }); }).catch(() => {});
+    this.apiFetch('/api/staff/me').then(r => r.ok ? r.json() : null).then(me => {
+      // Agents have no access to the shop data; their app is the field list.
+      if (me && me.role === 'agent') { window.location.href = '/recovery'; return; }
+      if (me) this.setState({ me });
+    }).catch(() => {});
     this.apiFetch('/api/whatsapp-status').then(r => r.json()).then(d => this.setState({ waStatus: d.status || 'disconnected' })).catch(() => {});
   };
 
@@ -564,6 +568,9 @@ export default class App extends React.Component {
         // value — the blank comes from the initial React state, not a user edit.
         const c = cloud.settings || {}, l = local.settings || {};
         const merged = { ...c, ...l };
+        // By id, so an account the server adds (online payments) survives a push
+        // from a device that loaded before it existed.
+        if (l.accounts || c.accounts) merged.accounts = mergeArr(l.accounts, c.accounts);
         ['businessName', 'ownerName', 'city'].forEach(k => {
           if (!(l[k] || '').trim() && (c[k] || '').trim()) merged[k] = c[k];
         });
@@ -7825,7 +7832,7 @@ export default class App extends React.Component {
       { key: 'udharbook', label: 'Udhar Book', icon: '🤝', go: () => this.go('udharbook') },
       { key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
       { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => { if (typeof window !== 'undefined') window.location.href = '/devices'; } },
-      ...(this._isSalesman() ? [] : [{ key: 'audit', label: 'Staff & Audit', icon: '🛡️', go: () => { if (typeof window !== 'undefined') window.location.href = '/audit'; } }]),
+      ...(this._isSalesman() ? [] : [{ key: 'audit', label: 'Staff & Audit', icon: '🛡️', go: () => { if (typeof window !== 'undefined') window.location.href = '/audit'; } }, { key: 'recovery', label: 'Recovery', icon: '🛵', go: () => { if (typeof window !== 'undefined') window.location.href = '/recovery'; } }]),
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -8126,7 +8133,7 @@ export default class App extends React.Component {
                   { icon: '🤝', label: 'Udhar Book', go: 'udharbook' },
                   { icon: '👷', label: 'Staff',      go: 'staff' },
                   { icon: '🔒', label: 'Device Lock', go: 'devices', ext: '/devices' },
-                  ...(this._isSalesman() ? [] : [{ icon: '🛡️', label: 'Staff & Audit', go: 'audit', ext: '/audit' }]),
+                  ...(this._isSalesman() ? [] : [{ icon: '🛡️', label: 'Staff & Audit', go: 'audit', ext: '/audit' }, { icon: '🛵', label: 'Recovery', go: 'recovery', ext: '/recovery' }]),
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
                   <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
