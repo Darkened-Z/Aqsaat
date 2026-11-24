@@ -552,6 +552,12 @@ export default class App extends React.Component {
         // value — the blank comes from the initial React state, not a user edit.
         const c = cloud.settings || {}, l = local.settings || {};
         const merged = { ...c, ...l };
+        // Settings blocks written from other pages/servers carry their own
+        // updatedAt; the newer copy wins instead of whichever device pushed last.
+        Object.keys(c).forEach(k => {
+          const cv = c[k], lv = l[k];
+          if (cv && typeof cv === 'object' && !Array.isArray(cv) && cv.updatedAt && (!lv || !lv.updatedAt || cv.updatedAt > lv.updatedAt)) merged[k] = cv;
+        });
         ['businessName', 'ownerName', 'city'].forEach(k => {
           if (!(l[k] || '').trim() && (c[k] || '').trim()) merged[k] = c[k];
         });
@@ -3298,6 +3304,7 @@ export default class App extends React.Component {
           : h('div', {}),
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h('button', { onClick: () => this.openEditPlan(pl.id), style: { background: '#eaf5ee', color: '#0f6b4b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '✎'),
+          h('a', { href: '/agreement?plan=' + encodeURIComponent(pl.id), title: 'Installment agreement', style: { background: pl.agreement && pl.agreement.signedAt ? '#eaf5ee' : '#f4f1e6', color: '#0f6b4b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' } }, pl.agreement && pl.agreement.signedAt ? '📄✓' : '📄'),
           h('button', { onClick: () => this.openDeletePlan(pl.id), style: { background: '#fdecea', color: '#a4362b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '🗑'),
           h('button', { onClick: () => this.toggleLateFeePanel(pl.id), title: 'Late fee settings', style: { background: this.state.lateFeePanel === pl.id ? '#fef3c7' : '#f4f1e6', color: '#a26a10', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '⚙'),
           h('button', { onClick: () => this.toggleReportMonthPanel(pl.id), title: 'Report month', style: { background: this.state.reportMonthPanel === pl.id || pl.reportMonth ? '#eaf0ff' : '#f4f1e6', color: '#3b5bdb', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '📊'),
