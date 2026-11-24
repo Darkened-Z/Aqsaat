@@ -10,6 +10,8 @@ const APK_URL = 'https://aqsaat.vercel.app/device-lock.apk';
 const APK_CHECKSUM = 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk';
 const RATE_PER_DEVICE = 450;
 
+const appVersionName = (code) => 'v1.' + (code - 1);
+
 export default class Devices extends React.Component {
   state = {
     authUser: undefined, email: '', password: '', authErr: '', busy: false,
@@ -353,11 +355,10 @@ export default class Devices extends React.Component {
   };
 
   appVersionLabel = (d) => {
-    const v = (code) => 'v1.' + (code - 1);
     const latest = this.state.latestVersion;
     if (!d.appVersion) return <b style={{ color: C.amber }}>old (no auto-update) — update once from the phone's browser</b>;
-    if (latest && d.appVersion < latest) return <b style={{ color: C.amber }}>{v(d.appVersion)} → updating to {v(latest)} at next check-in</b>;
-    return <b style={{ color: C.green }}>{v(d.appVersion)} ✓ latest</b>;
+    if (latest && d.appVersion < latest) return <b style={{ color: C.amber }}>{appVersionName(d.appVersion)} → updating to {appVersionName(latest)} at next check-in</b>;
+    return <b style={{ color: C.green }}>{appVersionName(d.appVersion)} ✓ latest</b>;
   };
 
   canDelete = (d) => !d.claimed || d.lastAction === 'release';
@@ -510,7 +511,7 @@ export default class Devices extends React.Component {
               <div style={{ fontSize: 12, color: C.mut, margin: '12px 0 10px' }}>On a factory-reset phone, tap the first welcome screen 6 times, then scan this QR.</div>
               <div style={{ marginBottom: 10 }}>
                 <a href={APK_URL} target="_blank" rel="noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download lock app (APK)</a>
-                <span style={{ fontSize: 11, color: C.mut, marginLeft: 10 }}>v1.1.0 · hosted on aqsaat</span>
+                <span style={{ fontSize: 11, color: C.mut, marginLeft: 10 }}>{this.state.latestVersion ? appVersionName(this.state.latestVersion) + ' · ' : ''}hosted on aqsaat</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 8, marginBottom: 10 }}>
                 <input placeholder="APK download URL (https)" value={this.state.qrCfg.apkUrl} onChange={e => this.setState({ qrCfg: { ...this.state.qrCfg, apkUrl: e.target.value } })} style={fi} />
