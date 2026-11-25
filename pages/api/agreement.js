@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { supabaseAdmin, SHOP_ID, requireMember } from '../../lib/serverAuth';
+import { requireRole } from '../../lib/staff';
 import { updateShopData } from '../../lib/shopData';
 import { planFacts, termsFor, parseSignature } from '../../lib/agreement';
 
@@ -34,6 +35,7 @@ export default async function handler(req, res) {
   const b = req.body || {};
 
   if (b.action === 'terms') {
+    if (!(await requireRole(req, res, ['owner']))) return;
     const items = (Array.isArray(b.items) ? b.items : []).slice(0, 15)
       .map(t => ({ en: String(t.en || '').trim().slice(0, 600), ur: String(t.ur || '').trim().slice(0, 600) }))
       .filter(t => t.en || t.ur);

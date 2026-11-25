@@ -1,4 +1,5 @@
 import { requireMember } from '../../lib/serverAuth';
+import { requireRole } from '../../lib/staff';
 import { updateShopData } from '../../lib/shopData';
 import { supabaseAdmin, SHOP_ID } from '../../lib/serverAuth';
 import { config, DEFAULTS } from '../../lib/waAutomation';
@@ -14,6 +15,7 @@ export default async function handler(req, res) {
     return res.json({ config: config(((data && data.data) || {}).settings) });
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await requireRole(req, res, ['owner']))) return;
   const b = req.body || {};
   const next = { updatedAt: new Date().toISOString() };
   BOOLS.forEach(k => { next[k] = typeof b[k] === 'boolean' ? b[k] : DEFAULTS[k]; });

@@ -1,11 +1,12 @@
-import { supabaseAdmin, SHOP_ID, requireMember } from '../../../lib/serverAuth';
+import { supabaseAdmin, SHOP_ID } from '../../../lib/serverAuth';
+import { requireRole } from '../../../lib/staff';
 import { updateShopData } from '../../../lib/shopData';
 import { cleanFrpIds } from '../../../lib/lockPro';
 
 // Owner: shop-wide device-lock settings. FRP account IDs reach every phone at its
 // next check-in (Android 11+ on OEMs that honour the policy).
 export default async function handler(req, res) {
-  if (!(await requireMember(req, res))) return;
+  if (!(await requireRole(req, res, ['owner']))) return;
   if (req.method === 'GET') {
     const { data } = await supabaseAdmin.from('shops').select('data').eq('id', SHOP_ID).single();
     const frp = (((data && data.data) || {}).settings || {}).frp || {};
