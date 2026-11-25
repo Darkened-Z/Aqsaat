@@ -77,7 +77,7 @@ export default async function handler(req, res) {
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true, push: await pokeDevices({ deviceId }) });
     }
-    const mins = { 30: 30, 120: 120, 1440: 1440 }[value];
+    const mins = { 30: 30, 120: 120, 4320: 4320 }[value];
     const patch = {
       lock:     { lock_mode: 'force_lock', unlock_until: null },
       unlock:   { lock_mode: 'force_unlock', unlock_until: null },

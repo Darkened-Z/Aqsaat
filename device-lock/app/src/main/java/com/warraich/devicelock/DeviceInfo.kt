@@ -36,5 +36,6 @@ object DeviceInfo {
             // Factory-reset protection: which shop accounts this phone has armed.
             .put("frpSupported", Build.VERSION.SDK_INT >= 30 && LockManager(ctx).isDeviceOwner())
             .put("frpIds", Prefs(ctx).frpIds)
+            .put("upd", Prefs(ctx).updStatus)
     }
 }

@@ -201,7 +201,7 @@ export default class Devices extends React.Component {
               {this.timedNote(d)}
               <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? 'only ' + (d.allowNumber || '—') : 'all'}</b></span>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: C.mut, marginBottom: 6 }}>🔑 Offline codes: {this.codesLine(d)}</div>
+            <div style={{ marginTop: 10 }}>{this.renderTempUnlock(d)}</div>
             <div style={{ fontSize: 12, color: C.mut, marginBottom: 14 }}>📍 {d.locAt ? <a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>View last location</a> : 'Location not reported yet'}</div>
             {this.state.history && this.state.history.length ? (
               <div style={{ marginBottom: 14 }}>
@@ -237,9 +237,6 @@ export default class Devices extends React.Component {
             {btnInline('🔒 Lock', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
             {btnInline('🔓 Unlock', C.green, () => this.act(d.id, 'unlock', 'Force-unlock this phone?'))}
             {btnInline('⚙ Auto', C.ink, () => this.act(d.id, 'auto'))}
-            {btnInline('⏱ 30 min', C.green, () => this.unlockFor(d, 30, '30 minutes'))}
-            {btnInline('⏱ 2 h', C.green, () => this.unlockFor(d, 120, '2 hours'))}
-            {btnInline('⏱ 1 day', C.green, () => this.unlockFor(d, 1440, '1 day'))}
           </div>
         </div>
       </div>
@@ -330,12 +327,47 @@ export default class Devices extends React.Component {
     this.load();
   };
 
-  unlockFor = (d, mins, label) => this.act(d.id, 'unlockfor', `Unlock this phone for ${label}? It locks again by itself after that if the installment is still due.`, mins);
+  // One duration drives both ways of unlocking: online now, or an offline code (shown on tap).
+  TU = [{ mins: 30, label: '30 min', code: '30 min' }, { mins: 120, label: '2 hours', code: '2 hours' }, { mins: 4320, label: '3 days', code: '3 days' }];
 
-  // 30 min / 2 h codes need app v1.12 (code 13); older apps only take the 3-day one.
-  codesLine = (d) => (d.unlockCodes || []).filter(c => d.appVersion >= 13 || c.label === '3 days').map(c => (
-    <span key={c.label}>{c.label}: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14, letterSpacing: 1 }}>{c.code}</b></span>
-  ));
+  renderTempUnlock = (d) => {
+    const sel = this.TU.find(t => t.mins === (this.state.tuMins || {})[d.id]) || this.TU[0];
+    const shown = (this.state.tuCode || {})[d.id] === sel.mins;
+    const c = (d.unlockCodes || []).find(x => x.label === sel.code);
+    const codeOk = c && (d.appVersion >= 13 || sel.code === '3 days');
+    const pick = (mins) => this.setState(st => ({ tuMins: { ...st.tuMins, [d.id]: mins }, tuCode: { ...st.tuCode, [d.id]: null } }));
+    const reveal = () => this.setState(st => ({ tuCode: { ...st.tuCode, [d.id]: shown ? null : sel.mins } }));
+    const opt = { flex: '1 1 200px', background: '#fff', border: '1px solid ' + C.line, borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 };
+    return (
+      <div style={{ background: '#f3faf6', border: '1px solid #cfe9db', borderRadius: 14, padding: 14, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, flex: 1 }}>🔓 Temporary unlock</div>
+          {this.timedNote(d)}
+        </div>
+        <div style={{ display: 'inline-flex', background: '#fff', border: '1px solid ' + C.line, borderRadius: 999, padding: 3, marginBottom: 12 }}>
+          {this.TU.map(t => (
+            <button key={t.mins} onClick={() => pick(t.mins)} style={{ padding: '6px 14px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: t.mins === sel.mins ? C.green : 'transparent', color: t.mins === sel.mins ? '#fff' : C.ink }}>{t.label}</button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={opt}>
+            <div style={{ fontSize: 12, color: C.mut }}><b style={{ color: C.ink }}>Phone has internet</b> — opens in seconds, locks again by itself after {sel.label}.</div>
+            <button onClick={() => this.act(d.id, 'unlockfor', `Unlock this phone for ${sel.label}? It locks again by itself after that if the installment is still due.`, sel.mins)} style={{ padding: '10px 12px', borderRadius: 10, border: 'none', background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>⚡ Unlock for {sel.label}</button>
+          </div>
+          <div style={opt}>
+            <div style={{ fontSize: 12, color: C.mut }}><b style={{ color: C.ink }}>No internet</b> — customer types this code on the lock screen. Valid today only.</div>
+            {shown ? (
+              codeOk
+                ? <div onClick={reveal} style={{ fontFamily: 'monospace', fontSize: 26, fontWeight: 800, letterSpacing: 6, textAlign: 'center', color: C.ink, background: '#fdfcf8', border: '1px dashed #cfe9db', borderRadius: 10, padding: '6px 0', cursor: 'pointer', marginTop: 'auto' }}>{c.code.slice(0, 3)} {c.code.slice(3)}</div>
+                : <div style={{ fontSize: 12, color: C.amber, fontWeight: 600, marginTop: 'auto' }}>This phone's app is too old for a {sel.label} code — use 3 days, or wait for it to update.</div>
+            ) : (
+              <button onClick={reveal} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid ' + C.green, background: '#fff', color: C.green, fontWeight: 700, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>🔑 Show {sel.label} code</button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   timedNote = (d) => d.unlockUntil
     ? <span style={{ color: C.green, fontWeight: 700 }}>⏱ Unlocked until {new Date(d.unlockUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{new Date(d.unlockUntil).toDateString() !== new Date().toDateString() ? ' ' + new Date(d.unlockUntil).toLocaleDateString() : ''}</span>
@@ -459,7 +491,8 @@ export default class Devices extends React.Component {
   appVersionLabel = (d) => {
     const latest = this.state.latestVersion;
     if (!d.appVersion) return <b style={{ color: C.amber }}>old (no auto-update) — update once from the phone's browser</b>;
-    if (latest && d.appVersion < latest) return <b style={{ color: C.amber }}>{appVersionName(d.appVersion)} → updating to {appVersionName(latest)} at next check-in</b>;
+    const upd = d.info && d.info.upd;
+    if (latest && d.appVersion < latest) return <b style={{ color: C.amber }}>{appVersionName(d.appVersion)} → updating to {appVersionName(latest)} at next check-in{upd ? <span style={{ fontWeight: 400, color: C.mut }}> · last try: {upd}</span> : null}</b>;
     return <b style={{ color: C.green }}>{appVersionName(d.appVersion)} ✓ latest</b>;
   };
 
@@ -696,7 +729,7 @@ export default class Devices extends React.Component {
                       : <b style={{ color: C.ink }}>not reported yet</b>}
                       {d.locPerm && d.locPerm !== 'fg+bg' ? <b style={{ color: C.amber }}> · {d.locPerm === 'none' ? 'location permission OFF on phone' : 'background location not allowed — only updates when the app is opened'}</b> : null}</span>
                   </div>
-                  {d.status !== 'deleted' ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>🔑 Offline unlock codes (today): {this.codesLine(d)}</div> : null}
+                  {d.status !== 'deleted' && this.state.tuOpen === d.id ? this.renderTempUnlock(d) : null}
                   {d.claimed && d.status !== 'deleted' ? this.simRow(d) : null}
                   {d.status === 'deleted' ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -709,9 +742,7 @@ export default class Devices extends React.Component {
                     {btn('🔒 Lock', '#fdecea', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
                     {btn('🔓 Unlock', '#eaf5ee', C.green, () => this.act(d.id, 'unlock', 'Force-unlock (ignore overdue) this phone?'))}
                     {btn('⚙ Auto', '#f4f1e6', C.ink, () => this.act(d.id, 'auto'))}
-                    {btn('⏱ 30 min', '#eaf5ee', C.green, () => this.unlockFor(d, 30, '30 minutes'))}
-                    {btn('⏱ 2 h', '#eaf5ee', C.green, () => this.unlockFor(d, 120, '2 hours'))}
-                    {btn('⏱ 1 day', '#eaf5ee', C.green, () => this.unlockFor(d, 1440, '1 day'))}
+                    {btn(this.state.tuOpen === d.id ? '✕ Close temporary unlock' : '⏱ Temporary unlock', this.state.tuOpen === d.id ? '#fff' : '#eaf5ee', C.green, () => this.setState({ tuOpen: this.state.tuOpen === d.id ? null : d.id }))}
                     {(d.status === 'released' || d.status === 'lost') ? btn('● Activate', '#eafaf0', C.green, () => this.act(d.id, 'active', 'Bring this phone back to Active (auto-lock on overdue)?')) : null}
                     {btn('⚠ Mark lost', '#fff7ed', C.amber, () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
                     {btn('✓ Release', '#eef2ff', '#4338ca', () => this.act(d.id, 'release', 'Release this phone? This UN-ENROLLS it and removes the lock permanently — only do this when the loan is fully paid.'))}
