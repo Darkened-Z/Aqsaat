@@ -245,10 +245,11 @@ export default class App extends React.Component {
     const startRoute = new URLSearchParams(search).get('r');
     const deep = ['devices', 'audit', 'recovery', 'automation', 'stock'].includes(startRoute) ? { route: startRoute } : {};
     if (startRoute) window.history.replaceState(null, '', '/');
-    this.setState({ darkMode: dm, savedPin: pin, pinLocked: false, ...deep, ...(forceUdhar ? { route: 'udharbook' } : {}) }, this.initAuth);
+    this.setState({ darkMode: dm, savedPin: pin, pinLocked: !!pin, ...deep, ...(forceUdhar ? { route: 'udharbook' } : {}) }, this.initAuth);
     this._onVisibility = () => {
       // Realtime keeps an open tab current; only refetch after a real absence.
       if (document.visibilityState === 'hidden') { this._hiddenAt = Date.now(); return; }
+      if (this.state.savedPin && this._hiddenAt && Date.now() - this._hiddenAt > 5 * 60000) { this._pinUnlocked = false; this.setState({ pinLocked: true, enteredPin: '', pinLockError: false }); }
       if (Date.now() - (this._hiddenAt || 0) > 60000) this._refetchCloud();
     };
     document.addEventListener('visibilitychange', this._onVisibility);
@@ -410,7 +411,7 @@ export default class App extends React.Component {
     const cloudPin = settings.pin || '';
     if (cloudPin) { localStorage.setItem('aqsat_pin', cloudPin); }
     const payload = { customers: merged.customers, products: merged.products, plans: merged.plans, settings, ledger: merged.ledger || [], udpiEntries: merged.udpiEntries || [], invoices: merged.invoices || [], staff: merged.staff || [], syncStatus: 'synced' };
-    if (cloudPin) payload.savedPin = cloudPin;
+    if (cloudPin) { payload.savedPin = cloudPin; if (!this._pinUnlocked) payload.pinLocked = true; }
     this._saveLocal(merged);
     this._syncSnapshot = this._snapshotOf(merged);
     this.setState(payload, () => { this.processRecurring(); this._pushIfAhead(merged, d); });
@@ -600,6 +601,7 @@ export default class App extends React.Component {
         // By id, so an account the server adds (online payments) survives a push
         // from a device that loaded before it existed.
         if (l.accounts || c.accounts) merged.accounts = mergeArr(l.accounts, c.accounts);
+        if ((c.pinAt || '') > (l.pinAt || '')) { merged.pin = c.pin; merged.pinAt = c.pinAt; }
         ['businessName', 'ownerName', 'city'].forEach(k => {
           if (!(l[k] || '').trim() && (c[k] || '').trim()) merged[k] = c[k];
         });
@@ -2320,11 +2322,13 @@ export default class App extends React.Component {
   setPin = (pin) => {
     if (pin) localStorage.setItem('aqsat_pin', pin);
     else localStorage.removeItem('aqsat_pin');
-    this.setState({ savedPin: pin, settings: { ...this.state.settings, pin } });
+    this._pinUnlocked = true;
+    this.setState({ savedPin: pin, settings: { ...this.state.settings, pin, pinAt: new Date().toISOString() } });
   };
 
   submitPin = () => {
     if (this.state.enteredPin === this.state.savedPin) {
+      this._pinUnlocked = true;
       this.setState({ pinLocked: false, enteredPin: '', pinLockError: false });
     } else {
       this.setState({ enteredPin: '', pinLockError: true });
@@ -4188,10 +4192,10 @@ export default class App extends React.Component {
           h('pre', { style: { fontFamily: 'monospace', fontSize: 10, margin: 0, whiteSpace: 'pre-wrap', userSelect: 'all', lineHeight: 1.6 } }, 'create table if not exists shops (\n  id text primary key,\n  data jsonb not null,\n  updated_at timestamptz default now()\n);\nalter table shops enable row level security;\ncreate policy "public access" on shops for all using (true);'),
         ) : null,
         row('Dark mode', 'ڈارک موڈ', h('button', { onClick: this.toggleDark, style: { padding: '8px 16px', borderRadius: 8, background: this.state.darkMode ? '#1a2b1f' : '#f4f1e6', color: this.state.darkMode ? '#eaf5ee' : '#3a4a3f', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, this.state.darkMode ? '🌙 Dark On' : '☀️ Dark Off')),
-        row('PIN lock', 'پن لاک', h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
-          this.state.savedPin
-            ? h('button', { onClick: () => this.setPin(''), style: { padding: '6px 12px', borderRadius: 8, background: '#fdecea', color: '#a4362b', fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' } }, '🔓 Remove PIN')
-            : h('input', { type: 'number', maxLength: 4, placeholder: '4-digit PIN', onBlur: e => { if (e.target.value.length === 4) this.setPin(e.target.value); }, style: { width: 100, border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, fontFamily: 'monospace', outline: 'none' } }),
+        row('App PIN', 'ایپ PIN', h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+          this.state.savedPin ? h('span', { className: 'mono', style: { fontSize: 13, color: '#0f6b4b', fontWeight: 700 } }, '•'.repeat(this.state.savedPin.length)) : null,
+          h('input', { type: 'password', inputMode: 'numeric', autoComplete: 'off', maxLength: 6, placeholder: this.state.savedPin ? 'New PIN' : '4–6 digit PIN', value: this.state.newPinDraft || '', onChange: e => this.setState({ newPinDraft: e.target.value.replace(/\D/g, '').slice(0, 6) }), style: { width: 110, border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13 } }),
+          h('button', { onClick: () => { const v = this.state.newPinDraft || ''; if (v.length < 4) { alert('PIN must be 4–6 digits / PIN چار سے چھ ہندسوں کا ہو'); return; } this.setPin(v); this.setState({ newPinDraft: '' }); alert('PIN changed / PIN تبدیل ہو گیا'); }, style: { padding: '6px 12px', borderRadius: 8, background: '#0f6b4b', color: '#fff', fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' } }, this.state.savedPin ? 'Change PIN' : 'Set PIN'),
         )),
         row('Reset PIN (6-digit)', 'ری سیٹ PIN', h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
           st.resetPin
