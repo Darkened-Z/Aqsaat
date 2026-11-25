@@ -30,7 +30,7 @@ class LockManager(private val ctx: Context) {
         grantRuntimePerms()
         // Force location services on so a fresh fix is available for recovery.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) runCatching { dpm.setLocationEnabled(admin, true) }
-        applyFrpPolicy()
+        applyFrpPolicy(Prefs(ctx).frpIds)
     }
 
     /**
@@ -42,8 +42,11 @@ class LockManager(private val ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         val perms = mutableListOf(
             android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            // SIM serial / IMEI for SIM lock and the device info shown to the shop.
+            android.Manifest.permission.READ_PHONE_STATE
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) perms += android.Manifest.permission.READ_PHONE_NUMBERS
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) perms += android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) perms += android.Manifest.permission.POST_NOTIFICATIONS
         for (perm in perms) runCatching {
@@ -57,17 +60,16 @@ class LockManager(private val ctx: Context) {
      * account at setup. Android 11+ and only where the OEM honours the AOSP policy;
      * a no-op / throw elsewhere is swallowed.
      */
-    private fun applyFrpPolicy() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        val ids = BuildConfig.FRP_ACCOUNT_IDS.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        if (ids.isEmpty()) return
-        runCatching {
-            val policy = FactoryResetProtectionPolicy.Builder()
+    /** [serverIds] from check-in (comma-separated); falls back to the compiled-in list. True if applied. */
+    fun applyFrpPolicy(serverIds: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || !isDeviceOwner()) return false
+        val ids = serverIds.ifBlank { BuildConfig.FRP_ACCOUNT_IDS }.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        return runCatching {
+            dpm.setFactoryResetProtectionPolicy(admin, if (ids.isEmpty()) null else FactoryResetProtectionPolicy.Builder()
                 .setFactoryResetProtectionAccounts(ids)
                 .setFactoryResetProtectionEnabled(true)
-                .build()
-            dpm.setFactoryResetProtectionPolicy(admin, policy)
-        }
+                .build())
+        }.isSuccess
     }
 
     /** Called on Release so the freed phone no longer challenges for the shop account. */

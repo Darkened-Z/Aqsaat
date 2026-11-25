@@ -43,7 +43,7 @@ export default class Devices extends React.Component {
     } catch (e) { alert(e.message); }
     this.setState({ qrBusy: false });
   };
-  onAuthed = (user) => { this.setState({ authUser: user }); this.load(); this.loadShop(); };
+  onAuthed = (user) => { this.setState({ authUser: user }); this.load(); this.loadShop(); this.loadFrp(); };
 
   // The shop blob (customers/plans/products) so enrollment can link to a real plan
   // by its internal id — which is what drives auto-lock on overdue.
@@ -84,7 +84,52 @@ export default class Devices extends React.Component {
 
   clearPick = () => this.setState(st => ({ form: { ...st.form, planId: '', customerId: '' } }));
 
-  openDetail = (d) => { this.setState({ detail: d }); this.loadShop(); };
+  openDetail = (d) => { this.setState({ detail: d, history: null }); this.loadShop(); this.loadHistory(d.id); };
+
+  loadHistory = async (id) => {
+    try {
+      const t = await this.token();
+      const r = await fetch('/api/device/manage?history=' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + t } });
+      const j = await r.json();
+      this.setState({ history: j.points || [] }, this.drawTrail);
+    } catch (e) { this.setState({ history: [] }); }
+  };
+
+  // Leaflet + OpenStreetMap from the CDN, loaded only when a trail is shown.
+  drawTrail = async () => {
+    const pts = this.state.history || [];
+    const el = document.getElementById('trail-map');
+    if (!pts.length || !el) return;
+    if (!window.L) {
+      await new Promise((ok, fail) => {
+        const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+        const sc = document.createElement('script'); sc.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; sc.onload = ok; sc.onerror = fail; document.head.appendChild(sc);
+      }).catch(() => {});
+    }
+    const L = window.L;
+    if (!L) return;
+    if (this._trail) this._trail.remove();
+    this._trail = L.map(el);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(this._trail);
+    const ll = pts.slice().reverse().map(p => [p.lat, p.lng]);
+    L.polyline(ll, { color: C.green, weight: 3 }).addTo(this._trail);
+    pts.forEach((p, i) => L.circleMarker([p.lat, p.lng], { radius: i === 0 ? 8 : 4, color: i === 0 ? C.red : C.green, fillOpacity: 0.9 }).addTo(this._trail).bindPopup(new Date(p.at).toLocaleString() + (p.acc ? ' · ±' + Math.round(p.acc) + 'm' : '')));
+    this._trail.fitBounds(ll, { padding: [20, 20], maxZoom: 16 });
+  };
+
+  loadFrp = async () => {
+    try { const t = await this.token(); const r = await fetch('/api/device/settings', { headers: { Authorization: 'Bearer ' + t } }); const j = await r.json(); this.setState({ frpIds: (j.frpAccountIds || []).join(', ') }); } catch (e) {}
+  };
+  saveFrp = async () => {
+    try {
+      const t = await this.token();
+      const r = await fetch('/api/device/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify({ frpAccountIds: this.state.frpIds }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error);
+      this.setState({ frpIds: j.frpAccountIds.join(', ') });
+      alert(j.frpAccountIds.length ? 'Saved. Each phone arms it at its next check-in.' : 'Cleared. Phones drop factory-reset protection at their next check-in.');
+    } catch (e) { alert(e.message || 'Save failed'); }
+  };
   refresh = () => { this.load(); this.loadShop(); };
   closeDetail = () => this.setState({ detail: null });
 
@@ -156,6 +201,12 @@ export default class Devices extends React.Component {
               <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? 'only ' + (d.allowNumber || '—') : 'all'}</b></span>
             </div>
             <div style={{ fontSize: 12, color: C.mut, marginBottom: 14 }}>📍 {d.locAt ? <a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>View last location</a> : 'Location not reported yet'}</div>
+            {this.state.history && this.state.history.length ? (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>Location trail — {this.state.history.length} points{d.status === 'lost' ? ' · lost mode: every 15 min' : ''}</div>
+                <div id="trail-map" style={{ height: 240, borderRadius: 12, overflow: 'hidden', border: '1px solid ' + C.line }} />
+              </div>
+            ) : null}
 
             {!plan ? (
               <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: 12, fontSize: 12.5, color: C.amber }}>No plan linked to this phone. Enroll it again with a plan, or it can only be locked manually.</div>
@@ -278,6 +329,35 @@ export default class Devices extends React.Component {
     const name = prompt('Name for this phone (to remember which is which):', d.label || '');
     if (name === null) return;
     this.act(d.id, 'rename', null, name.trim());
+  };
+
+  setSimMode = (d) => {
+    const next = { lock: 'alert', alert: 'off', off: 'lock' }[d.simMode] || 'lock';
+    const msg = {
+      lock: 'SIM lock → LOCK: the phone locks itself if its registered SIM is removed or swapped (works offline). Continue?',
+      alert: 'SIM lock → ALERT ONLY: a SIM change is flagged here but the phone is not locked. Continue?',
+      off: 'SIM lock → OFF: SIM changes are ignored and airplane mode is allowed again. Continue?',
+    }[next];
+    this.act(d.id, 'simmode', msg, next);
+  };
+
+  simRow = (d) => {
+    const cur = d.simCurrent, base = d.simBaseline || [], info = d.info;
+    const tail = s => '…' + String(s).slice(-6);
+    let state;
+    if (!cur && !info) state = <b style={{ color: C.ink }}>waiting for app v1.9+</b>;
+    else if (d.simChangedAt) state = <b style={{ color: C.red }}>🔴 SIM changed{cur && cur.absent ? ' (no SIM in phone)' : ''} · since {new Date(d.simChangedAt).toLocaleString()}</b>;
+    else if (!base.length) state = <b style={{ color: C.amber }}>no readable SIM registered yet</b>;
+    else state = <b style={{ color: C.green }}>✓ original SIM</b>;
+    const slots = (cur && cur.slots) || [];
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
+        <span>📶 SIM: {state} · lock mode <b style={{ color: d.simMode === 'lock' ? C.green : d.simMode === 'alert' ? C.amber : C.ink }}>{d.simMode}</b>{d.simMode === 'lock' && d.lockMode === 'force_unlock' ? ' (alert only while force-unlocked)' : ''}</span>
+        {base.length ? <span>Registered: <b style={{ color: C.ink, fontFamily: 'monospace' }}>{base.map(tail).join(', ')}</b></span> : null}
+        {slots.length ? <span>In phone: <b style={{ color: C.ink }}>{slots.map(s => [s.carrier || 'SIM', s.number, s.iccid ? tail(s.iccid) : ''].filter(Boolean).join(' ')).join(' | ')}</b></span> : null}
+        {info ? <span>📱 <b style={{ color: C.ink }}>{[info.brand, info.model].filter(Boolean).join(' ')}</b>{info.android ? ` · Android ${info.android}` : ''}{info.imei1 ? ` · IMEI ${info.imei1}` : ''}{info.imei2 ? ` / ${info.imei2}` : ''}{info.serial ? ` · S/N ${info.serial}` : ''}{info.battery != null ? ` · 🔋 ${info.battery}%${info.charging ? ' ⚡' : ''}` : ''}{info.network ? ` · ${info.network}` : ''}</span> : null}
+      </div>
+    );
   };
 
   setCallShop = (d) => {
@@ -467,7 +547,7 @@ export default class Devices extends React.Component {
         {this.renderDetail()}
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-          <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🔒</div>
+          <img src="/icon-lock.png" alt="" style={{ width: 42, height: 42, borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,.15)' }} />
           <div style={{ flex: 1, minWidth: 140 }}>
             <div style={{ fontSize: 20, fontWeight: 800 }}>Device Lock</div>
             <div style={{ fontSize: 12, color: C.mut }}>Enrolled phones on installment</div>
@@ -494,6 +574,15 @@ export default class Devices extends React.Component {
               <div style={{ fontSize: 11, color: C.mut }}>One-time, expires in 24h. PC fallback string: <span style={{ fontFamily: 'monospace', wordBreak: 'break-all', userSelect: 'all' }}>{enroll.enrollString}</span></div>
             </div>
           ) : null}
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, marginBottom: 12, padding: '12px 16px' }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>🛡 Factory-reset protection (shop Google account)</div>
+          <div style={{ fontSize: 12, color: C.mut, margin: '4px 0 8px' }}>If someone wipes a phone from recovery mode, it will ask for this Google account before it can be used. Enter the account's numeric ID (from Google's People API, "people/<b>1234…</b>"). Android 11+, brands that support it.</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={this.state.frpIds || ''} onChange={e => this.setState({ frpIds: e.target.value })} placeholder="e.g. 112233445566778899001" style={{ flex: 1, padding: 10, borderRadius: 10, border: '1px solid ' + C.line, fontFamily: 'monospace' }} />
+            <button onClick={this.saveFrp} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: C.green, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+          </div>
         </div>
 
         {/* Provisioning QR — collapsible */}
@@ -576,6 +665,7 @@ export default class Devices extends React.Component {
                     <span>Unlock code: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14, letterSpacing: 1 }}>{d.unlockCode}</b></span>
                     <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? `only ${d.allowNumber || '—'}` : 'all allowed'}</b></span>
                     {d.claimed && d.status !== 'deleted' ? <span>App: {this.appVersionLabel(d)}</span> : null}
+                    {d.claimed && d.status !== 'deleted' ? <span>Control: {d.instant ? <b style={{ color: C.green }}>⚡ instant</b> : <b style={{ color: C.ink }}>at next check-in (~6h)</b>}</span> : null}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
                     <span>📍 Last location: {d.locAt
@@ -583,6 +673,7 @@ export default class Devices extends React.Component {
                       : <b style={{ color: C.ink }}>not reported yet</b>}
                       {d.locPerm && d.locPerm !== 'fg+bg' ? <b style={{ color: C.amber }}> · {d.locPerm === 'none' ? 'location permission OFF on phone' : 'background location not allowed — only updates when the app is opened'}</b> : null}</span>
                   </div>
+                  {d.claimed && d.status !== 'deleted' ? this.simRow(d) : null}
                   {d.status === 'deleted' ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {btn('↩ Restore', '#eaf5ee', C.green, () => this.act(d.id, 'active'))}
@@ -605,6 +696,8 @@ export default class Devices extends React.Component {
                     {d.callMode === 'shop_only'
                       ? btn('📞 Calls: all', '#eaf5ee', C.green, () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
                       : btn('📞 Shop-only calls', '#fff7ed', C.amber, () => this.setCallShop(d))}
+                    {btn('📶 SIM: ' + (d.simMode || 'lock'), '#f5f0ff', '#6d28d9', () => this.setSimMode(d))}
+                    {d.simChangedAt ? btn('✓ Accept new SIM', '#f5f0ff', '#6d28d9', () => this.act(d.id, 'simaccept', 'Register the SIM now in this phone as its own? The SIM lock will then protect the NEW SIM.')) : null}
                   </div>
                   )}
                 </div>

@@ -15,5 +15,7 @@ class BootReceiver : BroadcastReceiver() {
         if (p.lockState == "hard" && now >= p.unlockUntilMs) {
             LockManager(context).showLock(p.message)
         }
+        // A SIM swapped while the phone was off is caught here, before any network.
+        SimGuard.enforce(context)
     }
 }

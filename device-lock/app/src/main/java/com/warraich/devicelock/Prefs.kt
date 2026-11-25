@@ -30,6 +30,22 @@ class Prefs(ctx: Context) {
     var callMode: String    get() = sp.getString("callMode", "open") ?: "open"; set(v) = sp.edit().putString("callMode", v).apply()
     var allowNumber: String get() = sp.getString("allowNumber", "") ?: "";      set(v) = sp.edit().putString("allowNumber", v).apply()
 
+    // FCM registration token, reported to the server on every check-in.
+    var pushToken: String   get() = sp.getString("pushToken", "") ?: "";        set(v) = sp.edit().putString("pushToken", v).apply()
+
+    // Online payment link + amount for the lock screen, from the last check-in.
+    var payUrl: String      get() = sp.getString("payUrl", "") ?: "";           set(v) = sp.edit().putString("payUrl", v).apply()
+    var dueAmount: Int      get() = sp.getInt("dueAmount", 0);                  set(v) = sp.edit().putInt("dueAmount", v).apply()
+
+    // Heartbeat interval the server asked for, and the FRP accounts last applied.
+    var checkinMinutes: Int get() = sp.getInt("checkinMinutes", 360);         set(v) = sp.edit().putInt("checkinMinutes", v).apply()
+    var frpIds: String      get() = sp.getString("frpIds", "") ?: "";           set(v) = sp.edit().putString("frpIds", v).apply()
+
+    // SIM lock from the server, and whether the current hard lock was set by the SIM guard.
+    var simMode: String     get() = sp.getString("simMode", "off") ?: "off";    set(v) = sp.edit().putString("simMode", v).apply()
+    var simIccids: String   get() = sp.getString("simIccids", "") ?: "";        set(v) = sp.edit().putString("simIccids", v).apply()
+    var simLocked: Boolean  get() = sp.getBoolean("simLocked", false);          set(v) = sp.edit().putBoolean("simLocked", v).apply()
+
     fun saveEnrollment(id: String, sec: String, url: String) {
         deviceId = id; secret = sec; baseUrl = url.trimEnd('/')
         lastOkMs = System.currentTimeMillis()

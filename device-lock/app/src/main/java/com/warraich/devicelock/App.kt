@@ -10,6 +10,7 @@ class App : Application() {
             CheckinWorker.schedule(this)
             LockManager(this).applyOwnerPolicies()
             Notify.managed(this)
+            Push.init(this)
         }
     }
 }

@@ -70,6 +70,7 @@ class MainActivity : AppCompatActivity() {
                         CheckinWorker.schedule(this@MainActivity)
                         LockManager(this@MainActivity).applyOwnerPolicies()
                         Notify.managed(this@MainActivity)
+                        Push.init(this@MainActivity)
                         requestCallScreeningRole()
                         checkNow()
                         render()

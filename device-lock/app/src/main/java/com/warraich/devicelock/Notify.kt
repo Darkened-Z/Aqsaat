@@ -15,6 +15,20 @@ object Notify {
     private const val CH = "managed"
     private const val ID = 42
 
+    /** Brief notification while a push-triggered check-in runs (needed before Android 12). */
+    fun working(ctx: Context): Notification {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ctx.getSystemService(NotificationManager::class.java)
+                ?.createNotificationChannel(NotificationChannel(CH, "Device management", NotificationManager.IMPORTANCE_LOW))
+        }
+        return androidx.core.app.NotificationCompat.Builder(ctx, CH)
+            .setSmallIcon(android.R.drawable.ic_popup_sync)
+            .setContentTitle(ctx.getString(R.string.shop_name))
+            .setContentText("Checking with the shop…")
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
     fun managed(ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return

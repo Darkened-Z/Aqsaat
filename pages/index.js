@@ -1,6 +1,7 @@
 import React from 'react';
 import Head from 'next/head';
 import { supabase, SHOP_ID, getSessionSafe } from '../lib/supabase';
+import { diffShop } from '../lib/auditDiff';
 
 export default class App extends React.Component {
   _isDemo = false;
@@ -310,6 +311,11 @@ export default class App extends React.Component {
 
   startSession = (user) => {
     this.setState({ authUser: user }, () => this.initSupabaseSync());
+    this.apiFetch('/api/staff/me').then(r => r.ok ? r.json() : null).then(me => {
+      // Agents have no access to the shop data; their app is the field list.
+      if (me && me.role === 'agent') { window.location.href = '/recovery'; return; }
+      if (me) this.setState({ me });
+    }).catch(() => {});
     this.apiFetch('/api/whatsapp-status').then(r => r.json()).then(d => this.setState({ waStatus: d.status || 'disconnected' })).catch(() => {});
   };
 
@@ -340,7 +346,17 @@ export default class App extends React.Component {
     this._pendingSync = false;
     localStorage.removeItem('aqsat_data');
     localStorage.removeItem('aqsat_pin');
-    this.setState({ authUser: null, customers: null, products: null, plans: null, ledger: null, udpiEntries: null, invoices: [], staff: [], savedPin: '', pinLocked: false });
+    this.setState({ authUser: null, customers: null, products: null, plans: null, ledger: null, udpiEntries: null, invoices: [], staff: [], savedPin: '', pinLocked: false, me: null });
+  };
+
+  _isSalesman = () => !!(this.state.me && this.state.me.role === 'salesman');
+
+  // Report what a save changed. The server takes the actor from the login token.
+  _postAudit = (before, after) => {
+    try {
+      const entries = diffShop(before, after);
+      if (entries.length) this.apiFetch('/api/audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries }) }).catch(() => {});
+    } catch (e) {}
   };
 
   apiFetch = async (url, opts = {}) => {
@@ -552,6 +568,15 @@ export default class App extends React.Component {
         // value — the blank comes from the initial React state, not a user edit.
         const c = cloud.settings || {}, l = local.settings || {};
         const merged = { ...c, ...l };
+        // Settings blocks written from other pages/servers carry their own
+        // updatedAt; the newer copy wins instead of whichever device pushed last.
+        Object.keys(c).forEach(k => {
+          const cv = c[k], lv = l[k];
+          if (cv && typeof cv === 'object' && !Array.isArray(cv) && cv.updatedAt && (!lv || !lv.updatedAt || cv.updatedAt > lv.updatedAt)) merged[k] = cv;
+        });
+        // By id, so an account the server adds (online payments) survives a push
+        // from a device that loaded before it existed.
+        if (l.accounts || c.accounts) merged.accounts = mergeArr(l.accounts, c.accounts);
         ['businessName', 'ownerName', 'city'].forEach(k => {
           if (!(l[k] || '').trim() && (c[k] || '').trim()) merged[k] = c[k];
         });
@@ -584,6 +609,7 @@ export default class App extends React.Component {
     try {
       const stamped = this._stampLocalChanges(localData);
       let merged = null;
+      let cloudBefore = null;
       // Compare-and-swap on updated_at: the write only lands if nobody else wrote
       // since our read. Otherwise re-read, re-merge and retry, so two devices (or
       // a server endpoint) saving at once never silently drop each other's rows.
@@ -603,13 +629,15 @@ export default class App extends React.Component {
           const { data: rows, error } = await supabase.from('shops').update({ data: candidate, updated_at: ts })
             .eq('id', SHOP_ID).eq('updated_at', cloud.updated_at).select('id');
           if (error) throw new Error(error.message || 'sync write failed');
-          if (rows && rows.length) merged = candidate;
+          if (rows && rows.length) { merged = candidate; cloudBefore = cloud.data; }
         }
       }
       if (!merged) throw new Error('busy — another device kept saving; will retry');
+      if (cloudBefore) this._postAudit(cloudBefore, merged);
       this._saveLocal(merged);
       this._pendingSync = false;
       this._syncSnapshot = this._snapshotOf(merged);
+      this._flushPokes();
       // Edits made while this push was in flight are not in `merged`; keep them
       // (they differ from the snapshot, so the next push stamps and sends them).
       const cur = this.state;
@@ -1751,6 +1779,8 @@ export default class App extends React.Component {
   }
 
   requirePin = (action) => {
+    // Salesman logins never get past an owner gate on their own.
+    if (!this.state.savedPin && this._isSalesman()) { alert('Owner only — ask the owner to do this.\nیہ صرف مالک کر سکتا ہے۔'); return; }
     if (!this.state.savedPin) { action(); return; }
     this.setState({ pinModal: { open: true, callback: action, error: '' }, pinModalInput: '' });
   };
@@ -1783,7 +1813,7 @@ export default class App extends React.Component {
 
   go = (route, params = {}) => {
     const guarded = ['settings', 'newplan'];
-    if (guarded.includes(route) && this.state.savedPin) {
+    if (guarded.includes(route) && (this.state.savedPin || (route === 'settings' && this._isSalesman()))) {
       this.requirePin(() => { this.setState({ route, routeParams: params }); if (typeof window !== 'undefined') window.scrollTo(0, 0); });
       return;
     }
@@ -1812,6 +1842,7 @@ export default class App extends React.Component {
       const allPaid = schedule.every(s => s.paid);
       return { ...pl, schedule, status: allPaid ? 'completed' : pl.status };
     });
+    this._queuePoke(ctx.planId);
     const pl = plans.find(p => p.id === ctx.planId);
     const customer = this.state.customers.find(c => c.id === pl.customerId);
     const product = this.state.products.find(p => p.id === pl.productId);
@@ -1823,11 +1854,21 @@ export default class App extends React.Component {
       this.setState({ plans, paymentModalOpen: false, receiptOpen: true, receiptData: { receiptNo: 'RCP-' + Date.now().toString().slice(-6), customer, product, plan: pl, installment: s, date: today, amountCollected: amountCollected || s.amount, accountName: acc ? acc.emoji + ' ' + acc.name : '' } });
     }
   }
+  // Payment changes wake the plan's locked phone, but only after they are in the
+  // cloud — otherwise the phone would check in and still see the old schedule.
+  _queuePoke = (planId) => { (this._pokePlans = this._pokePlans || new Set()).add(planId); };
+  _flushPokes = () => {
+    if (!this._pokePlans || !this._pokePlans.size) return;
+    const planIds = Array.from(this._pokePlans);
+    this._pokePlans.clear();
+    this.apiFetch('/api/device/poke', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planIds }) }).catch(() => {});
+  };
   closeReceipt = () => this.setState({ receiptOpen: false, receiptData: null });
 
   undoPayment = (planId, installmentN) => {
     this.requirePin(() => {
       if (!confirm('Undo payment for installment #' + installmentN + '?\nقسط نمبر ' + installmentN + ' کی ادائیگی واپس کریں؟')) return;
+      this._queuePoke(planId);
       const plans = this.state.plans.map(pl => {
         if (pl.id !== planId) return pl;
         const schedule = pl.schedule.map(s => s.n === installmentN
@@ -3298,6 +3339,7 @@ export default class App extends React.Component {
           : h('div', {}),
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h('button', { onClick: () => this.openEditPlan(pl.id), style: { background: '#eaf5ee', color: '#0f6b4b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '✎'),
+          h('a', { href: '/agreement?plan=' + encodeURIComponent(pl.id), title: 'Installment agreement', style: { background: pl.agreement && pl.agreement.signedAt ? '#eaf5ee' : '#f4f1e6', color: '#0f6b4b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' } }, pl.agreement && pl.agreement.signedAt ? '📄✓' : '📄'),
           h('button', { onClick: () => this.openDeletePlan(pl.id), style: { background: '#fdecea', color: '#a4362b', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '🗑'),
           h('button', { onClick: () => this.toggleLateFeePanel(pl.id), title: 'Late fee settings', style: { background: this.state.lateFeePanel === pl.id ? '#fef3c7' : '#f4f1e6', color: '#a26a10', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '⚙'),
           h('button', { onClick: () => this.toggleReportMonthPanel(pl.id), title: 'Report month', style: { background: this.state.reportMonthPanel === pl.id || pl.reportMonth ? '#eaf0ff' : '#f4f1e6', color: '#3b5bdb', padding: '8px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600 } }, '📊'),
@@ -3568,7 +3610,7 @@ export default class App extends React.Component {
               : h('div', { style: { fontSize: 13, color: '#7a7663' } }, 'No accounts configured. Add in Settings.');
             })(),
           ),
-          isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('input', { value: np.imei, onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
+          isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('div', {}, h('input', { value: np.imei, list: 'stock-imeis', onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI — pick from stock', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } }), h('datalist', { id: 'stock-imeis' }, ((this.state.products.find(p => p.id === np.productId) || {}).units || []).filter(u => !u._deleted && u.status === 'in_stock' && u.imei).map(u => h('option', { key: u.id, value: u.imei }, u.imei2 ? 'IMEI2 ' + u.imei2 : ''))))) : null,
           isVehicle ? field('Chassis Number', 'چیسس نمبر', h('input', { value: np.chassisNo, onChange: e => set('chassisNo', e.target.value), placeholder: 'e.g. ABC1234567890', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isVehicle ? field('Engine Number', 'انجن نمبر', h('input', { value: np.engineNo, onChange: e => set('engineNo', e.target.value), placeholder: 'e.g. G15A1234567', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isElectrical ? field('Serial Number', 'سیریل نمبر', h('input', { value: np.serialNo, onChange: e => set('serialNo', e.target.value), placeholder: 'Serial / model number on the unit', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
@@ -7809,6 +7851,9 @@ export default class App extends React.Component {
       { key: 'udharbook', label: 'Udhar Book', icon: '🤝', go: () => this.go('udharbook') },
       { key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
       { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => { if (typeof window !== 'undefined') window.location.href = '/devices'; } },
+      ...(this._isSalesman() ? [] : [{ key: 'audit', label: 'Staff & Audit', icon: '🛡️', go: () => { if (typeof window !== 'undefined') window.location.href = '/audit'; } }, { key: 'recovery', label: 'Recovery', icon: '🛵', go: () => { if (typeof window !== 'undefined') window.location.href = '/recovery'; } }]),
+      { key: 'automation', label: 'WA Automation', icon: '🤖', go: () => { if (typeof window !== 'undefined') window.location.href = '/automation'; } },
+      { key: 'stock', label: 'IMEI Stock', icon: '📦', go: () => { if (typeof window !== 'undefined') window.location.href = '/stock'; } },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -7845,7 +7890,7 @@ export default class App extends React.Component {
             <div style={{ maxWidth: 900, margin: '0 auto', padding: '10px 14px 12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.16)', flexShrink: 0 }}>
-                  <img src="/pfp.jpeg" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src="/logo-mark-white.svg" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 3, boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.2px' }}>{this.state.settings.businessName || 'Udhar Book'}</div>
@@ -8109,6 +8154,9 @@ export default class App extends React.Component {
                   { icon: '🤝', label: 'Udhar Book', go: 'udharbook' },
                   { icon: '👷', label: 'Staff',      go: 'staff' },
                   { icon: '🔒', label: 'Device Lock', go: 'devices', ext: '/devices' },
+                  ...(this._isSalesman() ? [] : [{ icon: '🛡️', label: 'Staff & Audit', go: 'audit', ext: '/audit' }, { icon: '🛵', label: 'Recovery', go: 'recovery', ext: '/recovery' }]),
+                  { icon: '🤖', label: 'WA Automation', go: 'automation', ext: '/automation' },
+                  { icon: '📦', label: 'IMEI Stock', go: 'stock', ext: '/stock' },
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
                   <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>

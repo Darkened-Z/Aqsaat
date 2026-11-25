@@ -43,6 +43,9 @@ export default async function handler(req, res) {
       return res.json({ ok: true, log: wa.getBotLog() });
     }
 
+    if (action === 'auto-status') return res.json({ ok: true, ...wa.getAutomationStatus() });
+    if (action === 'auto-run') return res.json({ ok: true, last: await wa.runAutomation() });
+
     if (action === 'send-reminders') {
       const result = await wa.sendBulkReminders();
       return res.json(result);
