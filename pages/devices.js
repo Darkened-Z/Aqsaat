@@ -382,7 +382,9 @@ export default class Devices extends React.Component {
       });
       if (!resp.ok) throw new Error((await resp.json()).error || 'enroll failed');
       const r = await resp.json();
-      this.setState({ enroll: r, pickQ: '', form: { label: '', planId: '', customerId: '', graceDays: '' } });
+      const { form, shop } = this.state;
+      const cust = ((shop && shop.customers) || []).find(c => c.id === form.customerId);
+      this.setState({ enroll: { ...r, label: form.label, customer: cust ? cust.name : '' }, pickQ: '', form: { label: '', planId: '', customerId: '', graceDays: '' } });
       this.load();
     } catch (e) { alert(e.message); }
     this.setState({ enrollBusy: false });
@@ -574,6 +576,7 @@ export default class Devices extends React.Component {
           <button onClick={this.enroll} disabled={this.state.enrollBusy || !form.planId} style={{ padding: '10px 16px', borderRadius: 10, background: (this.state.enrollBusy || !form.planId) ? C.mut : C.green, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: (this.state.enrollBusy || !form.planId) ? 'not-allowed' : 'pointer' }}>{this.state.enrollBusy ? 'Creating…' : form.planId ? '+ Create enrollment' : 'Link a plan first'}</button>
           {enroll ? (
             <div style={{ marginTop: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 12 }}>
+              <div style={{ fontSize: 13, color: C.ink, marginBottom: 8, paddingBottom: 8, borderBottom: '1px dashed #bbf7d0' }}>📱 Code for: <b>{enroll.label || 'this phone'}</b>{enroll.customer ? <span style={{ color: C.mut }}> · linked to {enroll.customer}'s plan ✓</span> : null}</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.green, marginBottom: 4 }}>On the phone (after scanning the provisioning QR), open Device Lock and type this code:</div>
               <div style={{ fontFamily: 'monospace', fontSize: 30, fontWeight: 800, letterSpacing: 4, color: C.ink, textAlign: 'center', padding: '6px 0' }}>{enroll.claimCode}</div>
               <div style={{ fontSize: 11, color: C.mut }}>One-time, expires in 24h. PC fallback string: <span style={{ fontFamily: 'monospace', wordBreak: 'break-all', userSelect: 'all' }}>{enroll.enrollString}</span></div>
