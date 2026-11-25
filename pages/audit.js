@@ -1,10 +1,10 @@
 import React from 'react';
-import AuthGate, { C } from '../lib/ui/AuthGate';
+import { C } from '../lib/ui/AuthGate';
 
 const ACTIONS = { create: '➕ Added', delete: '🗑 Deleted', restore: '↩ Restored', edit: '✏️ Edited', pay: '💰 Paid', unpay: '⚠️ Undo pay', 'edit-payment': '✏️ Payment edit', settings: '⚙️ Settings', collect: '🛵 Collected' };
 const ROLE = { owner: 'Owner', salesman: 'Salesman', agent: 'Recovery agent', system: 'System' };
 
-class Audit extends React.Component {
+export class Audit extends React.Component {
   state = { tab: 'log', entries: null, writes: [], staff: null, f: { actor: '', action: '', q: '', from: '' }, err: '', form: { name: '', username: '', password: '', role: 'salesman' }, busy: false, msg: '' };
 
   componentDidMount() { this.load(); this.loadStaff(); }
@@ -100,5 +100,6 @@ class Audit extends React.Component {
 }
 
 export default function AuditPage() {
-  return <AuthGate title="Staff & Audit">{api => <Audit api={api} />}</AuthGate>;
+  React.useEffect(() => { window.location.replace('/?r=audit'); }, []);
+  return null;
 }

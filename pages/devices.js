@@ -24,6 +24,7 @@ export default class Devices extends React.Component {
   };
 
   async componentDidMount() {
+    if (!this.props.embedded) { window.location.replace('/?r=devices'); return; }
     try { const s = JSON.parse(localStorage.getItem('devicelock_qrcfg') || '{}'); if (s && typeof s === 'object') this.setState(st => ({ qrCfg: { ...st.qrCfg, ...s, apkUrl: APK_URL, checksum: APK_CHECKSUM } })); } catch (e) {}
     const { data: { session } } = await getSessionSafe();
     if (session) this.onAuthed(session.user); else this.setState({ authUser: null });
@@ -389,6 +390,7 @@ export default class Devices extends React.Component {
 
   render() {
     const { authUser } = this.state;
+    if (this.props.embedded) return authUser ? this.renderApp() : <div style={{ padding: 30, color: C.mut }}>Loading…</div>;
     return (
       <div style={{ minHeight: '100vh', background: C.bg, fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", color: C.ink }}>
         <Head><title>Devices — Aqsat</title><meta name="viewport" content="width=device-width,initial-scale=1" /></Head>
@@ -523,7 +525,7 @@ export default class Devices extends React.Component {
             <div style={{ width: 110, textAlign: 'right', color: C2.amber }}>{money(total * rate)}</div>
           </div>
         </div>
-        <div style={{ fontSize: 11.5, color: C2.mut, marginTop: 10 }}>One-time charge per phone, billed in the month it was registered (deleted ones excluded). Never charged again./div>
+        <div style={{ fontSize: 11.5, color: C2.mut, marginTop: 10 }}>One-time charge per phone, billed in the month it was registered (deleted ones excluded). Never charged again.</div>
       </div>
     );
   };
@@ -555,9 +557,9 @@ export default class Devices extends React.Component {
             <div style={{ fontSize: 20, fontWeight: 800 }}>Device Lock</div>
             <div style={{ fontSize: 12, color: C.mut }}>Enrolled phones on installment</div>
           </div>
-          <button onClick={() => { if (typeof window !== 'undefined') window.location.href = '/'; }} style={{ ...ghost, background: C.green, color: '#fff', border: 'none' }}>← Back to Aqsat</button>
+          {this.props.embedded ? null : <button onClick={() => { if (typeof window !== 'undefined') window.location.href = '/'; }} style={{ ...ghost, background: C.green, color: '#fff', border: 'none' }}>← Back to Aqsat</button>}
           <button onClick={this.refresh} style={ghost}>↻ Refresh</button>
-          <button onClick={this.signOut} style={{ ...ghost, background: '#f4f1e6', border: 'none' }}>Sign out</button>
+          {this.props.embedded ? null : <button onClick={this.signOut} style={{ ...ghost, background: '#f4f1e6', border: 'none' }}>Sign out</button>}
         </div>
 
         {/* Enroll */}

@@ -2,6 +2,14 @@ import React from 'react';
 import Head from 'next/head';
 import { supabase, SHOP_ID, getSessionSafe } from '../lib/supabase';
 import { diffShop } from '../lib/auditDiff';
+import dynamic from 'next/dynamic';
+
+const panelLoading = () => <div style={{ padding: 30, color: '#7a7663' }}>Loading…</div>;
+const DevicesPanel = dynamic(() => import('./devices'), { ssr: false, loading: panelLoading });
+const AuditPanel = dynamic(() => import('./audit').then(m => m.Audit), { ssr: false, loading: panelLoading });
+const RecoveryPanel = dynamic(() => import('./recovery').then(m => m.Recovery), { ssr: false, loading: panelLoading });
+const AutomationPanel = dynamic(() => import('./automation').then(m => m.Automation), { ssr: false, loading: panelLoading });
+const StockPanel = dynamic(() => import('./stock').then(m => m.Stock), { ssr: false, loading: panelLoading });
 
 export default class App extends React.Component {
   _isDemo = false;
@@ -234,9 +242,14 @@ export default class App extends React.Component {
     const forceUdhar = udharHost || window.location.hash === '#udharbook';
     // Username login already gates entry, so no separate PIN lock on startup.
     // (savedPin still guards sensitive actions via requirePin.)
-    this.setState({ darkMode: dm, savedPin: pin, pinLocked: false, ...(forceUdhar ? { route: 'udharbook' } : {}) }, this.initAuth);
+    const startRoute = new URLSearchParams(search).get('r');
+    const deep = ['devices', 'audit', 'recovery', 'automation', 'stock'].includes(startRoute) ? { route: startRoute } : {};
+    if (startRoute) window.history.replaceState(null, '', '/');
+    this.setState({ darkMode: dm, savedPin: pin, pinLocked: false, ...deep, ...(forceUdhar ? { route: 'udharbook' } : {}) }, this.initAuth);
     this._onVisibility = () => {
-      if (document.visibilityState === 'visible') this._refetchCloud();
+      // Realtime keeps an open tab current; only refetch after a real absence.
+      if (document.visibilityState === 'hidden') { this._hiddenAt = Date.now(); return; }
+      if (Date.now() - (this._hiddenAt || 0) > 60000) this._refetchCloud();
     };
     document.addEventListener('visibilitychange', this._onVisibility);
 
@@ -359,6 +372,13 @@ export default class App extends React.Component {
     } catch (e) {}
   };
 
+  apiJson = async (path, { method = 'GET', body } = {}) => {
+    const r = await this.apiFetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Request failed (' + r.status + ')');
+    return j;
+  };
+
   apiFetch = async (url, opts = {}) => {
     const { data: { session } } = await getSessionSafe();
     const headers = { ...(opts.headers || {}) };
@@ -461,6 +481,9 @@ export default class App extends React.Component {
       .channel('shop-' + SHOP_ID)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shops', filter: `id=eq.${SHOP_ID}` }, (payload) => {
         const d = payload.new?.data;
+        // Our own save echoing back: already merged locally, skip the full re-merge.
+        const at = payload.new?.updated_at;
+        if (at && this._lastWriteAt && Date.parse(at) === this._lastWriteAt) return;
         if (d) this._applyCloudData(d);
       })
       .subscribe();
@@ -629,7 +652,7 @@ export default class App extends React.Component {
           const { data: rows, error } = await supabase.from('shops').update({ data: candidate, updated_at: ts })
             .eq('id', SHOP_ID).eq('updated_at', cloud.updated_at).select('id');
           if (error) throw new Error(error.message || 'sync write failed');
-          if (rows && rows.length) { merged = candidate; cloudBefore = cloud.data; }
+          if (rows && rows.length) { merged = candidate; cloudBefore = cloud.data; this._lastWriteAt = Date.parse(ts); }
         }
       }
       if (!merged) throw new Error('busy — another device kept saving; will retry');
@@ -7829,6 +7852,11 @@ export default class App extends React.Component {
       udharbook:  ['Udhar Book', 'اُدھار بک', 'Lent & borrowed tracking'],
       staff:      ['Staff',      'ملازمین',   'Payroll & attendance'],
       settings:   ['Settings',  'ترتیبات',   'Business preferences'],
+      devices:    ['Device Lock', 'ڈیوائس لاک', 'Enrolled phones on installment'],
+      audit:      ['Staff & Audit', 'عملہ اور ریکارڈ', 'Logins and activity log'],
+      recovery:   ['Recovery', 'ریکوری', 'Field collection'],
+      automation: ['WA Automation', 'واٹس ایپ آٹومیشن', 'Automatic WhatsApp messages'],
+      stock:      ['IMEI Stock', 'IMEI اسٹاک', 'Phones in stock by IMEI'],
     };
     const t = titles[route] || titles.dashboard;
     const overdueCount = plans.reduce((a, pl) => a + this.planStats(pl).overdue.length, 0);
@@ -7850,10 +7878,10 @@ export default class App extends React.Component {
       { key: 'accounts',  label: 'Accounts',   icon: '💰', go: () => this.go('accounts') },
       { key: 'udharbook', label: 'Udhar Book', icon: '🤝', go: () => this.go('udharbook') },
       { key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
-      { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => { if (typeof window !== 'undefined') window.location.href = '/devices'; } },
-      ...(this._isSalesman() ? [] : [{ key: 'audit', label: 'Staff & Audit', icon: '🛡️', go: () => { if (typeof window !== 'undefined') window.location.href = '/audit'; } }, { key: 'recovery', label: 'Recovery', icon: '🛵', go: () => { if (typeof window !== 'undefined') window.location.href = '/recovery'; } }]),
-      { key: 'automation', label: 'WA Automation', icon: '🤖', go: () => { if (typeof window !== 'undefined') window.location.href = '/automation'; } },
-      { key: 'stock', label: 'IMEI Stock', icon: '📦', go: () => { if (typeof window !== 'undefined') window.location.href = '/stock'; } },
+      { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => this.go('devices') },
+      ...(this._isSalesman() ? [] : [{ key: 'audit', label: 'Staff & Audit', icon: '🛡️', go: () => this.go('audit') }, { key: 'recovery', label: 'Recovery', icon: '🛵', go: () => this.go('recovery') }]),
+      { key: 'automation', label: 'WA Automation', icon: '🤖', go: () => this.go('automation') },
+      { key: 'stock', label: 'IMEI Stock', icon: '📦', go: () => this.go('stock') },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -8112,6 +8140,11 @@ export default class App extends React.Component {
 
             {route === 'staff'      && this.renderStaff()}
             {route === 'settings'   && this.renderSettings()}
+            {route === 'devices'    && <DevicesPanel embedded />}
+            {route === 'audit'      && !this._isSalesman() && <AuditPanel api={this.apiJson} />}
+            {route === 'recovery'   && !this._isSalesman() && <RecoveryPanel api={this.apiJson} />}
+            {route === 'automation' && <AutomationPanel api={this.apiJson} />}
+            {route === 'stock'      && <StockPanel api={this.apiJson} />}
           </div>
         </main>
 
@@ -8153,10 +8186,10 @@ export default class App extends React.Component {
                   { icon: '💰', label: 'Accounts',  go: 'accounts' },
                   { icon: '🤝', label: 'Udhar Book', go: 'udharbook' },
                   { icon: '👷', label: 'Staff',      go: 'staff' },
-                  { icon: '🔒', label: 'Device Lock', go: 'devices', ext: '/devices' },
-                  ...(this._isSalesman() ? [] : [{ icon: '🛡️', label: 'Staff & Audit', go: 'audit', ext: '/audit' }, { icon: '🛵', label: 'Recovery', go: 'recovery', ext: '/recovery' }]),
-                  { icon: '🤖', label: 'WA Automation', go: 'automation', ext: '/automation' },
-                  { icon: '📦', label: 'IMEI Stock', go: 'stock', ext: '/stock' },
+                  { icon: '🔒', label: 'Device Lock', go: 'devices' },
+                  ...(this._isSalesman() ? [] : [{ icon: '🛡️', label: 'Staff & Audit', go: 'audit' }, { icon: '🛵', label: 'Recovery', go: 'recovery' }]),
+                  { icon: '🤖', label: 'WA Automation', go: 'automation' },
+                  { icon: '📦', label: 'IMEI Stock', go: 'stock' },
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
                   <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>

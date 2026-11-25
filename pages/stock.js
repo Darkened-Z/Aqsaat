@@ -1,9 +1,9 @@
 import React from 'react';
-import AuthGate, { C } from '../lib/ui/AuthGate';
+import { C } from '../lib/ui/AuthGate';
 
 const fmt = n => 'Rs ' + Math.round(n || 0).toLocaleString('en-PK');
 
-class Stock extends React.Component {
+export class Stock extends React.Component {
   state = { r: null, err: '', q: '', open: null, addFor: null, paste: '', cost: '', busy: false, msg: '' };
   componentDidMount() { this.load(); }
   load = async () => { try { this.setState({ r: await this.props.api('/api/stock'), err: '' }); } catch (e) { this.setState({ err: e.message }); } };
@@ -92,5 +92,6 @@ class Stock extends React.Component {
 }
 
 export default function StockPage() {
-  return <AuthGate title="IMEI Stock">{api => <Stock api={api} />}</AuthGate>;
+  React.useEffect(() => { window.location.replace('/?r=stock'); }, []);
+  return null;
 }
