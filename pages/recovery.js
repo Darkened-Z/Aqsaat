@@ -13,7 +13,7 @@ function loadLeaflet() {
   });
 }
 
-class Recovery extends React.Component {
+export class Recovery extends React.Component {
   state = { data: null, err: '', q: '', view: 'list', pick: null, sel: [], busy: false, done: null };
   mapEl = React.createRef();
 

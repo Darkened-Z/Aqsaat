@@ -1,11 +1,11 @@
 import React from 'react';
-import AuthGate, { C } from '../lib/ui/AuthGate';
+import { C } from '../lib/ui/AuthGate';
 import { supabase, SHOP_ID } from '../lib/supabase';
 import { buildQueue, pkDate } from '../lib/waAutomation';
 
 const KINDS = { receipt: 'Receipt', due3: 'Due in 3 days', due0: 'Due today', late3: '3 days late', monthly: 'Monthly statement', owner: 'Owner summary' };
 
-class Automation extends React.Component {
+export class Automation extends React.Component {
   state = { cfg: null, saving: false, msg: '', bot: null, preview: null, open: null };
 
   componentDidMount() { this.load(); }
@@ -113,5 +113,6 @@ class Automation extends React.Component {
 }
 
 export default function AutomationPage() {
-  return <AuthGate title="WhatsApp Automation">{api => <Automation api={api} />}</AuthGate>;
+  React.useEffect(() => { window.location.replace('/?r=automation'); }, []);
+  return null;
 }
