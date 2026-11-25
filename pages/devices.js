@@ -331,8 +331,8 @@ export default class Devices extends React.Component {
     this.act(d.id, 'rename', null, name.trim());
   };
 
-  setSimMode = (d) => {
-    const next = { lock: 'alert', alert: 'off', off: 'lock' }[d.simMode] || 'lock';
+  setSimMode = (d, next) => {
+    if (!next || next === d.simMode) return;
     const msg = {
       lock: 'SIM lock → LOCK: the phone locks itself if its registered SIM is removed or swapped (works offline). Continue?',
       alert: 'SIM lock → ALERT ONLY: a SIM change is flagged here but the phone is not locked. Continue?',
@@ -355,6 +355,9 @@ export default class Devices extends React.Component {
         <span>📶 SIM: {state} · lock mode <b style={{ color: d.simMode === 'lock' ? C.green : d.simMode === 'alert' ? C.amber : C.ink }}>{d.simMode}</b>{d.simMode === 'lock' && d.lockMode === 'force_unlock' ? ' (alert only while force-unlocked)' : ''}</span>
         {base.length ? <span>Registered: <b style={{ color: C.ink, fontFamily: 'monospace' }}>{base.map(tail).join(', ')}</b></span> : null}
         {slots.length ? <span>In phone: <b style={{ color: C.ink }}>{slots.map(s => [s.carrier || 'SIM', s.number, s.iccid ? tail(s.iccid) : ''].filter(Boolean).join(' ')).join(' | ')}</b></span> : null}
+        {info ? <span>🛡 FRP: {!info.frpSupported ? <b style={{ color: C.amber }}>not supported (needs Android 11+)</b>
+          : info.frpIds ? <b style={{ color: C.green }}>✓ armed ({info.frpIds.split(',').length} account{info.frpIds.includes(',') ? 's' : ''})</b>
+          : <b style={{ color: C.red }}>not armed — set the shop account above</b>}</span> : null}
         {info ? <span>📱 <b style={{ color: C.ink }}>{[info.brand, info.model].filter(Boolean).join(' ')}</b>{info.android ? ` · Android ${info.android}` : ''}{info.imei1 ? ` · IMEI ${info.imei1}` : ''}{info.imei2 ? ` / ${info.imei2}` : ''}{info.serial ? ` · S/N ${info.serial}` : ''}{info.battery != null ? ` · 🔋 ${info.battery}%${info.charging ? ' ⚡' : ''}` : ''}{info.network ? ` · ${info.network}` : ''}</span> : null}
       </div>
     );
@@ -578,7 +581,7 @@ export default class Devices extends React.Component {
 
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 16, marginBottom: 12, padding: '12px 16px' }}>
           <div style={{ fontWeight: 700, fontSize: 14 }}>🛡 Factory-reset protection (shop Google account)</div>
-          <div style={{ fontSize: 12, color: C.mut, margin: '4px 0 8px' }}>If someone wipes a phone from recovery mode, it will ask for this Google account before it can be used. Enter the account's numeric ID (from Google's People API, "people/<b>1234…</b>"). Android 11+, brands that support it.</div>
+          <div style={{ fontSize: 12, color: C.mut, margin: '4px 0 8px' }}>If someone wipes a phone from recovery mode, it will ask for this Google account before it can be used. Enter the account's numeric ID: open Google Maps signed in to the shop account → profile → <b>Your contributions</b>, and copy the long number after <b>/contrib/</b> in the link. Use an account the shop will keep forever — losing its password bricks wiped phones. Each phone shows "FRP ✓ armed" below once it has applied it (Android 11+).</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input value={this.state.frpIds || ''} onChange={e => this.setState({ frpIds: e.target.value })} placeholder="e.g. 112233445566778899001" style={{ flex: 1, padding: 10, borderRadius: 10, border: '1px solid ' + C.line, fontFamily: 'monospace' }} />
             <button onClick={this.saveFrp} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: C.green, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
@@ -696,7 +699,11 @@ export default class Devices extends React.Component {
                     {d.callMode === 'shop_only'
                       ? btn('📞 Calls: all', '#eaf5ee', C.green, () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
                       : btn('📞 Shop-only calls', '#fff7ed', C.amber, () => this.setCallShop(d))}
-                    {btn('📶 SIM: ' + (d.simMode || 'lock'), '#f5f0ff', '#6d28d9', () => this.setSimMode(d))}
+                    <select value={d.simMode || 'lock'} onChange={e => this.setSimMode(d, e.target.value)} title="SIM lock for this phone" style={{ padding: '7px 10px', borderRadius: 9, border: '1px solid #ddd6fe', background: '#f5f0ff', color: '#6d28d9', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                      <option value="lock">📶 SIM: lock phone</option>
+                      <option value="alert">📶 SIM: alert only</option>
+                      <option value="off">📶 SIM: off</option>
+                    </select>
                     {d.simChangedAt ? btn('✓ Accept new SIM', '#f5f0ff', '#6d28d9', () => this.act(d.id, 'simaccept', 'Register the SIM now in this phone as its own? The SIM lock will then protect the NEW SIM.')) : null}
                   </div>
                   )}

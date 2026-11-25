@@ -123,7 +123,8 @@ class LockActivity : AppCompatActivity() {
         root.addView(label(msg.ifBlank { "Phone locked. Please contact the shop." }, 16f, 16))
         root.addView(label("Call: ${getString(R.string.shop_phone)}", 15f, 10))
 
-        val url = p.payUrl
+        // Paying never lifts a SIM lock, so no pay offer then.
+        val url = if (p.simLocked) "" else p.payUrl
         if (url.isNotBlank() && p.dueAmount > 0) {
             root.addView(label("Pay Rs ${"%,d".format(p.dueAmount)} to unlock now", 18f, 22))
             root.addView(label("ادائیگی کریں، فون فوراً کھل جائے گا", 15f, 4))

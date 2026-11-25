@@ -13,5 +13,6 @@ class SimReceiver : BroadcastReceiver() {
         if (!Prefs(context).enrolled) return
         SimGuard.enforce(context)
         Push.checkInNow(context)
+        SimGuard.checkSoon(context, 30)
     }
 }
