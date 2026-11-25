@@ -3610,7 +3610,7 @@ export default class App extends React.Component {
               : h('div', { style: { fontSize: 13, color: '#7a7663' } }, 'No accounts configured. Add in Settings.');
             })(),
           ),
-          isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('input', { value: np.imei, onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
+          isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('div', {}, h('input', { value: np.imei, list: 'stock-imeis', onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI — pick from stock', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } }), h('datalist', { id: 'stock-imeis' }, ((this.state.products.find(p => p.id === np.productId) || {}).units || []).filter(u => !u._deleted && u.status === 'in_stock' && u.imei).map(u => h('option', { key: u.id, value: u.imei }, u.imei2 ? 'IMEI2 ' + u.imei2 : ''))))) : null,
           isVehicle ? field('Chassis Number', 'چیسس نمبر', h('input', { value: np.chassisNo, onChange: e => set('chassisNo', e.target.value), placeholder: 'e.g. ABC1234567890', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isVehicle ? field('Engine Number', 'انجن نمبر', h('input', { value: np.engineNo, onChange: e => set('engineNo', e.target.value), placeholder: 'e.g. G15A1234567', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isElectrical ? field('Serial Number', 'سیریل نمبر', h('input', { value: np.serialNo, onChange: e => set('serialNo', e.target.value), placeholder: 'Serial / model number on the unit', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
@@ -7853,6 +7853,7 @@ export default class App extends React.Component {
       { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => { if (typeof window !== 'undefined') window.location.href = '/devices'; } },
       ...(this._isSalesman() ? [] : [{ key: 'audit', label: 'Staff & Audit', icon: '🛡️', go: () => { if (typeof window !== 'undefined') window.location.href = '/audit'; } }, { key: 'recovery', label: 'Recovery', icon: '🛵', go: () => { if (typeof window !== 'undefined') window.location.href = '/recovery'; } }]),
       { key: 'automation', label: 'WA Automation', icon: '🤖', go: () => { if (typeof window !== 'undefined') window.location.href = '/automation'; } },
+      { key: 'stock', label: 'IMEI Stock', icon: '📦', go: () => { if (typeof window !== 'undefined') window.location.href = '/stock'; } },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -8155,6 +8156,7 @@ export default class App extends React.Component {
                   { icon: '🔒', label: 'Device Lock', go: 'devices', ext: '/devices' },
                   ...(this._isSalesman() ? [] : [{ icon: '🛡️', label: 'Staff & Audit', go: 'audit', ext: '/audit' }, { icon: '🛵', label: 'Recovery', go: 'recovery', ext: '/recovery' }]),
                   { icon: '🤖', label: 'WA Automation', go: 'automation', ext: '/automation' },
+                  { icon: '📦', label: 'IMEI Stock', go: 'stock', ext: '/stock' },
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
                   <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
