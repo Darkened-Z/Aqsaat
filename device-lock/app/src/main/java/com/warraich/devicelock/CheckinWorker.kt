@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -20,11 +21,15 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         return Result.success()
     }
 
+    // Expedited (push-triggered) work runs as a foreground service before Android 12.
+    override suspend fun getForegroundInfo(): ForegroundInfo =
+        ForegroundInfo(43, Notify.working(applicationContext))
+
     companion object {
         const val UNIQUE = "devicelock-checkin"
 
-        fun schedule(ctx: Context) {
-            val req = PeriodicWorkRequestBuilder<CheckinWorker>(6, TimeUnit.HOURS)
+        fun schedule(ctx: Context, minutes: Int = Prefs(ctx).checkinMinutes) {
+            val req = PeriodicWorkRequestBuilder<CheckinWorker>(minutes.coerceAtLeast(15).toLong(), TimeUnit.MINUTES)
                 .build()
             WorkManager.getInstance(ctx)
                 .enqueueUniquePeriodicWork(UNIQUE, ExistingPeriodicWorkPolicy.UPDATE, req)
@@ -37,12 +42,13 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
  * locks on its own so a phone kept off the network doesn't escape.
  */
 object Checkin {
-    suspend fun run(ctx: Context): CheckinResult? {
+    /** [freshLocation] false = last-known fix only (lock-screen polling every minute). */
+    suspend fun run(ctx: Context, freshLocation: Boolean = true): CheckinResult? {
         val p = Prefs(ctx)
         if (!p.enrolled) return null
 
-        val loc = Loc.fresh(ctx)
-        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx))
+        val loc = if (freshLocation) Loc.fresh(ctx) else Loc.last(ctx)
+        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx), p.pushToken)
         val now = System.currentTimeMillis()
 
         if (r.reachable) {
@@ -50,6 +56,14 @@ object Checkin {
             p.offlineLockDays = r.offlineLockDays
             p.callMode = r.callMode
             p.allowNumber = r.allowNumber
+            p.payUrl = r.payUrl
+            p.dueAmount = r.dueAmount
+            // Lost / force-locked phones report every 15 min instead of every 6 h.
+            if (r.checkinMinutes != p.checkinMinutes) {
+                p.checkinMinutes = r.checkinMinutes
+                CheckinWorker.schedule(ctx, r.checkinMinutes)
+            }
+            if (r.frpAccountIds != p.frpIds && LockManager(ctx).applyFrpPolicy(r.frpAccountIds)) p.frpIds = r.frpAccountIds
             when (r.action) {
                 "release" -> { releaseSelf(ctx, p); return r }
                 "lock" -> {

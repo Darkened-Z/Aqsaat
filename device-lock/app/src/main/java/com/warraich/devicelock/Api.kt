@@ -12,7 +12,11 @@ data class CheckinResult(
     val callMode: String = "open",  // open | shop_only
     val allowNumber: String = "",
     val latestVersion: Int = 0,
-    val apkUrl: String = ""
+    val apkUrl: String = "",
+    val payUrl: String = "",        // blank = online payment off / nothing due
+    val dueAmount: Int = 0,
+    val checkinMinutes: Int = 360,  // 15 while lost / force-locked
+    val frpAccountIds: String = ""  // shop Google account IDs for factory-reset protection
 )
 
 data class ClaimResult(val ok: Boolean, val deviceId: String = "", val secret: String = "", val baseUrl: String = "", val error: String = "")
@@ -39,7 +43,7 @@ object Api {
 
     /** POST deviceId+secret (+ last-known location). Network/5xx errors return reachable=false (never a wrong lock). */
     fun checkin(baseUrl: String, deviceId: String, secret: String,
-                lat: Double? = null, lng: Double? = null, acc: Float? = null, locPerm: String = ""): CheckinResult {
+                lat: Double? = null, lng: Double? = null, acc: Float? = null, locPerm: String = "", pushToken: String = ""): CheckinResult {
         return try {
             val conn = (URL("$baseUrl/api/device/checkin").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -48,7 +52,7 @@ object Api {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
             }
-            val body = JSONObject().put("deviceId", deviceId).put("secret", secret).put("version", BuildConfig.VERSION_CODE).put("locPerm", locPerm)
+            val body = JSONObject().put("deviceId", deviceId).put("secret", secret).put("version", BuildConfig.VERSION_CODE).put("locPerm", locPerm).put("pushToken", pushToken)
             if (lat != null && lng != null) {
                 body.put("lat", lat).put("lng", lng)
                 if (acc != null) body.put("acc", acc.toDouble())
@@ -67,7 +71,11 @@ object Api {
                 callMode = j.optString("callMode", "open"),
                 allowNumber = j.optString("allowNumber", ""),
                 latestVersion = j.optInt("latestVersion", 0),
-                apkUrl = j.optString("apkUrl", "")
+                apkUrl = j.optString("apkUrl", ""),
+                payUrl = j.optString("payUrl", ""),
+                dueAmount = j.optInt("dueAmount", 0),
+                checkinMinutes = j.optInt("checkinMinutes", 360),
+                frpAccountIds = j.optString("frpAccountIds", "")
             )
         } catch (e: Exception) {
             CheckinResult(false)

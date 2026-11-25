@@ -1,5 +1,6 @@
 import { requireMember } from '../../../lib/serverAuth';
 import { updateShopData } from '../../../lib/shopData';
+import { pokeDevices } from '../../../lib/fcm';
 
 // Owner-only. Marks one installment paid so the phone won't auto-lock. Writes the
 // same fields the main app writes (paid/paidDate/amountPaid/accountId), and bumps
@@ -33,5 +34,6 @@ export default async function handler(req, res) {
   if (result === 'no-plan') return res.status(404).json({ error: 'plan not found' });
   if (result === 'no-inst') return res.status(404).json({ error: 'installment not found' });
   if (result === 'already') return res.json({ ok: true, already: true });
+  await pokeDevices({ planId });
   res.json({ ok: true });
 }

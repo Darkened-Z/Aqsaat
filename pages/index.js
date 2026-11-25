@@ -552,6 +552,15 @@ export default class App extends React.Component {
         // value — the blank comes from the initial React state, not a user edit.
         const c = cloud.settings || {}, l = local.settings || {};
         const merged = { ...c, ...l };
+        // Settings blocks written from other pages/servers carry their own
+        // updatedAt; the newer copy wins instead of whichever device pushed last.
+        Object.keys(c).forEach(k => {
+          const cv = c[k], lv = l[k];
+          if (cv && typeof cv === 'object' && !Array.isArray(cv) && cv.updatedAt && (!lv || !lv.updatedAt || cv.updatedAt > lv.updatedAt)) merged[k] = cv;
+        });
+        // By id, so an account the server adds (online payments) survives a push
+        // from a device that loaded before it existed.
+        if (l.accounts || c.accounts) merged.accounts = mergeArr(l.accounts, c.accounts);
         ['businessName', 'ownerName', 'city'].forEach(k => {
           if (!(l[k] || '').trim() && (c[k] || '').trim()) merged[k] = c[k];
         });
@@ -610,6 +619,7 @@ export default class App extends React.Component {
       this._saveLocal(merged);
       this._pendingSync = false;
       this._syncSnapshot = this._snapshotOf(merged);
+      this._flushPokes();
       // Edits made while this push was in flight are not in `merged`; keep them
       // (they differ from the snapshot, so the next push stamps and sends them).
       const cur = this.state;
@@ -1812,6 +1822,7 @@ export default class App extends React.Component {
       const allPaid = schedule.every(s => s.paid);
       return { ...pl, schedule, status: allPaid ? 'completed' : pl.status };
     });
+    this._queuePoke(ctx.planId);
     const pl = plans.find(p => p.id === ctx.planId);
     const customer = this.state.customers.find(c => c.id === pl.customerId);
     const product = this.state.products.find(p => p.id === pl.productId);
@@ -1823,11 +1834,21 @@ export default class App extends React.Component {
       this.setState({ plans, paymentModalOpen: false, receiptOpen: true, receiptData: { receiptNo: 'RCP-' + Date.now().toString().slice(-6), customer, product, plan: pl, installment: s, date: today, amountCollected: amountCollected || s.amount, accountName: acc ? acc.emoji + ' ' + acc.name : '' } });
     }
   }
+  // Payment changes wake the plan's locked phone, but only after they are in the
+  // cloud — otherwise the phone would check in and still see the old schedule.
+  _queuePoke = (planId) => { (this._pokePlans = this._pokePlans || new Set()).add(planId); };
+  _flushPokes = () => {
+    if (!this._pokePlans || !this._pokePlans.size) return;
+    const planIds = Array.from(this._pokePlans);
+    this._pokePlans.clear();
+    this.apiFetch('/api/device/poke', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planIds }) }).catch(() => {});
+  };
   closeReceipt = () => this.setState({ receiptOpen: false, receiptData: null });
 
   undoPayment = (planId, installmentN) => {
     this.requirePin(() => {
       if (!confirm('Undo payment for installment #' + installmentN + '?\nقسط نمبر ' + installmentN + ' کی ادائیگی واپس کریں؟')) return;
+      this._queuePoke(planId);
       const plans = this.state.plans.map(pl => {
         if (pl.id !== planId) return pl;
         const schedule = pl.schedule.map(s => s.n === installmentN
