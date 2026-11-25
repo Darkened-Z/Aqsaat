@@ -7890,7 +7890,7 @@ export default class App extends React.Component {
             <div style={{ maxWidth: 900, margin: '0 auto', padding: '10px 14px 12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.16)', flexShrink: 0 }}>
-                  <img src="/pfp.jpeg" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src="/logo-mark-white.svg" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 3, boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.2px' }}>{this.state.settings.businessName || 'Udhar Book'}</div>

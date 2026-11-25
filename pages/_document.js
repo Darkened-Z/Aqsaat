@@ -19,6 +19,7 @@ export default function Document() {
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
         {/* Favicon */}
+        <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
 
         {/* Self-heal, all without touching saved data or login:

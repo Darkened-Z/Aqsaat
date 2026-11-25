@@ -547,7 +547,7 @@ export default class Devices extends React.Component {
         {this.renderDetail()}
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-          <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🔒</div>
+          <img src="/icon-lock.png" alt="" style={{ width: 42, height: 42, borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,.15)' }} />
           <div style={{ flex: 1, minWidth: 140 }}>
             <div style={{ fontSize: 20, fontWeight: 800 }}>Device Lock</div>
             <div style={{ fontSize: 12, color: C.mut }}>Enrolled phones on installment</div>
