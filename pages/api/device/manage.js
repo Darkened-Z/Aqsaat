@@ -1,4 +1,5 @@
 import { supabaseAdmin, SHOP_ID, requireMember } from '../../../lib/serverAuth';
+import { whoAmI } from '../../../lib/staff';
 import { evaluate, unlockCode, LATEST_APP_VERSION } from '../../../lib/deviceLock';
 import { pokeDevices } from '../../../lib/fcm';
 
@@ -36,6 +37,9 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    // Lock/unlock/release/delete are the owner's call, not a salesman's.
+    const me = await whoAmI(req);
+    if (!me || !['owner', 'system'].includes(me.role)) return res.status(403).json({ error: 'Owner only' });
     const { deviceId, action, value } = req.body || {};
     if (!deviceId || !action) return res.status(400).json({ error: 'deviceId and action required' });
     if (action === 'rename') {
