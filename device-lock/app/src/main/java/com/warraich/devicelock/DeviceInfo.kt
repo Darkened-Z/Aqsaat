@@ -33,5 +33,8 @@ object DeviceInfo {
             .put("battery", runCatching { bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) }.getOrNull() ?: JSONObject.NULL)
             .put("charging", runCatching { bm?.isCharging }.getOrNull() == true)
             .put("network", network)
+            // Factory-reset protection: which shop accounts this phone has armed.
+            .put("frpSupported", Build.VERSION.SDK_INT >= 30 && LockManager(ctx).isDeviceOwner())
+            .put("frpIds", Prefs(ctx).frpIds)
     }
 }

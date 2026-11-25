@@ -90,6 +90,13 @@ object SimGuard {
         }
     }
 
+    /** One check-in (which also runs [enforce], online or not) after the SIM has had time to load. */
+    fun checkSoon(ctx: Context, delaySec: Long = 60) {
+        val req = androidx.work.OneTimeWorkRequestBuilder<CheckinWorker>()
+            .setInitialDelay(delaySec, java.util.concurrent.TimeUnit.SECONDS).build()
+        androidx.work.WorkManager.getInstance(ctx).enqueueUniqueWork("devicelock-simcheck", androidx.work.ExistingWorkPolicy.REPLACE, req)
+    }
+
     /** No airplane mode / mobile-network fiddling while SIM lock is on (Android 9+). */
     fun applyPolicy(ctx: Context, mode: String) {
         val lm = LockManager(ctx)
