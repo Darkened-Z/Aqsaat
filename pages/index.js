@@ -7851,6 +7851,7 @@ export default class App extends React.Component {
       { key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
       { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => { if (typeof window !== 'undefined') window.location.href = '/devices'; } },
       ...(this._isSalesman() ? [] : [{ key: 'audit', label: 'Staff & Audit', icon: '🛡️', go: () => { if (typeof window !== 'undefined') window.location.href = '/audit'; } }, { key: 'recovery', label: 'Recovery', icon: '🛵', go: () => { if (typeof window !== 'undefined') window.location.href = '/recovery'; } }]),
+      { key: 'automation', label: 'WA Automation', icon: '🤖', go: () => { if (typeof window !== 'undefined') window.location.href = '/automation'; } },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
@@ -8152,6 +8153,7 @@ export default class App extends React.Component {
                   { icon: '👷', label: 'Staff',      go: 'staff' },
                   { icon: '🔒', label: 'Device Lock', go: 'devices', ext: '/devices' },
                   ...(this._isSalesman() ? [] : [{ icon: '🛡️', label: 'Staff & Audit', go: 'audit', ext: '/audit' }, { icon: '🛵', label: 'Recovery', go: 'recovery', ext: '/recovery' }]),
+                  { icon: '🤖', label: 'WA Automation', go: 'automation', ext: '/automation' },
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
                   <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
