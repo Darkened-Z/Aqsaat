@@ -210,11 +210,16 @@ class LockActivity : AppCompatActivity() {
 
     private fun tryUnlock(entered: String) {
         val secret = p.secret
-        if (secret != null && UnlockCode.isValid(secret, entered)) {
-            p.unlockUntilMs = System.currentTimeMillis() + 72L * 3_600_000L // 72h grace
-            p.lockState = "none"
+        val ms = if (secret != null) UnlockCode.grant(secret, entered) else null
+        if (ms != null) {
+            // lockState stays "hard": the lock comes back by itself when this runs out.
+            val until = System.currentTimeMillis() + ms
+            p.codeUntilMs = until
+            p.unlockUntilMs = maxOf(p.unlockUntilMs, until)
+            Relock.at(this, p.unlockUntilMs)
             runCatching { stopLockTask() }
-            Toast.makeText(this, "Unlocked for 72 hours", Toast.LENGTH_LONG).show()
+            val label = if (ms < 3_600_000L) "${ms / 60_000L} minutes" else "${ms / 3_600_000L} hours"
+            Toast.makeText(this, "Unlocked for $label", Toast.LENGTH_LONG).show()
             finish()
         } else {
             Toast.makeText(this, "Wrong code", Toast.LENGTH_SHORT).show()

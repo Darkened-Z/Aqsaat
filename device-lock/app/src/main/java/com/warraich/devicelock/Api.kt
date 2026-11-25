@@ -18,7 +18,9 @@ data class CheckinResult(
     val checkinMinutes: Int = 360,  // 15 while lost / force-locked
     val frpAccountIds: String = "", // shop Google account IDs for factory-reset protection
     val simMode: String = "off",    // lock | alert | off
-    val simIccids: String = ""      // registered SIM serials, comma-separated
+    val simIccids: String = "",     // registered SIM serials, comma-separated
+    val override: Boolean = false,  // manual lock from the shop: ends any offline-code unlock
+    val graceUntil: Long = 0L       // timed unlock from the shop: hold the lock until this time
 )
 
 data class ClaimResult(val ok: Boolean, val deviceId: String = "", val secret: String = "", val baseUrl: String = "", val error: String = "")
@@ -82,7 +84,9 @@ object Api {
                 checkinMinutes = j.optInt("checkinMinutes", 360),
                 frpAccountIds = j.optString("frpAccountIds", ""),
                 simMode = j.optString("simMode", "off"),
-                simIccids = j.optString("simIccids", "")
+                simIccids = j.optString("simIccids", ""),
+                override = j.optBoolean("override", false),
+                graceUntil = j.optLong("graceUntil", 0L)
             )
         } catch (e: Exception) {
             CheckinResult(false)

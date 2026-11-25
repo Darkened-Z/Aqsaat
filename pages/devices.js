@@ -198,9 +198,10 @@ export default class Devices extends React.Component {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: C.mut, marginBottom: 6 }}>
               <span>Status: <b style={{ color: C.ink }}>{d.status}</b></span>
               <span>Mode: <b style={{ color: C.ink }}>{d.lockMode}</b></span>
-              <span>Unlock code: <b style={{ color: C.green, fontFamily: 'monospace' }}>{d.unlockCode}</b></span>
+              {this.timedNote(d)}
               <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? 'only ' + (d.allowNumber || '—') : 'all'}</b></span>
             </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: C.mut, marginBottom: 6 }}>🔑 Offline codes: {this.codesLine(d)}</div>
             <div style={{ fontSize: 12, color: C.mut, marginBottom: 14 }}>📍 {d.locAt ? <a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>View last location</a> : 'Location not reported yet'}</div>
             {this.state.history && this.state.history.length ? (
               <div style={{ marginBottom: 14 }}>
@@ -236,6 +237,9 @@ export default class Devices extends React.Component {
             {btnInline('🔒 Lock', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
             {btnInline('🔓 Unlock', C.green, () => this.act(d.id, 'unlock', 'Force-unlock this phone?'))}
             {btnInline('⚙ Auto', C.ink, () => this.act(d.id, 'auto'))}
+            {btnInline('⏱ 30 min', C.green, () => this.unlockFor(d, 30, '30 minutes'))}
+            {btnInline('⏱ 2 h', C.green, () => this.unlockFor(d, 120, '2 hours'))}
+            {btnInline('⏱ 1 day', C.green, () => this.unlockFor(d, 1440, '1 day'))}
           </div>
         </div>
       </div>
@@ -325,6 +329,17 @@ export default class Devices extends React.Component {
     if (!resp.ok) { alert((await resp.json()).error || 'action failed'); return; }
     this.load();
   };
+
+  unlockFor = (d, mins, label) => this.act(d.id, 'unlockfor', `Unlock this phone for ${label}? It locks again by itself after that if the installment is still due.`, mins);
+
+  // 30 min / 2 h codes need app v1.12 (code 13); older apps only take the 3-day one.
+  codesLine = (d) => (d.unlockCodes || []).filter(c => d.appVersion >= 13 || c.label === '3 days').map(c => (
+    <span key={c.label}>{c.label}: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14, letterSpacing: 1 }}>{c.code}</b></span>
+  ));
+
+  timedNote = (d) => d.unlockUntil
+    ? <span style={{ color: C.green, fontWeight: 700 }}>⏱ Unlocked until {new Date(d.unlockUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{new Date(d.unlockUntil).toDateString() !== new Date().toDateString() ? ' ' + new Date(d.unlockUntil).toLocaleDateString() : ''}</span>
+    : null;
 
   rename = (d) => {
     const name = prompt('Name for this phone (to remember which is which):', d.label || '');
@@ -670,7 +685,7 @@ export default class Devices extends React.Component {
                     <span>Mode: <b style={{ color: C.ink }}>{d.lockMode}</b></span>
                     <span>Status: <b style={{ color: C.ink }}>{d.status}</b></span>
                     <span>Last check-in: <b style={{ color: C.ink }}>{d.lastCheckin ? new Date(d.lastCheckin).toLocaleString() : 'never'}</b></span>
-                    <span>Unlock code: <b style={{ color: C.green, fontFamily: 'monospace', fontSize: 14, letterSpacing: 1 }}>{d.unlockCode}</b></span>
+                    {this.timedNote(d)}
                     <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? `only ${d.allowNumber || '—'}` : 'all allowed'}</b></span>
                     {d.claimed && d.status !== 'deleted' ? <span>App: {this.appVersionLabel(d)}</span> : null}
                     {d.claimed && d.status !== 'deleted' ? <span>Control: {d.instant ? <b style={{ color: C.green }}>⚡ instant</b> : <b style={{ color: C.ink }}>at next check-in (~6h)</b>}</span> : null}
@@ -681,6 +696,7 @@ export default class Devices extends React.Component {
                       : <b style={{ color: C.ink }}>not reported yet</b>}
                       {d.locPerm && d.locPerm !== 'fg+bg' ? <b style={{ color: C.amber }}> · {d.locPerm === 'none' ? 'location permission OFF on phone' : 'background location not allowed — only updates when the app is opened'}</b> : null}</span>
                   </div>
+                  {d.status !== 'deleted' ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>🔑 Offline unlock codes (today): {this.codesLine(d)}</div> : null}
                   {d.claimed && d.status !== 'deleted' ? this.simRow(d) : null}
                   {d.status === 'deleted' ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -693,6 +709,9 @@ export default class Devices extends React.Component {
                     {btn('🔒 Lock', '#fdecea', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
                     {btn('🔓 Unlock', '#eaf5ee', C.green, () => this.act(d.id, 'unlock', 'Force-unlock (ignore overdue) this phone?'))}
                     {btn('⚙ Auto', '#f4f1e6', C.ink, () => this.act(d.id, 'auto'))}
+                    {btn('⏱ 30 min', '#eaf5ee', C.green, () => this.unlockFor(d, 30, '30 minutes'))}
+                    {btn('⏱ 2 h', '#eaf5ee', C.green, () => this.unlockFor(d, 120, '2 hours'))}
+                    {btn('⏱ 1 day', '#eaf5ee', C.green, () => this.unlockFor(d, 1440, '1 day'))}
                     {(d.status === 'released' || d.status === 'lost') ? btn('● Activate', '#eafaf0', C.green, () => this.act(d.id, 'active', 'Bring this phone back to Active (auto-lock on overdue)?')) : null}
                     {btn('⚠ Mark lost', '#fff7ed', C.amber, () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
                     {btn('✓ Release', '#eef2ff', '#4338ca', () => this.act(d.id, 'release', 'Release this phone? This UN-ENROLLS it and removes the lock permanently — only do this when the loan is fully paid.'))}
