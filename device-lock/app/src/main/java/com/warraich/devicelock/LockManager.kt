@@ -42,8 +42,11 @@ class LockManager(private val ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         val perms = mutableListOf(
             android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            // SIM serial / IMEI for SIM lock and the device info shown to the shop.
+            android.Manifest.permission.READ_PHONE_STATE
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) perms += android.Manifest.permission.READ_PHONE_NUMBERS
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) perms += android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) perms += android.Manifest.permission.POST_NOTIFICATIONS
         for (perm in perms) runCatching {

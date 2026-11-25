@@ -41,6 +41,11 @@ class Prefs(ctx: Context) {
     var checkinMinutes: Int get() = sp.getInt("checkinMinutes", 360);         set(v) = sp.edit().putInt("checkinMinutes", v).apply()
     var frpIds: String      get() = sp.getString("frpIds", "") ?: "";           set(v) = sp.edit().putString("frpIds", v).apply()
 
+    // SIM lock from the server, and whether the current hard lock was set by the SIM guard.
+    var simMode: String     get() = sp.getString("simMode", "off") ?: "off";    set(v) = sp.edit().putString("simMode", v).apply()
+    var simIccids: String   get() = sp.getString("simIccids", "") ?: "";        set(v) = sp.edit().putString("simIccids", v).apply()
+    var simLocked: Boolean  get() = sp.getBoolean("simLocked", false);          set(v) = sp.edit().putBoolean("simLocked", v).apply()
+
     fun saveEnrollment(id: String, sec: String, url: String) {
         deviceId = id; secret = sec; baseUrl = url.trimEnd('/')
         lastOkMs = System.currentTimeMillis()

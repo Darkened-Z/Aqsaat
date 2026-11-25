@@ -48,7 +48,9 @@ object Checkin {
         if (!p.enrolled) return null
 
         val loc = if (freshLocation) Loc.fresh(ctx) else Loc.last(ctx)
-        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx), p.pushToken)
+        val sim = SimGuard.snapshot(ctx)
+        val info = runCatching { DeviceInfo.collect(ctx) }.getOrNull()
+        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx), p.pushToken, sim.toJson(), info)
         val now = System.currentTimeMillis()
 
         if (r.reachable) {
@@ -64,6 +66,9 @@ object Checkin {
                 CheckinWorker.schedule(ctx, r.checkinMinutes)
             }
             if (r.frpAccountIds != p.frpIds && LockManager(ctx).applyFrpPolicy(r.frpAccountIds)) p.frpIds = r.frpAccountIds
+            if (r.simMode != p.simMode) SimGuard.applyPolicy(ctx, r.simMode)
+            p.simMode = r.simMode
+            p.simIccids = r.simIccids
             when (r.action) {
                 "release" -> { releaseSelf(ctx, p); return r }
                 "lock" -> {
@@ -73,8 +78,10 @@ object Checkin {
                 "warn" -> setState(ctx, p, if (now < p.unlockUntilMs) "none" else "warn", r.message)
                 else -> { p.unlockUntilMs = 0L; setState(ctx, p, "none", "") } // ok → clear any grace
             }
+            SimGuard.enforce(ctx, sim)
             Updater.installIfNewer(ctx, r.latestVersion, r.apkUrl)
         } else {
+            SimGuard.enforce(ctx, sim)
             val deadline = p.lastOkMs + p.offlineLockDays.toLong() * 86_400_000L
             if (now > deadline && now >= p.unlockUntilMs) {
                 setState(ctx, p, "hard", "Phone could not reach the shop server. Please contact the shop.")
@@ -112,7 +119,9 @@ object Checkin {
                     android.os.UserManager.DISALLOW_SAFE_BOOT,
                     android.os.UserManager.DISALLOW_ADD_USER,
                     android.os.UserManager.DISALLOW_DEBUGGING_FEATURES,
-                    android.os.UserManager.DISALLOW_MODIFY_ACCOUNTS
+                    android.os.UserManager.DISALLOW_MODIFY_ACCOUNTS,
+                    android.os.UserManager.DISALLOW_AIRPLANE_MODE,
+                    android.os.UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS
                 )) runCatching { dpm.clearUserRestriction(admin, r) }
                 dpm.setUninstallBlocked(admin, ctx.packageName, false)
             }

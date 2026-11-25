@@ -331,6 +331,35 @@ export default class Devices extends React.Component {
     this.act(d.id, 'rename', null, name.trim());
   };
 
+  setSimMode = (d) => {
+    const next = { lock: 'alert', alert: 'off', off: 'lock' }[d.simMode] || 'lock';
+    const msg = {
+      lock: 'SIM lock → LOCK: the phone locks itself if its registered SIM is removed or swapped (works offline). Continue?',
+      alert: 'SIM lock → ALERT ONLY: a SIM change is flagged here but the phone is not locked. Continue?',
+      off: 'SIM lock → OFF: SIM changes are ignored and airplane mode is allowed again. Continue?',
+    }[next];
+    this.act(d.id, 'simmode', msg, next);
+  };
+
+  simRow = (d) => {
+    const cur = d.simCurrent, base = d.simBaseline || [], info = d.info;
+    const tail = s => '…' + String(s).slice(-6);
+    let state;
+    if (!cur && !info) state = <b style={{ color: C.ink }}>waiting for app v1.9+</b>;
+    else if (d.simChangedAt) state = <b style={{ color: C.red }}>🔴 SIM changed{cur && cur.absent ? ' (no SIM in phone)' : ''} · since {new Date(d.simChangedAt).toLocaleString()}</b>;
+    else if (!base.length) state = <b style={{ color: C.amber }}>no readable SIM registered yet</b>;
+    else state = <b style={{ color: C.green }}>✓ original SIM</b>;
+    const slots = (cur && cur.slots) || [];
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
+        <span>📶 SIM: {state} · lock mode <b style={{ color: d.simMode === 'lock' ? C.green : d.simMode === 'alert' ? C.amber : C.ink }}>{d.simMode}</b>{d.simMode === 'lock' && d.lockMode === 'force_unlock' ? ' (alert only while force-unlocked)' : ''}</span>
+        {base.length ? <span>Registered: <b style={{ color: C.ink, fontFamily: 'monospace' }}>{base.map(tail).join(', ')}</b></span> : null}
+        {slots.length ? <span>In phone: <b style={{ color: C.ink }}>{slots.map(s => [s.carrier || 'SIM', s.number, s.iccid ? tail(s.iccid) : ''].filter(Boolean).join(' ')).join(' | ')}</b></span> : null}
+        {info ? <span>📱 <b style={{ color: C.ink }}>{[info.brand, info.model].filter(Boolean).join(' ')}</b>{info.android ? ` · Android ${info.android}` : ''}{info.imei1 ? ` · IMEI ${info.imei1}` : ''}{info.imei2 ? ` / ${info.imei2}` : ''}{info.serial ? ` · S/N ${info.serial}` : ''}{info.battery != null ? ` · 🔋 ${info.battery}%${info.charging ? ' ⚡' : ''}` : ''}{info.network ? ` · ${info.network}` : ''}</span> : null}
+      </div>
+    );
+  };
+
   setCallShop = (d) => {
     const num = prompt('Block ALL calls on this phone except this one number (incoming and outgoing). Enter the shop number the phone may call:', d.allowNumber || '');
     if (num === null) return;
@@ -644,6 +673,7 @@ export default class Devices extends React.Component {
                       : <b style={{ color: C.ink }}>not reported yet</b>}
                       {d.locPerm && d.locPerm !== 'fg+bg' ? <b style={{ color: C.amber }}> · {d.locPerm === 'none' ? 'location permission OFF on phone' : 'background location not allowed — only updates when the app is opened'}</b> : null}</span>
                   </div>
+                  {d.claimed && d.status !== 'deleted' ? this.simRow(d) : null}
                   {d.status === 'deleted' ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {btn('↩ Restore', '#eaf5ee', C.green, () => this.act(d.id, 'active'))}
@@ -666,6 +696,8 @@ export default class Devices extends React.Component {
                     {d.callMode === 'shop_only'
                       ? btn('📞 Calls: all', '#eaf5ee', C.green, () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
                       : btn('📞 Shop-only calls', '#fff7ed', C.amber, () => this.setCallShop(d))}
+                    {btn('📶 SIM: ' + (d.simMode || 'lock'), '#f5f0ff', '#6d28d9', () => this.setSimMode(d))}
+                    {d.simChangedAt ? btn('✓ Accept new SIM', '#f5f0ff', '#6d28d9', () => this.act(d.id, 'simaccept', 'Register the SIM now in this phone as its own? The SIM lock will then protect the NEW SIM.')) : null}
                   </div>
                   )}
                 </div>

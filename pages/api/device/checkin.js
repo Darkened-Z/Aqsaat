@@ -3,12 +3,13 @@ import { evaluate, OFFLINE_LOCK_DAYS, LATEST_APP_VERSION } from '../../../lib/de
 import { config as payConfig } from '../../../lib/payments/jazzcash';
 import { payUrl, dueNow, planOf, confirmPendingFor } from '../../../lib/payments/online';
 import { checkinMinutes, keepPoint, cleanFrpIds } from '../../../lib/lockPro';
+import { simCheck, cleanSim, cleanInfo, SIM_MESSAGE } from '../../../lib/simLock';
 
 // Called by the phone app on a timer. Authenticated by the per-device secret, not
 // a user login. No member check — the device is not a signed-in person.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { deviceId, secret, lat, lng, acc, version, locPerm, pushToken } = req.body || {};
+  const { deviceId, secret, lat, lng, acc, version, locPerm, pushToken, sim, info } = req.body || {};
   if (!deviceId || !secret) return res.status(400).json({ error: 'deviceId and secret required' });
 
   const { data: device } = await supabaseAdmin
@@ -20,11 +21,16 @@ export default async function handler(req, res) {
   await confirmPendingFor(deviceId);
   const { data: shop } = await supabaseAdmin.from('shops').select('data').eq('id', SHOP_ID).single();
   const shopData = (shop && shop.data) || {};
-  const result = evaluate(device, shopData);
+  let result = evaluate(device, shopData);
+  const simc = simCheck(device, cleanSim(sim));
+  // Paying doesn't fix a swapped SIM, so this is treated like a manual lock (no pay link).
+  if (simc.lock && result.action !== 'release') result = { ...result, action: 'lock', reason: 'manual', message: SIM_MESSAGE };
   // No pay link on a manual lock: paying wouldn't unlock it.
   const pay = payConfig() && result.action !== 'release' && result.reason !== 'manual' ? dueNow(planOf(shopData, device.plan_id)) : null;
 
-  const patch = { last_checkin: new Date().toISOString(), last_action: result.action };
+  const patch = { last_checkin: new Date().toISOString(), last_action: result.action, ...simc.patch };
+  const inf = cleanInfo(info);
+  if (inf) { patch.device_info = inf; patch.info_at = patch.last_checkin; }
   if (Number.isInteger(version)) patch.app_version = version;
   if (['fg+bg', 'fg', 'none'].includes(locPerm)) patch.loc_perm = locPerm;
   if (typeof pushToken === 'string' && pushToken.length > 20 && pushToken.length < 4096) patch.push_token = pushToken;
@@ -53,7 +59,10 @@ export default async function handler(req, res) {
     apkUrl: `https://${req.headers.host}/device-lock.apk`,
     payUrl: pay && pay.amount ? payUrl(req.headers.host, device) : '',
     dueAmount: pay ? pay.amount : 0,
-    checkinMinutes: checkinMinutes(device),
+    // A swapped SIM gets the same 15-min tracking as a lost phone.
+    checkinMinutes: simc.changed === true ? 15 : checkinMinutes(device),
+    simMode: simc.mode,
+    simIccids: simc.baseline.join(','),
     frpAccountIds: cleanFrpIds(shopData.settings && shopData.settings.frp && shopData.settings.frp.accountIds).join(','),
   });
 }

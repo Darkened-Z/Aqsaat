@@ -2,6 +2,7 @@ import { supabaseAdmin, SHOP_ID, requireMember } from '../../../lib/serverAuth';
 import { whoAmI } from '../../../lib/staff';
 import { evaluate, unlockCode, LATEST_APP_VERSION } from '../../../lib/deviceLock';
 import { pokeDevices } from '../../../lib/fcm';
+import { SIM_MODES } from '../../../lib/simLock';
 
 // Owner-only. GET lists devices with live status + today's unlock code.
 // POST applies an action to one device.
@@ -32,6 +33,8 @@ export default async function handler(req, res) {
       created: dev.created_at, claimed: dev.claimed,
       planId: dev.plan_id, customerId: dev.customer_id,
       appVersion: dev.app_version, locPerm: dev.loc_perm, instant: !!dev.push_token,
+      simMode: dev.sim_mode || 'lock', simBaseline: dev.sim_baseline || [], simCurrent: dev.sim_current || null,
+      simChangedAt: dev.sim_changed_at, info: dev.device_info || null, infoAt: dev.info_at,
     }));
     return res.json({ devices: list, latestVersion: LATEST_APP_VERSION });
   }
@@ -48,6 +51,21 @@ export default async function handler(req, res) {
         .eq('id', deviceId).eq('shop_id', SHOP_ID);
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true });
+    }
+    if (action === 'simmode') {
+      if (!SIM_MODES.includes(value)) return res.status(400).json({ error: 'mode must be lock, alert or off' });
+      const { error } = await supabaseAdmin.from('devices').update({ sim_mode: value }).eq('id', deviceId).eq('shop_id', SHOP_ID);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ ok: true, push: await pokeDevices({ deviceId }) });
+    }
+    if (action === 'simaccept') {
+      // Register the SIM(s) in the phone now as its own (customer changed number with the shop's OK).
+      const { data: dev } = await supabaseAdmin.from('devices').select('sim_current').eq('id', deviceId).eq('shop_id', SHOP_ID).single();
+      const cur = dev && dev.sim_current;
+      if (!cur || !cur.readable || !(cur.iccids || []).length) return res.status(409).json({ error: 'The phone has not reported a readable SIM yet. Wait for it to check in with the new SIM inserted.' });
+      const { error } = await supabaseAdmin.from('devices').update({ sim_baseline: cur.iccids, sim_changed_at: null }).eq('id', deviceId).eq('shop_id', SHOP_ID);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ ok: true, push: await pokeDevices({ deviceId }) });
     }
     if (action === 'callshop') {
       const num = String(value || '').trim();
