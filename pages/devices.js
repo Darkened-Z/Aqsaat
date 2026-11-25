@@ -8,7 +8,7 @@ const C = { green: '#0f6b4b', red: '#b91c1c', amber: '#b45309', ink: '#1a2b1f', 
 // sync with the published app-release.apk.
 const APK_URL = 'https://aqsaat.vercel.app/device-lock.apk';
 const APK_CHECKSUM = 'rMUF7bdAJ91h_LKXg2yQqLhwJq5mdQlXX-eWPh3qmMk';
-const RATE_PER_DEVICE = 450;
+const RATE_PER_DEVICE = 700;
 
 const appVersionName = (code) => 'v1.' + (code - 1);
 
