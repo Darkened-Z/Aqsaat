@@ -484,7 +484,7 @@ export default class Devices extends React.Component {
             </div>
             <button onClick={() => this.setState({ billMonth: '' })} style={{ padding: '9px 14px', borderRadius: 10, background: sel === curKey ? C2.green : '#fff', color: sel === curKey ? '#fff' : C2.ink, border: '1px solid ' + (sel === curKey ? C2.green : C2.line), fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>This month</button>
             <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-              <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Rate per device</div>
+              <div style={{ fontSize: 12, color: C2.mut, marginBottom: 4 }}>Rate per device (one-time)</div>
               <div style={{ fontSize: 16, fontWeight: 800, color: C2.ink }}>{money(rate)}</div>
             </div>
           </div>
@@ -523,7 +523,7 @@ export default class Devices extends React.Component {
             <div style={{ width: 110, textAlign: 'right', color: C2.amber }}>{money(total * rate)}</div>
           </div>
         </div>
-        <div style={{ fontSize: 11.5, color: C2.mut, marginTop: 10 }}>Counts every phone by the month it was registered, deleted ones excluded.</div>
+        <div style={{ fontSize: 11.5, color: C2.mut, marginTop: 10 }}>One-time charge per phone, billed in the month it was registered (deleted ones excluded). Never charged again./div>
       </div>
     );
   };
