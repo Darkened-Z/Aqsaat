@@ -71,12 +71,22 @@ object Checkin {
             p.simIccids = r.simIccids
             when (r.action) {
                 "release" -> { releaseSelf(ctx, p); return r }
-                "lock" -> {
-                    // A code-granted temporary unlock still holds until it expires.
-                    if (now < p.unlockUntilMs) setState(ctx, p, "none", "") else setState(ctx, p, "hard", r.message)
+                "lock", "warn" -> {
+                    // A manual lock from the shop ends any unlock. Otherwise an offline code
+                    // or the shop's timed unlock holds the lock until it runs out.
+                    // Pre-1.12 a code unlock lived only in unlockUntilMs (with lockState "none").
+                    if (p.codeUntilMs == 0L && p.lockState == "none" && p.unlockUntilMs > now) p.codeUntilMs = p.unlockUntilMs
+                    if (r.override) p.codeUntilMs = 0L
+                    p.unlockUntilMs = if (r.override) 0L else maxOf(if (p.codeUntilMs > now) p.codeUntilMs else 0L, r.graceUntil)
+                    val held = now < p.unlockUntilMs
+                    if (held) Relock.at(ctx, p.unlockUntilMs)
+                    when {
+                        r.action == "warn" -> setState(ctx, p, if (held) "none" else "warn", r.message)
+                        held -> { p.lockState = "hard"; p.message = r.message }
+                        else -> setState(ctx, p, "hard", r.message)
+                    }
                 }
-                "warn" -> setState(ctx, p, if (now < p.unlockUntilMs) "none" else "warn", r.message)
-                else -> { p.unlockUntilMs = 0L; setState(ctx, p, "none", "") } // ok → clear any grace
+                else -> { p.unlockUntilMs = 0L; p.codeUntilMs = 0L; setState(ctx, p, "none", "") } // ok → clear any grace
             }
             SimGuard.enforce(ctx, sim)
             Updater.installIfNewer(ctx, r.latestVersion, r.apkUrl)
@@ -85,6 +95,9 @@ object Checkin {
             val deadline = p.lastOkMs + p.offlineLockDays.toLong() * 86_400_000L
             if (now > deadline && now >= p.unlockUntilMs) {
                 setState(ctx, p, "hard", "Phone could not reach the shop server. Please contact the shop.")
+            } else if (p.lockState == "hard" && now >= p.unlockUntilMs) {
+                // A timed / code unlock ran out with no network: the held lock comes back.
+                LockManager(ctx).showLock(p.message)
             }
         }
         return r

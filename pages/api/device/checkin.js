@@ -25,6 +25,9 @@ export default async function handler(req, res) {
   const simc = simCheck(device, cleanSim(sim));
   // Paying doesn't fix a swapped SIM, so this is treated like a manual lock (no pay link).
   if (simc.lock && result.action !== 'release') result = { ...result, action: 'lock', reason: 'manual', message: SIM_MESSAGE };
+  // Before v1.12 the app can't hold a lock until a time: unlock it and check back often.
+  const timedOld = result.graceUntil && !(version >= 13);
+  if (timedOld) result = { action: 'ok' };
   // No pay link on a manual lock: paying wouldn't unlock it.
   const pay = payConfig() && result.action !== 'release' && result.reason !== 'manual' ? dueNow(planOf(shopData, device.plan_id)) : null;
 
@@ -60,7 +63,9 @@ export default async function handler(req, res) {
     payUrl: pay && pay.amount ? payUrl(req.headers.host, device) : '',
     dueAmount: pay ? pay.amount : 0,
     // A swapped SIM gets the same 15-min tracking as a lost phone.
-    checkinMinutes: simc.changed === true ? 15 : checkinMinutes(device),
+    checkinMinutes: simc.changed === true || timedOld ? 15 : checkinMinutes(device),
+    override: !!result.override,      // manual lock: also ends an offline-code unlock
+    graceUntil: result.graceUntil || 0,
     simMode: simc.mode,
     simIccids: simc.baseline.join(','),
     frpAccountIds: cleanFrpIds(shopData.settings && shopData.settings.frp && shopData.settings.frp.accountIds).join(','),

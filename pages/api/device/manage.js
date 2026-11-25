@@ -1,6 +1,6 @@
 import { supabaseAdmin, SHOP_ID, requireMember } from '../../../lib/serverAuth';
 import { whoAmI } from '../../../lib/staff';
-import { evaluate, unlockCode, LATEST_APP_VERSION } from '../../../lib/deviceLock';
+import { evaluate, unlockCode, UNLOCK_CODE_KINDS, LATEST_APP_VERSION } from '../../../lib/deviceLock';
 import { pokeDevices } from '../../../lib/fcm';
 import { SIM_MODES } from '../../../lib/simLock';
 
@@ -28,6 +28,8 @@ export default async function handler(req, res) {
       lastCheckin: dev.last_checkin, lastAction: dev.last_action,
       current: evaluate(dev, d).action,
       unlockCode: unlockCode(dev.secret),
+      unlockCodes: UNLOCK_CODE_KINDS.map(([k, label]) => ({ label, code: unlockCode(dev.secret, undefined, k) })),
+      unlockUntil: dev.unlock_until && Date.parse(dev.unlock_until) > Date.now() ? dev.unlock_until : null,
       lat: dev.last_lat, lng: dev.last_lng, locAcc: dev.last_loc_acc, locAt: dev.last_loc_at,
       callMode: dev.call_mode || 'open', allowNumber: dev.allow_number || '',
       created: dev.created_at, claimed: dev.claimed,
@@ -75,11 +77,13 @@ export default async function handler(req, res) {
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true, push: await pokeDevices({ deviceId }) });
     }
+    const mins = { 30: 30, 120: 120, 1440: 1440 }[value];
     const patch = {
-      lock:     { lock_mode: 'force_lock' },
-      unlock:   { lock_mode: 'force_unlock' },
-      auto:     { lock_mode: 'auto' },
-      lost:     { status: 'lost' },
+      lock:     { lock_mode: 'force_lock', unlock_until: null },
+      unlock:   { lock_mode: 'force_unlock', unlock_until: null },
+      auto:     { lock_mode: 'auto', unlock_until: null },
+      unlockfor: mins ? { lock_mode: 'auto', unlock_until: new Date(Date.now() + mins * 60000).toISOString() } : null,
+      lost:     { status: 'lost', unlock_until: null },
       release:  { status: 'released', lock_mode: 'force_unlock', call_mode: 'open' },
       active:   { status: 'active', lock_mode: 'auto' },
       delete:   { status: 'deleted' },   // soft delete; restore via 'active'

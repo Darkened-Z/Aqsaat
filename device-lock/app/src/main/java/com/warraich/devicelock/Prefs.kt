@@ -23,6 +23,8 @@ class Prefs(ctx: Context) {
     var lastOkMs: Long       get() = sp.getLong("lastOkMs", 0L);       set(v) = sp.edit().putLong("lastOkMs", v).apply()
     // Temporary unlock granted by an offline code: ignore server 'lock' until this time.
     var unlockUntilMs: Long  get() = sp.getLong("unlockUntilMs", 0L);  set(v) = sp.edit().putLong("unlockUntilMs", v).apply()
+    /** End of an offline-code unlock; kept apart from the shop's timed unlock so a plan lock can't cut it short. */
+    var codeUntilMs: Long    get() = sp.getLong("codeUntilMs", 0L);    set(v) = sp.edit().putLong("codeUntilMs", v).apply()
     var offlineLockDays: Int get() = sp.getInt("offlineLockDays", 7);  set(v) = sp.edit().putInt("offlineLockDays", v).apply()
 
     // Call policy pushed from the server. "open" = all calls; "shop_only" = block
