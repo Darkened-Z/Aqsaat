@@ -75,7 +75,7 @@ export default class Portal extends React.Component {
       React.createElement('div', { style: { maxWidth: 480, margin: '0 auto', padding: '0 16px 40px' } },
 
         React.createElement('div', { style: { textAlign: 'center', padding: '32px 0 24px' } },
-          React.createElement('div', { style: { width: 56, height: 56, borderRadius: 16, background: '#0f6b4b', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 24, fontWeight: 800 } }, shopName[0] || 'A'),
+          React.createElement('div', { style: { width: 56, height: 56, borderRadius: 16, background: '#0f6b4b', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' } }, React.createElement('img', { src: '/logo-mark-white.svg', alt: '', style: { width: '100%', height: '100%', padding: 8, boxSizing: 'border-box' } })),
           React.createElement('div', { style: { fontSize: 22, fontWeight: 800, color: '#1a2b1f', letterSpacing: '-0.02em' } }, shopName),
           React.createElement('div', { style: { fontSize: 13, color: '#7a7663', marginTop: 4 } }, 'Customer Portal / کسٹمر پورٹل'),
         ),

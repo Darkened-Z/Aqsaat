@@ -7933,7 +7933,7 @@ export default class App extends React.Component {
     return h('div', { style: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef', padding: 16 } },
       h(Head, {}, h('title', {}, 'Sign in — Aqsat')),
       h('div', { style: { width: '100%', maxWidth: 360, background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #ece8dc' } },
-        h('div', { style: { width: 52, height: 52, borderRadius: 14, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 24, margin: '0 auto 12px' } }, 'A'),
+        h('div', { style: { width: 52, height: 52, borderRadius: 14, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', margin: '0 auto 12px' } }, h('img', { src: '/logo-mark-white.svg', alt: 'Aqsat', style: { width: '100%', height: '100%', padding: 8, boxSizing: 'border-box' } })),
         h('div', { style: { fontSize: 20, fontWeight: 800, textAlign: 'center', color: '#1a2b1f' } }, 'Aqsat'),
         h('div', { style: { fontSize: 13, color: '#7a7663', textAlign: 'center', marginBottom: 20 } }, 'Sign in to your shop / سائن ان کریں'),
         h('input', { type: 'text', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false, autoComplete: 'username', placeholder: 'Username / یوزر نیم', value: loginUser, onChange: e => this.setState({ loginUser: e.target.value, loginError: '' }), onKeyDown: onKey, style: inp }),
@@ -7958,7 +7958,7 @@ export default class App extends React.Component {
     const btnBase = { width: 76, height: 64, borderRadius: 16, border: '1px solid #ece8dc', background: '#fdfcf8', fontSize: 26, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a2b1f', transition: 'background .1s', touchAction: 'manipulation', userSelect: 'none', WebkitTapHighlightColor: 'transparent' };
     return h('div', { style: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef' } },
       h('div', { style: { textAlign: 'center', width: '100%', maxWidth: 360, padding: '0 12px' } },
-        h('div', { style: { width: 56, height: 56, borderRadius: 16, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 26, margin: '0 auto 16px' } }, 'A'),
+        h('div', { style: { width: 56, height: 56, borderRadius: 16, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', margin: '0 auto 16px' } }, h('img', { src: '/logo-mark-white.svg', alt: 'Aqsat', style: { width: '100%', height: '100%', padding: 8, boxSizing: 'border-box' } })),
         h('div', { style: { fontSize: 22, fontWeight: 800, marginBottom: 2, color: '#1a2b1f' } }, 'Aqsat'),
         h('div', { style: { fontSize: 13, color: '#7a7663', marginBottom: 28 } }, 'Enter PIN to unlock / PIN درج کریں'),
         h('div', { style: { display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 10 } }, ...dots),
@@ -8209,7 +8209,7 @@ export default class App extends React.Component {
         {/* Sidebar desktop */}
         <aside className="desktop-only" style={{ width: 232, flexShrink: 0, background: '#ffffff', borderRight: '1px solid #ece8dc', padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 1, position: 'sticky', top: this._isDemo ? 28 : 0, height: this._isDemo ? 'calc(100vh - 28px)' : '100vh', overflowY: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px 18px' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 18 }}>A</div>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><img src="/logo-mark-white.svg" alt="Aqsat" style={{ width: '100%', height: '100%', padding: 5, boxSizing: 'border-box' }} /></div>
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.01em' }}>Aqsat</div>
               <div style={{ fontSize: 11, color: '#7a7663', marginTop: -2 }}>Installment Manager</div>
@@ -8236,7 +8236,7 @@ export default class App extends React.Component {
 
         {/* Mobile topbar */}
         <div className="mobile-only" style={{ position: 'fixed', top: this._isDemo ? 28 : 0, left: 0, right: 0, zIndex: 30, background: '#ffffff', borderBottom: '1px solid #ece8dc', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, flexShrink: 0 }}>A</div>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><img src="/logo-mark-white.svg" alt="Aqsat" style={{ width: '100%', height: '100%', padding: 4, boxSizing: 'border-box' }} /></div>
           <div style={{ flex: 1, background: '#f4f1e6', borderRadius: 10, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 13 }}>🔍</span>
             <input placeholder="Search…" value={this.state.searchQuery} onChange={e => {
