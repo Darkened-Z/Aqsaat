@@ -2607,9 +2607,9 @@ export default class App extends React.Component {
   }
 
   sectionHeader(title, ur, action) {
-    return this.h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 10, flexWrap: 'wrap' } },
+    return this.h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, paddingBottom: 10, marginBottom: 4, borderBottom: '1px solid #f2eee2', flexWrap: 'wrap' } },
       this.h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8 } },
-        this.h('div', { style: { fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' } }, title),
+        this.h('div', { style: { fontSize: 15, fontWeight: 800, letterSpacing: '-0.01em' } }, title),
         ur ? this.h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, ur) : null,
       ),
       action,
@@ -2648,27 +2648,29 @@ export default class App extends React.Component {
     const totalReceivedToday = receivedTodayList.reduce((s, r) => s + r.s.amount, 0);
 
     const kpiCard = (label, ur, value, sub, tone, onClick) => {
-      const tones = { green: { bg: 'linear-gradient(140deg,#eaf5ee,#d3e9dd)', ac: '#0f6b4b' }, amber: { bg: 'linear-gradient(140deg,#fdf2d9,#f6e2af)', ac: '#a26a10' }, red: { bg: 'linear-gradient(140deg,#fbe5e2,#f5cac2)', ac: '#a4362b' }, neutral: { bg: '#ffffff', ac: '#3a4a3f' } }[tone];
+      const ac = { green: '#0f6b4b', amber: '#a26a10', red: '#a4362b', neutral: '#3a4a3f' }[tone];
       return h('div', {
         onClick,
+        className: onClick ? 'tap' : undefined,
         style: {
-          background: tones.bg,
+          background: '#ffffff',
           border: '1px solid #ece8dc',
           borderRadius: 12,
-          padding: '12px 14px',
+          padding: '14px 16px 12px',
           cursor: onClick ? 'pointer' : 'default',
-          position: 'relative',
-          transition: 'transform .15s, box-shadow .15s',
-          userSelect: 'none'
+          userSelect: 'none',
+          display: 'flex', flexDirection: 'column',
         }
       },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 } },
-          h('div', { style: { fontSize: 10, fontWeight: 700, color: tones.ac, textTransform: 'uppercase', letterSpacing: '0.05em' } }, label),
-          h('div', { className: 'ur', style: { fontSize: 11, color: tones.ac, opacity: 0.75 } }, ur),
+          h('div', { style: { fontSize: 11, fontWeight: 700, color: ac, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 7, height: 7, borderRadius: 2, background: ac } }), label),
+          h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, ur),
         ),
-        h('div', { className: 'mono', style: { fontSize: 22, fontWeight: 700, marginTop: 6, color: '#1a2b1f', letterSpacing: '-0.02em' } }, value),
-        sub ? h('div', { style: { fontSize: 11, color: '#5a6a5f', marginTop: 2 } }, sub) : null,
-        onClick ? h('div', { style: { position: 'absolute', bottom: 8, right: 10, fontSize: 10, color: tones.ac, opacity: 0.7, fontWeight: 700 } }, 'View ›') : null,
+        h('div', { className: 'mono kpi-val', style: { fontSize: 24, fontWeight: 700, marginTop: 4, color: '#1a2b1f', letterSpacing: '-0.02em' } }, value),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginTop: 6, paddingTop: 8, borderTop: '1px solid #f2eee2' } },
+          h('span', { style: { fontSize: 11, color: '#7a7663' } }, sub || ''),
+          onClick ? h('span', { style: { fontSize: 11, color: ac, fontWeight: 700 } }, 'View ›') : null,
+        ),
       );
     };
 
@@ -2960,150 +2962,22 @@ export default class App extends React.Component {
 
     return h('div', { className: 'screen' },
       kpiModalEl,
-      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14, flexWrap: 'wrap' } },
-        h('div', { style: { fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em' } }, new Date().toLocaleDateString('en-PK', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })),
-        h('div', { style: { fontSize: 12, color: '#7a7663' } }, '· Assalam-o-Alaikum' + (this.state.settings.ownerName ? ', ' + this.state.settings.ownerName.split(' ')[0] : '')),
+      h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 16, flexWrap: 'wrap' } },
+        h('div', { style: { flex: 1, minWidth: 220 } },
+          h('div', { style: { fontSize: 12, color: '#7a7663', fontWeight: 600 } }, 'Assalam-o-Alaikum' + (this.state.settings.ownerName ? ', ' + this.state.settings.ownerName.split(' ')[0] : '')),
+          h('div', { style: { fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 2 } }, new Date().toLocaleDateString('en-PK', { weekday: 'long', day: 'numeric', month: 'long' })),
+        ),
+        h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+          h('button', { className: 'btn', onClick: () => this.openAddCustomer(), style: { padding: '9px 14px', borderRadius: 10, background: '#ffffff', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 13 } }, '👤 Add customer'),
+          h('button', { className: 'btn', onClick: () => this.go('plans'), style: { padding: '9px 14px', borderRadius: 10, background: '#ffffff', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 13 } }, '💵 Collect payment'),
+        ),
       ),
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10, marginBottom: 16 } },
+      h('div', { className: 'kpi-grid', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, marginBottom: 16 } },
         kpiCard('Cash Today',    'آج کی وصولی', this.fmtPKR(cashToday),       dueTodayList.length + ' installments due', 'green', () => this.setState({ dashKpiModal: 'today', dashKpiTab: dueTodayList.length > 0 ? 'due' : 'received' })),
         kpiCard('Upcoming (7d)', 'اگلے ۷ دن',   this.fmtPKR(upcomingWeek),    upcomingList.length + ' installments', 'amber', () => this.setState({ dashKpiModal: 'upcoming' })),
         kpiCard('Overdue',       'بقایا',        this.fmtPKR(overdueTotal),    overdueCount + ' late · +' + this.fmtPKR(plans.reduce((a, p) => a + this.planStats(p).lateFees, 0)) + ' fees', 'red', () => this.setState({ dashKpiModal: 'overdue' })),
         kpiCard('Outstanding',   'باقی رقم',     this.fmtPKR(totalOutstanding), plans.filter(p => p.status === 'active').length + ' active plans', 'neutral', () => this.setState({ dashKpiModal: 'outstanding' })),
       ),
-      (() => {
-        const le = this.activeLedger().filter(x => !x.udpiRef && x.category !== 'Udhar' && x.category !== 'Udhar Return' && !this._isPlanLedgerEntry(x));
-        const curMonth = this.todayStr().slice(0, 7);
-        const mEntries = le.filter(x => x.date.startsWith(curMonth));
-        const mInc = mEntries.filter(x => x.type === 'income').reduce((s, x) => s + x.amount, 0);
-        const mExp = mEntries.filter(x => x.type === 'expense').reduce((s, x) => s + x.amount, 0);
-        const mNet = mInc - mExp;
-        if (le.length === 0) return null;
-        return h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, padding: '10px 14px', background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, flexWrap: 'wrap', cursor: 'pointer' }, onClick: () => this.go('ledger') },
-          h('div', { style: { fontSize: 14, fontWeight: 700 } }, '📒 This Month Ledger'),
-          h('div', { style: { display: 'flex', gap: 14, marginLeft: 'auto' } },
-            h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#0f6b4b' } }, '↑ ' + this.fmtPKR(mInc)),
-            h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#b91c1c' } }, '↓ ' + this.fmtPKR(mExp)),
-            h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 800, color: mNet >= 0 ? '#0f6b4b' : '#b91c1c' } }, 'Net ' + (mNet >= 0 ? '+' : '-') + this.fmtPKR(Math.abs(mNet))),
-          ),
-          h('span', { style: { fontSize: 11, color: '#7a7663' } }, 'View →'),
-        );
-      })(),
-      (() => {
-        const udpiList = this.activeUdpiEntries();
-        if (udpiList.length === 0) return null;
-        const todayS = this.todayStr();
-
-        const parseMs = (id, dateStr, timeStr) => this._udharActionMs(id, dateStr, timeStr);
-
-        const people = {};
-        udpiList.forEach(u => {
-          const name = (u.person || '').trim();
-          if (!name) return;
-          const key = name.toLowerCase();
-          if (!people[key]) people[key] = { name, lent: 0, borrowed: 0, entries: [], actions: [] };
-          const p = people[key];
-          p.entries.push(u);
-          if (u.direction === 'lent' && !u.returned) {
-            p.lent += u.amount - (u.returnedAmount || 0);
-          } else if (u.direction === 'borrowed' && !u.returned) {
-            p.borrowed += u.amount - (u.returnedAmount || 0);
-          }
-          p.actions.push({
-            type: u.direction === 'lent' ? 'gave' : 'got',
-            amount: u.amount,
-            date: u.date,
-            note: u.note || '',
-            ms: parseMs(u.id, u.date, u.time),
-            entryId: u.id,
-          });
-          (u.partialReturns || []).forEach(pr => {
-            p.actions.push({
-              type: 'got',
-              amount: pr.amount,
-              date: pr.date,
-              note: 'Partial payment',
-              ms: parseMs(pr.id, pr.date, pr.time),
-              entryId: u.id,
-            });
-          });
-        });
-
-        const duesList = Object.values(people)
-          .map(p => {
-            const balance = p.lent - p.borrowed;
-            p.actions.sort((a, b) => b.ms - a.ms);
-            const latestAction = p.actions[0] || null;
-            return {
-              name: p.name,
-              balance,
-              entries: p.entries,
-              latestAction,
-              latestMs: latestAction ? latestAction.ms : 0,
-            };
-          })
-          .filter(p => p.balance > 0)
-          .sort((a, b) => b.latestMs - a.latestMs);
-
-        if (duesList.length === 0) return null;
-        const sorted = duesList.slice(0, 10);
-
-        const avatarColors = ['#b91c1c','#0f6b4b','#3b82f6','#a26a10','#7c3aed','#0891b2','#c2410c','#4338ca'];
-        const getAvatarColor = (name) => avatarColors[Math.abs((name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % avatarColors.length];
-        const initials = (name) => (name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-
-        return h('div', { style: { marginBottom: 16 } },
-          this.card([
-            this.sectionHeader('Recent Dues', 'اُدھار واجبات', h('button', { onClick: () => this.go('udharbook'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'Full Book →')),
-            h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '2px 12px' } },
-              ...sorted.map((p, i) => {
-                const act = p.latestAction;
-                let actLabel = '';
-                let isGot = false;
-                if (act) {
-                  isGot = act.type === 'got';
-                  const days = act.date ? Math.round((new Date(todayS) - new Date(act.date)) / 86400000) : null;
-                  const dLabel = days === 0 ? 'today' : days === 1 ? 'yesterday' : (days !== null && days > 0 ? days + 'd ago' : (act.date || ''));
-                  const actionVerb = isGot ? 'Got' : 'Gave';
-                  const noteSnippet = act.note ? ' (' + (act.note.length > 18 ? act.note.slice(0, 16) + '…' : act.note) + ')' : '';
-                  actLabel = `${actionVerb} ${this.fmtPKR(act.amount)}${noteSnippet} · ${dLabel}`;
-                }
-                const ac = getAvatarColor(p.name);
-                const firstLent = p.entries.find(u => u.direction === 'lent' && !u.returned);
-
-                return h('div', {
-                  key: p.name,
-                  onClick: () => this.setState({ route: 'udharbook', udharPerson: p.name }),
-                  style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: '1px solid #f2eee2', cursor: 'pointer' }
-                },
-                  h('div', { style: { width: 30, height: 30, borderRadius: 8, background: ac + '18', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, flexShrink: 0 } }, initials(p.name)),
-                  h('div', { style: { flex: 1, minWidth: 0 } },
-                    h('div', { style: { fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, p.name),
-                    h('div', { style: { fontSize: 10, color: isGot ? '#0f6b4b' : '#7a7663', fontWeight: isGot ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 } },
-                      h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: isGot ? '#0f6b4b' : '#b91c1c', display: 'inline-block', flexShrink: 0 } }),
-                      actLabel
-                    ),
-                  ),
-                  h('div', { style: { textAlign: 'right', flexShrink: 0 } },
-                    h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 12, color: '#b91c1c' } }, this.fmtPKR(p.balance)),
-                    h('button', {
-                      onClick: e => {
-                        e.stopPropagation();
-                        if (firstLent) {
-                          this.markUdpiReturned(firstLent.id);
-                        } else {
-                          this.openUdpiModal();
-                          setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, open: true, direction: 'borrowed', person: p.name, amount: '', note: '', date: this.todayStr() } }), 20);
-                        }
-                      },
-                      style: { marginTop: 2, background: '#0f6b4b', color: 'white', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700, border: 'none', cursor: 'pointer' }
-                    }, '💰 Got'),
-                  ),
-                );
-              }),
-            ),
-          ]),
-        );
-      })(),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 12 } },
         this.card([
           this.sectionHeader('Due Today', 'آج کی اقساط', h('button', { onClick: () => this.go('plans'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'View all →')),
@@ -3200,6 +3074,140 @@ export default class App extends React.Component {
               )),
         ]),
       ),
+      (() => {
+        const le = this.activeLedger().filter(x => !x.udpiRef && x.category !== 'Udhar' && x.category !== 'Udhar Return' && !this._isPlanLedgerEntry(x));
+        const curMonth = this.todayStr().slice(0, 7);
+        const mEntries = le.filter(x => x.date.startsWith(curMonth));
+        const mInc = mEntries.filter(x => x.type === 'income').reduce((s, x) => s + x.amount, 0);
+        const mExp = mEntries.filter(x => x.type === 'expense').reduce((s, x) => s + x.amount, 0);
+        const mNet = mInc - mExp;
+        if (le.length === 0) return null;
+        return h('div', { className: 'tap', style: { display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, padding: '12px 16px', background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, flexWrap: 'wrap', cursor: 'pointer' }, onClick: () => this.go('ledger') },
+          h('div', { style: { fontSize: 14, fontWeight: 700 } }, '📒 This Month Ledger'),
+          h('div', { style: { display: 'flex', gap: 14, marginLeft: 'auto' } },
+            h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#0f6b4b' } }, '↑ ' + this.fmtPKR(mInc)),
+            h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#b91c1c' } }, '↓ ' + this.fmtPKR(mExp)),
+            h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 800, color: mNet >= 0 ? '#0f6b4b' : '#b91c1c' } }, 'Net ' + (mNet >= 0 ? '+' : '-') + this.fmtPKR(Math.abs(mNet))),
+          ),
+          h('span', { style: { fontSize: 11, color: '#7a7663' } }, 'View →'),
+        );
+      })(),
+      (() => {
+        const udpiList = this.activeUdpiEntries();
+        if (udpiList.length === 0) return null;
+        const todayS = this.todayStr();
+
+        const parseMs = (id, dateStr, timeStr) => this._udharActionMs(id, dateStr, timeStr);
+
+        const people = {};
+        udpiList.forEach(u => {
+          const name = (u.person || '').trim();
+          if (!name) return;
+          const key = name.toLowerCase();
+          if (!people[key]) people[key] = { name, lent: 0, borrowed: 0, entries: [], actions: [] };
+          const p = people[key];
+          p.entries.push(u);
+          if (u.direction === 'lent' && !u.returned) {
+            p.lent += u.amount - (u.returnedAmount || 0);
+          } else if (u.direction === 'borrowed' && !u.returned) {
+            p.borrowed += u.amount - (u.returnedAmount || 0);
+          }
+          p.actions.push({
+            type: u.direction === 'lent' ? 'gave' : 'got',
+            amount: u.amount,
+            date: u.date,
+            note: u.note || '',
+            ms: parseMs(u.id, u.date, u.time),
+            entryId: u.id,
+          });
+          (u.partialReturns || []).forEach(pr => {
+            p.actions.push({
+              type: 'got',
+              amount: pr.amount,
+              date: pr.date,
+              note: 'Partial payment',
+              ms: parseMs(pr.id, pr.date, pr.time),
+              entryId: u.id,
+            });
+          });
+        });
+
+        const duesList = Object.values(people)
+          .map(p => {
+            const balance = p.lent - p.borrowed;
+            p.actions.sort((a, b) => b.ms - a.ms);
+            const latestAction = p.actions[0] || null;
+            return {
+              name: p.name,
+              balance,
+              entries: p.entries,
+              latestAction,
+              latestMs: latestAction ? latestAction.ms : 0,
+            };
+          })
+          .filter(p => p.balance > 0)
+          .sort((a, b) => b.latestMs - a.latestMs);
+
+        if (duesList.length === 0) return null;
+        const sorted = duesList.slice(0, 10);
+
+        const avatarColors = ['#b91c1c','#0f6b4b','#3b82f6','#a26a10','#7c3aed','#0891b2','#c2410c','#4338ca'];
+        const getAvatarColor = (name) => avatarColors[Math.abs((name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % avatarColors.length];
+        const initials = (name) => (name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+        return h('div', { style: { marginTop: 12 } },
+          this.card([
+            this.sectionHeader('Recent Dues', 'اُدھار واجبات', h('button', { onClick: () => this.go('udharbook'), style: { color: '#0f6b4b', fontWeight: 600, fontSize: 12 } }, 'Full Book →')),
+            h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '2px 12px' } },
+              ...sorted.map((p, i) => {
+                const act = p.latestAction;
+                let actLabel = '';
+                let isGot = false;
+                if (act) {
+                  isGot = act.type === 'got';
+                  const days = act.date ? Math.round((new Date(todayS) - new Date(act.date)) / 86400000) : null;
+                  const dLabel = days === 0 ? 'today' : days === 1 ? 'yesterday' : (days !== null && days > 0 ? days + 'd ago' : (act.date || ''));
+                  const actionVerb = isGot ? 'Got' : 'Gave';
+                  const noteSnippet = act.note ? ' (' + (act.note.length > 18 ? act.note.slice(0, 16) + '…' : act.note) + ')' : '';
+                  actLabel = `${actionVerb} ${this.fmtPKR(act.amount)}${noteSnippet} · ${dLabel}`;
+                }
+                const ac = getAvatarColor(p.name);
+                const firstLent = p.entries.find(u => u.direction === 'lent' && !u.returned);
+
+                return h('div', {
+                  key: p.name,
+                  onClick: () => this.setState({ route: 'udharbook', udharPerson: p.name }),
+                  style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: '1px solid #f2eee2', cursor: 'pointer' }
+                },
+                  h('div', { style: { width: 30, height: 30, borderRadius: 8, background: ac + '18', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, flexShrink: 0 } }, initials(p.name)),
+                  h('div', { style: { flex: 1, minWidth: 0 } },
+                    h('div', { style: { fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, p.name),
+                    h('div', { style: { fontSize: 10, color: isGot ? '#0f6b4b' : '#7a7663', fontWeight: isGot ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 3 } },
+                      h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: isGot ? '#0f6b4b' : '#b91c1c', display: 'inline-block', flexShrink: 0 } }),
+                      actLabel
+                    ),
+                  ),
+                  h('div', { style: { textAlign: 'right', flexShrink: 0 } },
+                    h('div', { className: 'mono', style: { fontWeight: 700, fontSize: 12, color: '#b91c1c' } }, this.fmtPKR(p.balance)),
+                    h('button', {
+                      onClick: e => {
+                        e.stopPropagation();
+                        if (firstLent) {
+                          this.markUdpiReturned(firstLent.id);
+                        } else {
+                          this.openUdpiModal();
+                          setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, open: true, direction: 'borrowed', person: p.name, amount: '', note: '', date: this.todayStr() } }), 20);
+                        }
+                      },
+                      style: { marginTop: 2, background: '#0f6b4b', color: 'white', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700, border: 'none', cursor: 'pointer' }
+                    }, '💰 Got'),
+                  ),
+                );
+              }),
+            ),
+          ]),
+        );
+      })(),
     );
   }
 
@@ -3219,10 +3227,10 @@ export default class App extends React.Component {
           h('button', { onClick: this.openAddCustomer, style: { background: '#0f6b4b', color: 'white', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13 } }, '＋ Add Customer'),
         ),
       ),
-      this.card([
-        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 } },
+      h('div', null,
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 12 } },
           rows.map(({ c, st }) =>
-            h('button', { key: c.id, onClick: () => this.go('customer', { id: c.id }), style: { textAlign: 'left', background: '#fdfcf8', border: '1px solid #ece8dc', borderRadius: 14, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, cursor: 'pointer' } },
+            h('button', { key: c.id, className: 'tap', onClick: () => this.go('customer', { id: c.id }), style: { textAlign: 'left', background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, cursor: 'pointer' } },
               h('div', { style: { display: 'flex', gap: 12, alignItems: 'center' } },
                 h('div', { style: { width: 44, height: 44, borderRadius: 12, background: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#3a2f1a' } }, c.avatar),
                 h('div', { style: { flex: 1, minWidth: 0 } },
@@ -3231,8 +3239,9 @@ export default class App extends React.Component {
                 ),
                 st.overdue > 0 ? h('div', { style: { background: '#fdecea', color: '#a4362b', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20 } }, 'OVERDUE') : null,
               ),
-              h('div', { style: { fontSize: 12, color: '#7a7663' } }, '📞 ' + c.phone),
-              h('div', { style: { fontSize: 12, color: '#7a7663' } }, '📍 ' + c.area),
+              h('div', { style: { display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: '#7a7663' } },
+                c.phone ? h('span', null, '📞 ' + c.phone) : null,
+                (c.area || c.city) ? h('span', null, '📍 ' + (c.area || c.city)) : null),
               h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid #ece8dc' } },
                 h('div', {},
                   h('div', { style: { fontSize: 10, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, 'Outstanding'),
@@ -3242,7 +3251,7 @@ export default class App extends React.Component {
               ),
             )),
         ),
-      ]),
+      ),
     );
   }
 
@@ -3262,9 +3271,9 @@ export default class App extends React.Component {
             h('div', { style: { fontSize: 24, fontWeight: 800, letterSpacing: '-0.01em' } }, c.name),
             h('div', { className: 'ur', style: { fontSize: 16, color: '#7a7663' } }, c.nameUr),
             h('div', { style: { display: 'flex', gap: 16, marginTop: 8, flexWrap: 'wrap', fontSize: 13, color: '#5a6a5f' } },
-              h('span', {}, '📞 ' + c.phone),
-              h('span', {}, '🆔 ' + c.cnic),
-              h('span', {}, '📍 ' + c.area),
+              c.phone ? h('span', {}, '📞 ' + c.phone) : null,
+              c.cnic ? h('span', {}, '🆔 ' + c.cnic) : null,
+              (c.area || c.city) ? h('span', {}, '📍 ' + (c.area || c.city)) : null,
               h('span', {}, '📅 Joined ' + this.fmtDate(c.joined)),
             ),
           ),
@@ -3304,7 +3313,7 @@ export default class App extends React.Component {
     const c = this.state.customers.find(x => x.id === pl.customerId);
     const st = this.planStats(pl);
     const isOverdue = st.overdue.length > 0;
-    return h('div', { key: pl.id, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 16, padding: 20 } },
+    return h('div', { key: pl.id, style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 20 } },
       h('div', { style: { display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' } },
         h('div', { style: { width: 56, height: 56, borderRadius: 14, background: '#f4f1e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 } }, p.emoji),
         h('div', { style: { flex: 1, minWidth: 180 } },
@@ -3316,7 +3325,7 @@ export default class App extends React.Component {
                 ? h('span', { style: { fontSize: 10, fontWeight: 700, color: '#a4362b', background: '#fdecea', padding: '3px 8px', borderRadius: 20 } }, 'OVERDUE')
                 : h('span', { style: { fontSize: 10, fontWeight: 700, color: '#a26a10', background: '#fdf2d9', padding: '3px 8px', borderRadius: 20 } }, 'ACTIVE'),
           ),
-          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, c.name + ' · Started ' + this.fmtDate(pl.startDate) + ' · ' + pl.months + ' months @ ' + pl.interest + '% markup'),
+          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, [c ? c.name : '', 'Started ' + this.fmtDate(pl.startDate), pl.months + ' months' + (pl.interest != null && pl.interest !== '' ? ' @ ' + pl.interest + '% markup' : '')].filter(Boolean).join(' · ')),
           pl.voucherNo ? h('div', { className: 'mono', style: { fontSize: 11, color: '#7a7663', marginTop: 3, fontWeight: 600 } }, pl.voucherNo) : null,
         ),
         h('div', { style: { textAlign: 'right' } },
@@ -3338,7 +3347,7 @@ export default class App extends React.Component {
           h('span', { style: { fontWeight: 700, color: '#0f6b4b' } }, Math.round(st.progress * 100) + '%'),
         ),
         h('div', { style: { height: 8, background: '#f2eee2', borderRadius: 4, overflow: 'hidden' } },
-          h('div', { style: { height: '100%', width: (st.progress * 100) + '%', background: 'linear-gradient(90deg,#0f6b4b,#14a374)', borderRadius: 4, transition: 'width .4s' } }),
+          h('div', { style: { height: '100%', width: (st.progress * 100) + '%', background: '#0f6b4b', borderRadius: 4, transition: 'width .4s' } }),
         ),
       ),
       h('div', { style: { marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(76px,1fr))', gap: 6 } },
@@ -3644,7 +3653,7 @@ export default class App extends React.Component {
         ),
       ]),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
-        h('div', { style: { background: 'linear-gradient(160deg,#0f6b4b,#14a374)', color: 'white', borderRadius: 16, padding: 20 } },
+        h('div', { style: { background: '#0f6b4b', color: 'white', borderRadius: 16, padding: 20 } },
           h('div', { style: { fontSize: 12, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 } }, freqLabel + ' Installment'),
           h('div', { className: 'ur', style: { fontSize: 13, opacity: 0.85 } }, 'قسط'),
           h('div', { className: 'mono', style: { fontSize: 34, fontWeight: 800, marginTop: 12, letterSpacing: '-0.02em' } }, this.fmtPKR(monthly)),
@@ -3834,7 +3843,7 @@ export default class App extends React.Component {
               const total = md.collected + md.down;
               return h('div', { key: k, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
                 h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, total >= 1000 ? Math.round(total / 1000) + 'k' : total),
-                h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? 'linear-gradient(180deg,#14a374,#0f6b4b)' : '#d9d5c7', borderRadius: '6px 6px 0 0', height: (total / maxCollected * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
+                h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? '#0f6b4b' : '#d9d5c7', borderRadius: '6px 6px 0 0', height: (total / maxCollected * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
                 h('div', { style: { fontSize: 11, color: isCur ? '#0f6b4b' : '#7a7663', fontWeight: isCur ? 700 : 500 } }, md.label),
               );
             }),
@@ -3867,7 +3876,7 @@ export default class App extends React.Component {
             const val = Math.round(ep.expected);
             return h('div', { key: k, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
               h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, val >= 1000 ? Math.round(val / 1000) + 'k' : val),
-              h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? 'linear-gradient(180deg,#d4a94a,#a26a10)' : '#e8dcc4', borderRadius: '6px 6px 0 0', height: (val / maxExpected * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
+              h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? '#a26a10' : '#e8dcc4', borderRadius: '6px 6px 0 0', height: (val / maxExpected * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
               h('div', { style: { fontSize: 11, color: isCur ? '#a26a10' : '#7a7663', fontWeight: isCur ? 700 : 500 } }, ep.label),
             );
           }),
@@ -3884,7 +3893,7 @@ export default class App extends React.Component {
             const val = Math.round(pp.profit);
             return h('div', { key: k, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
               h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, val >= 1000 ? Math.round(val / 1000) + 'k' : val),
-              h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? 'linear-gradient(180deg,#4a8fd4,#1a4a8f)' : '#c4d8e8', borderRadius: '6px 6px 0 0', height: (val / maxPlanProfit * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
+              h('div', { style: { width: '100%', maxWidth: 36, background: isCur ? '#1a4a8f' : '#c4d8e8', borderRadius: '6px 6px 0 0', height: (val / maxPlanProfit * 140) + 'px', minHeight: 4, transition: 'height .4s' } }),
               h('div', { style: { fontSize: 11, color: isCur ? '#1a4a8f' : '#7a7663', fontWeight: isCur ? 700 : 500 } }, pp.label),
             );
           }),
@@ -4023,6 +4032,143 @@ export default class App extends React.Component {
     );
   }
 
+  renderInsights() {
+    const h = this.h;
+    const { customers, products } = this.state;
+    const plans = this.activePlans();
+    const fmt = n => this.fmtPKR(Math.round(n));
+    const pct = (a, b) => (b > 0 ? Math.round(a / b * 100) : 0);
+
+    const weeks = [0, 1, 2, 3].map(i => ({ label: i === 0 ? 'This week' : 'Week ' + (i + 1), from: i * 7 + (i ? 1 : 0), to: (i + 1) * 7 + (i === 3 ? 2 : 0), amount: 0, count: 0 }));
+    let next30 = 0, overdueAmt = 0, paidCount = 0, paidOnTime = 0;
+    const perCustomer = {};
+    const perProduct = {};
+
+    plans.forEach(pl => {
+      const st = this.planStats(pl);
+      const grace = (pl.lateFee && pl.lateFee.graceDays) || 0;
+      const cu = perCustomer[pl.customerId] || (perCustomer[pl.customerId] = { id: pl.customerId, overdueAmt: 0, overdueCount: 0, maxLate: 0, paid: 0, late: 0, remaining: 0 });
+      cu.remaining += st.remaining;
+      pl.schedule.forEach(s => {
+        const diff = this.dayDiff(s.dueDate);
+        if (!s.paid) {
+          if (diff < 0) { overdueAmt += s.amount; cu.overdueAmt += s.amount; cu.overdueCount++; cu.maxLate = Math.max(cu.maxLate, -diff); }
+          else if (diff <= 30) {
+            next30 += s.amount;
+            const w = weeks.find(x => diff >= x.from && diff <= x.to) || weeks[3];
+            w.amount += s.amount; w.count++;
+          }
+        } else if (s.paidDate) {
+          paidCount++; cu.paid++;
+          const lateBy = Math.round((new Date(s.paidDate) - new Date(s.dueDate)) / 86400000);
+          if (lateBy <= grace) paidOnTime++; else cu.late++;
+        }
+      });
+      const p = products.find(x => x.id === pl.productId);
+      const key = pl.productId || 'none';
+      const pp = perProduct[key] || (perProduct[key] = { name: p ? p.name : 'Deleted product', emoji: p ? p.emoji : '📦', units: 0, sales: 0, cost: 0, collected: 0 });
+      pp.units++;
+      pp.sales += st.total;
+      pp.cost += p && p.costPrice ? Number(p.costPrice) : 0;
+      pp.collected += st.paidAmount;
+    });
+
+    const active = plans.filter(pl => pl.status === 'active');
+    const atRisk = active.filter(pl => pl.schedule.some(s => !s.paid && this.dayDiff(s.dueDate) < -30));
+    const defaultRate = pct(atRisk.length, active.length);
+    const onTimeRate = pct(paidOnTime, paidCount);
+
+    const risky = Object.values(perCustomer)
+      .filter(c => c.overdueCount > 0 || c.late > 0)
+      .map(c => ({ ...c, score: Math.min(100, Math.round(c.maxLate * 0.8 + c.overdueCount * 10 + (c.paid ? c.late / c.paid : 0) * 30)), cust: customers.find(x => x.id === c.id) }))
+      .filter(c => c.cust)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+
+    const prodRows = Object.values(perProduct).map(r => ({ ...r, profit: r.sales - r.cost })).sort((a, b) => b.profit - a.profit);
+    const totProfit = prodRows.reduce((a, r) => a + r.profit, 0);
+    const maxWeek = Math.max(1, ...weeks.map(w => w.amount));
+    const maxProfit = Math.max(1, ...prodRows.map(r => Math.abs(r.profit)));
+
+    const stat = (label, ur, value, sub, color) => h('div', { style: { background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: '14px 16px 12px' } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 } },
+        h('div', { style: { fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 7, height: 7, borderRadius: 2, background: color } }), label),
+        h('div', { className: 'ur', style: { fontSize: 11, color: '#7a7663' } }, ur),
+      ),
+      h('div', { className: 'mono kpi-val', style: { fontSize: 24, fontWeight: 700, marginTop: 4, letterSpacing: '-0.02em' } }, value),
+      h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 6, paddingTop: 8, borderTop: '1px solid #f2eee2' } }, sub),
+    );
+    const th = { textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#7a7663', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '8px 10px', borderBottom: '1px solid #ece8dc', whiteSpace: 'nowrap' };
+    const td = { padding: '10px', borderBottom: '1px solid #f2eee2', fontSize: 13, verticalAlign: 'middle' };
+    const num = { ...td, textAlign: 'right', fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap' };
+    const empty = t => h('div', { style: { padding: '18px 0', color: '#7a7663', fontSize: 13 } }, t);
+
+    return h('div', { className: 'screen' },
+      h('div', { className: 'kpi-grid', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, marginBottom: 16 } },
+        stat('Next 30 days', 'اگلے 30 دن', fmt(next30), weeks.reduce((a, w) => a + w.count, 0) + ' installments expected', '#0f6b4b'),
+        stat('Overdue now', 'بقایا', fmt(overdueAmt), Object.values(perCustomer).filter(c => c.overdueCount).length + ' customers behind', '#a4362b'),
+        stat('Default rate', 'نادہندگی', defaultRate + '%', atRisk.length + ' of ' + active.length + ' active plans 30+ days late', defaultRate > 15 ? '#a4362b' : '#a26a10'),
+        stat('Paid on time', 'بروقت ادائیگی', onTimeRate + '%', paidOnTime + ' of ' + paidCount + ' payments within grace', '#3a4a3f'),
+      ),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 12, marginBottom: 12 } },
+        this.card([
+          this.sectionHeader('Collection forecast', 'آنے والی وصولی', h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#0f6b4b' } }, fmt(next30))),
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 } },
+            ...weeks.map(w => h('div', { key: w.label },
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 } },
+                h('span', { style: { fontWeight: 600 } }, w.label, h('span', { style: { color: '#7a7663', fontWeight: 400 } }, ' · ' + w.count + ' due')),
+                h('span', { className: 'mono', style: { fontWeight: 700 } }, fmt(w.amount)),
+              ),
+              h('div', { style: { height: 8, background: '#f4f1e6', borderRadius: 4, overflow: 'hidden' } },
+                h('div', { style: { height: '100%', width: (w.amount / maxWeek * 100) + '%', background: '#0f6b4b', borderRadius: 4 } })),
+            )),
+            overdueAmt > 0 ? h('div', { style: { fontSize: 12, color: '#a4362b', paddingTop: 10, borderTop: '1px solid #f2eee2' } }, '+ ' + fmt(overdueAmt) + ' already overdue — not counted above') : null,
+          ),
+        ]),
+        this.card([
+          this.sectionHeader('Riskiest customers', 'خطرناک گاہک', h('button', { onClick: () => this.go('reminders'), style: { color: '#a4362b', fontWeight: 600, fontSize: 12 } }, 'Remind →')),
+          risky.length === 0 ? empty('✨ Nobody is behind.') :
+          h('div', { style: { overflowX: 'auto' } },
+            h('table', { style: { width: '100%', borderCollapse: 'collapse' } },
+              h('thead', null, h('tr', null,
+                h('th', { style: th }, 'Customer'), h('th', { style: { ...th, textAlign: 'right' } }, 'Overdue'), h('th', { style: { ...th, textAlign: 'right' } }, 'Late'), h('th', { style: { ...th, textAlign: 'right' } }, 'Risk'))),
+              h('tbody', null, ...risky.map(r => h('tr', { key: r.id, className: 'row-link', onClick: () => this.go('customer', { id: r.id }), style: { cursor: 'pointer' } },
+                h('td', { style: td },
+                  h('div', { style: { fontWeight: 600 } }, r.cust.name),
+                  h('div', { style: { fontSize: 11, color: '#7a7663' } }, r.overdueCount + ' unpaid · ' + r.late + '/' + r.paid + ' paid late')),
+                h('td', { style: { ...num, color: '#a4362b', fontWeight: 700 } }, fmt(r.overdueAmt)),
+                h('td', { style: num }, r.maxLate + 'd'),
+                h('td', { style: { ...td, textAlign: 'right' } },
+                  h('span', { style: { display: 'inline-block', minWidth: 38, textAlign: 'center', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 800, background: r.score >= 60 ? '#fbe5e2' : r.score >= 30 ? '#fdf2d9' : '#f4f1e6', color: r.score >= 60 ? '#a4362b' : r.score >= 30 ? '#a26a10' : '#3a4a3f' } }, r.score)),
+              ))),
+            )),
+        ]),
+      ),
+      this.card([
+        this.sectionHeader('Profit by product', 'اشیاء کے حساب سے منافع', h('span', { className: 'mono', style: { fontSize: 13, fontWeight: 700, color: '#0f6b4b' } }, fmt(totProfit))),
+        prodRows.length === 0 ? empty('No plans yet.') :
+        h('div', { style: { overflowX: 'auto' } },
+          h('table', { style: { width: '100%', borderCollapse: 'collapse', minWidth: 560 } },
+            h('thead', null, h('tr', null,
+              h('th', { style: th }, 'Product'), h('th', { style: { ...th, textAlign: 'right' } }, 'Plans'), h('th', { style: { ...th, textAlign: 'right' } }, 'Sold for'), h('th', { style: { ...th, textAlign: 'right' } }, 'Cost'), h('th', { style: { ...th, textAlign: 'right' } }, 'Collected'), h('th', { style: { ...th, width: '28%' } }, 'Profit'))),
+            h('tbody', null, ...prodRows.map(r => h('tr', { key: r.name },
+              h('td', { style: { ...td, fontWeight: 600 } }, r.emoji + ' ' + r.name),
+              h('td', { style: num }, r.units),
+              h('td', { style: num }, fmt(r.sales)),
+              h('td', { style: { ...num, color: '#7a7663' } }, r.cost ? fmt(r.cost) : '—'),
+              h('td', { style: num }, pct(r.collected, r.sales) + '%'),
+              h('td', { style: td },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                  h('div', { style: { flex: 1, height: 6, background: '#f4f1e6', borderRadius: 3, overflow: 'hidden' } },
+                    h('div', { style: { height: '100%', width: (Math.abs(r.profit) / maxProfit * 100) + '%', background: r.profit >= 0 ? '#0f6b4b' : '#a4362b' } })),
+                  h('span', { className: 'mono', style: { fontSize: 12, fontWeight: 700, minWidth: 84, textAlign: 'right', color: r.profit >= 0 ? '#0f6b4b' : '#a4362b' } }, fmt(r.profit)))),
+            ))),
+          )),
+        h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 10 } }, 'Profit = total payable on the plan − product cost price. Set cost prices in Products for accurate numbers.'),
+      ]),
+    );
+  }
+
   renderReminders() {
     const h = this.h;
     let overdueList = [];
@@ -4036,13 +4182,18 @@ export default class App extends React.Component {
     return h('div', { className: 'screen' },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
         h('div', { style: { fontSize: 14, color: '#7a7663' } }, overdueList.length + ' overdue installments need attention.'),
-        overdueList.length > 0 ? h('button', { onClick: () => this.sendAllInstallmentReminders(), disabled: this.state.installmentAutoSending, style: { padding: '8px 16px', borderRadius: 10, background: this.state.installmentAutoSending ? '#94a3b8' : 'linear-gradient(135deg, #25D366, #128C7E)', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', opacity: this.state.installmentAutoSending ? 0.7 : 1 } }, this.state.installmentAutoSending ? '⏳ Sending...' : '🤖 Auto Send All') : null,
+        overdueList.length > 0 ? h('button', { onClick: () => this.sendAllInstallmentReminders(), disabled: this.state.installmentAutoSending, style: { padding: '8px 16px', borderRadius: 10, background: this.state.installmentAutoSending ? '#94a3b8' : '#128C7E', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', opacity: this.state.installmentAutoSending ? 0.7 : 1 } }, this.state.installmentAutoSending ? '⏳ Sending...' : '🤖 Auto Send All') : null,
       ),
       !waConnected && overdueList.length > 0 ? h('div', { style: { background: '#f59e0b15', border: '1px solid #f59e0b33', borderRadius: 10, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 } },
         h('span', { style: { fontSize: 14 } }, '⚠️'),
         h('div', { style: { flex: 1, color: '#92400e' } }, 'WhatsApp not connected. Go to ', h('strong', {}, 'Udhar Book → WA'), ' button to scan QR for auto-send.'),
       ) : null,
       this.card([
+        overdueList.length === 0 ? h('div', { style: { padding: '36px 0', textAlign: 'center' } },
+          h('div', { style: { fontSize: 28 } }, '✨'),
+          h('div', { style: { fontWeight: 700, fontSize: 15, marginTop: 6 } }, 'Nobody is late'),
+          h('div', { className: 'ur', style: { fontSize: 13, color: '#7a7663' } }, 'کوئی قسط لیٹ نہیں'),
+        ) : null,
         overdueList.map((r, i) => h('div', { key: i, style: { display: 'flex', gap: 12, padding: '14px 0', borderTop: i === 0 ? 'none' : '1px solid #f2eee2', alignItems: 'center', flexWrap: 'wrap' } },
           h('div', { style: { width: 44, height: 44, borderRadius: 12, background: r.c.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#3a2f1a' } }, r.c.avatar),
           h('div', { style: { flex: 1, minWidth: 200 } },
@@ -4052,8 +4203,8 @@ export default class App extends React.Component {
           h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
             h('a', { href: this.waLink(r.c.phone, r.c.name, r.s.amount, r.s.dueDate), target: '_blank', rel: 'noopener', style: { background: '#25D366', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 Manual'),
             h('button', { onClick: () => this.sendInstallmentReminder(r.c, r.pl, r.p, r.s), disabled: this.state.installmentAutoSending, style: { background: this.state.installmentAutoSending ? '#94a3b8' : '#0f6b4b', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '🤖 Auto'),
-            h('a', { href: this.getPortalLink(r.c.phone), target: '_blank', rel: 'noopener', style: { background: '#3b82f6', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '🔗 Portal'),
-            h('button', { style: { background: '#f4f1e6', color: '#3a4a3f', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, '📞 Call'),
+            h('a', { href: this.getPortalLink(r.c.phone), target: '_blank', rel: 'noopener', style: { background: '#f4f1e6', color: '#3a4a3f', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '🔗 Portal'),
+            r.c.phone ? h('a', { href: 'tel:' + r.c.phone, style: { background: '#f4f1e6', color: '#3a4a3f', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '📞 Call') : null,
             h('button', { onClick: () => this.openPayment(r.pl.id, r.s.n), style: { background: '#0f6b4b', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600 } }, 'Collect'),
           ),
         )),
@@ -4066,6 +4217,7 @@ export default class App extends React.Component {
     const st = this.state.settings;
     const setS = (k, v) => this.setState({ settings: { ...st, [k]: v } });
     const inp = { border: '1px solid #ece8dc', borderRadius: 8, padding: '6px 10px', fontSize: 13, background: '#fdfcf8', outline: 'none', width: 100, textAlign: 'right' };
+    const inpText = { ...inp, width: 'min(260px, 50vw)', textAlign: 'left', padding: '8px 10px' };
     const row = (l, ur, v) => h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '14px 0', borderTop: '1px solid #f2eee2', alignItems: 'center', gap: 12 } },
       h('div', { style: { minWidth: 0 } }, h('div', { style: { fontWeight: 600, fontSize: 14 } }, l), h('div', { className: 'ur', style: { fontSize: 12, color: '#7a7663' } }, ur)),
       h('div', { style: { color: '#3a4a3f', fontSize: 14 } }, v),
@@ -4073,9 +4225,9 @@ export default class App extends React.Component {
     return h('div', { className: 'screen', style: { maxWidth: 720 } },
       this.card([
         h('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 8 } }, 'Business'),
-        row('Business name', 'کاروبار کا نام', h('input', { value: st.businessName || '', onChange: e => setS('businessName', e.target.value), placeholder: 'e.g. Sadar Electronics', style: inp })),
-        row('Owner name', 'مالک', h('input', { value: st.ownerName || '', onChange: e => setS('ownerName', e.target.value), placeholder: 'e.g. Rehan Malik', style: inp })),
-        row('City', 'شہر', h('input', { value: st.city || '', onChange: e => setS('city', e.target.value), placeholder: 'e.g. Lahore', style: inp })),
+        row('Business name', 'کاروبار کا نام', h('input', { value: st.businessName || '', onChange: e => setS('businessName', e.target.value), placeholder: 'e.g. Sadar Electronics', style: inpText })),
+        row('Owner name', 'مالک', h('input', { value: st.ownerName || '', onChange: e => setS('ownerName', e.target.value), placeholder: 'e.g. Rehan Malik', style: inpText })),
+        row('City', 'شہر', h('input', { value: st.city || '', onChange: e => setS('city', e.target.value), placeholder: 'e.g. Lahore', style: inpText })),
         row('Currency', 'کرنسی', 'Pakistani Rupee (Rs)'),
       ]),
       h('div', { style: { height: 16 } }),
@@ -5212,7 +5364,7 @@ export default class App extends React.Component {
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h('button', {
             onClick: handleSendWhatsApp,
-            style: { flex: 2, minWidth: 160, padding: '12px 16px', borderRadius: 12, background: '#25D366', color: '#ffffff', fontWeight: 800, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 4px 14px rgba(37,211,102,.35)' }
+            style: { flex: 2, minWidth: 160, padding: '12px 16px', borderRadius: 12, background: '#25D366', color: '#ffffff', fontWeight: 800, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }
           }, '💬 Send WhatsApp / بھیجیں'),
           h('button', {
             onClick: handleCopy,
@@ -6103,7 +6255,7 @@ export default class App extends React.Component {
                   ),
                   h('div', { style: { fontWeight: 700, fontSize: 18, color: '#16211c', marginBottom: 4 } }, 'Your Udhar Book is empty'),
                   h('div', { style: { fontSize: 13, color: '#8b978f', marginBottom: 20 } }, 'Start by recording your first transaction'),
-                  h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { padding: '14px 28px', borderRadius: 14, background: '#0f6b4f', color: 'white', fontWeight: 700, fontSize: 15, border: 'none', boxShadow: '0 6px 16px rgba(15,107,79,.28)', cursor: 'pointer' } }, '+ Record First Entry'),
+                  h('button', { onClick: () => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { padding: '14px 28px', borderRadius: 14, background: '#0f6b4f', color: 'white', fontWeight: 700, fontSize: 15, border: 'none', cursor: 'pointer' } }, '+ Record First Entry'),
                 )
               : h('div', {},
                   h('div', { style: { fontSize: 14, fontWeight: 600, color: '#16211c' } }, 'No matching records'),
@@ -6287,8 +6439,8 @@ export default class App extends React.Component {
         'Since ' + new Date(firstDate + 'T00:00:00').toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }),
       ) : null,
       h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 } },
-        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: 'linear-gradient(135deg, #c0392b, #a93226)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', boxShadow: '0 4px 12px rgba(192,57,43,.25)' } }, '↑ Gave'),
-        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: 'linear-gradient(135deg, #0f6b4f, #0a5a3f)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', boxShadow: '0 4px 12px rgba(15,107,79,.25)' } }, '↓ Got'),
+        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: '#c0392b', color: 'white', fontWeight: 700, fontSize: 13, border: 'none' } }, '↑ Gave'),
+        h('button', { onClick: () => { this.openUdpiModal(null, personName); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }, style: { padding: '12px 8px', borderRadius: 12, background: '#0f6b4f', color: 'white', fontWeight: 700, fontSize: 13, border: 'none' } }, '↓ Got'),
         h('button', { onClick: () => this.openInvoiceModal(personName), style: { padding: '12px 8px', borderRadius: 12, background: '#e6eae5', color: '#16211c', fontWeight: 700, fontSize: 13, border: 'none' } }, '📄 Bill'),
       ),
       h('div', { style: { display: 'flex', gap: 5, marginBottom: 14, flexWrap: 'wrap' } },
@@ -7015,7 +7167,7 @@ export default class App extends React.Component {
             const ml = new Date(t.key + '-01T00:00:00').toLocaleDateString('en', { month: 'short' });
             return h('div', { key: t.key, onClick: () => this.setState({ pnlMonth: t.key }), style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' } },
               h('div', { className: 'mono', style: { fontSize: 10, color: '#5a6a5f', fontWeight: 600 } }, t.netPnL >= 1000 || t.netPnL <= -1000 ? Math.round(t.netPnL / 1000) + 'k' : t.netPnL),
-              h('div', { style: { width: '100%', maxWidth: 36, borderRadius: '6px 6px 0 0', height: barH + 'px', background: isPositive ? (isSel ? 'linear-gradient(180deg,#14a374,#0f6b4b)' : '#b6e2cc') : (isSel ? 'linear-gradient(180deg,#ef4444,#b91c1c)' : '#fca5a5'), transition: 'height .3s' } }),
+              h('div', { style: { width: '100%', maxWidth: 36, borderRadius: '6px 6px 0 0', height: barH + 'px', background: isPositive ? (isSel ? '#0f6b4b' : '#b6e2cc') : (isSel ? '#b91c1c' : '#fca5a5'), transition: 'height .3s' } }),
               h('div', { style: { fontSize: 11, fontWeight: isSel ? 700 : 500, color: isSel ? '#0f6b4b' : '#7a7663' } }, ml),
             );
           }),
@@ -7781,7 +7933,7 @@ export default class App extends React.Component {
     return h('div', { style: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef', padding: 16 } },
       h(Head, {}, h('title', {}, 'Sign in — Aqsat')),
       h('div', { style: { width: '100%', maxWidth: 360, background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #ece8dc' } },
-        h('div', { style: { width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 24, margin: '0 auto 12px' } }, 'A'),
+        h('div', { style: { width: 52, height: 52, borderRadius: 14, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 24, margin: '0 auto 12px' } }, 'A'),
         h('div', { style: { fontSize: 20, fontWeight: 800, textAlign: 'center', color: '#1a2b1f' } }, 'Aqsat'),
         h('div', { style: { fontSize: 13, color: '#7a7663', textAlign: 'center', marginBottom: 20 } }, 'Sign in to your shop / سائن ان کریں'),
         h('input', { type: 'text', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false, autoComplete: 'username', placeholder: 'Username / یوزر نیم', value: loginUser, onChange: e => this.setState({ loginUser: e.target.value, loginError: '' }), onKeyDown: onKey, style: inp }),
@@ -7806,7 +7958,7 @@ export default class App extends React.Component {
     const btnBase = { width: 76, height: 64, borderRadius: 16, border: '1px solid #ece8dc', background: '#fdfcf8', fontSize: 26, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a2b1f', transition: 'background .1s', touchAction: 'manipulation', userSelect: 'none', WebkitTapHighlightColor: 'transparent' };
     return h('div', { style: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f7f5ef' } },
       h('div', { style: { textAlign: 'center', width: '100%', maxWidth: 360, padding: '0 12px' } },
-        h('div', { style: { width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 26, margin: '0 auto 16px' } }, 'A'),
+        h('div', { style: { width: 56, height: 56, borderRadius: 16, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 26, margin: '0 auto 16px' } }, 'A'),
         h('div', { style: { fontSize: 22, fontWeight: 800, marginBottom: 2, color: '#1a2b1f' } }, 'Aqsat'),
         h('div', { style: { fontSize: 13, color: '#7a7663', marginBottom: 28 } }, 'Enter PIN to unlock / PIN درج کریں'),
         h('div', { style: { display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 10 } }, ...dots),
@@ -7848,6 +8000,7 @@ export default class App extends React.Component {
       newplan:    ['New Plan',  'نیا پلان',  'Create an installment plan'],
       record:     ['Record Payment', 'رقم وصول', 'Fast collection'],
       reports:    ['Reports',   'رپورٹس',    'Cashflow & analytics'],
+      insights:   ['Insights',  'جائزہ',     'Forecast, risk & profit'],
       reminders:  ['Reminders', 'یاد دہانی', 'Follow-ups & notifications'],
       ledger:     ['Ledger',     'لیجر',      'Income & expenses'],
       daybook:    ['Daily Book', 'روزنامچہ',  'Day-by-day cash register'],
@@ -7865,34 +8018,35 @@ export default class App extends React.Component {
     const t = titles[route] || titles.dashboard;
     const overdueCount = plans.reduce((a, pl) => a + this.planStats(pl).overdue.length, 0);
 
-    const navBase = { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, fontSize: 14, fontWeight: 500, color: '#3a4a3f', width: '100%' };
-    const navActive = { ...navBase, background: '#eaf5ee', color: '#0f6b4b', fontWeight: 700 };
+    const navBase = { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, fontSize: 13.5, fontWeight: 500, color: '#3a4a3f', width: '100%', borderLeft: '3px solid transparent' };
+    const navActive = { ...navBase, background: '#eaf5ee', color: '#0f6b4b', fontWeight: 700, borderLeft: '3px solid #0f6b4b' };
     const isOnCustomer = route === 'customer' || route === 'customers';
 
     const navItems = [
-      { key: 'dashboard', label: 'Dashboard', icon: '◆', go: () => this.go('dashboard') },
+      { group: 'Installments', key: 'dashboard', label: 'Dashboard', icon: '🏠', go: () => this.go('dashboard') },
       { key: 'customers', label: 'Customers',  icon: '👥', go: () => this.go('customers') },
       { key: 'plans',     label: 'Plans',      icon: '📋', go: () => this.go('plans') },
       { key: 'products',  label: 'Products',   icon: '📦', go: () => this.go('products') },
+      { key: 'insights',  label: 'Insights',   icon: '🎯', go: () => this.go('insights') },
       { key: 'reports',   label: 'Reports',    icon: '📊', go: () => this.go('reports') },
       { key: 'reminders', label: 'Reminders',  icon: '🔔', go: () => this.go('reminders'), badge: overdueCount > 0 ? String(overdueCount) : null },
-      { key: 'ledger',    label: 'Ledger',     icon: '📒', go: () => this.go('ledger') },
+      { group: 'Money', key: 'ledger',    label: 'Ledger',     icon: '📒', go: () => this.go('ledger') },
       { key: 'daybook',   label: 'Daily Book', icon: '📅', go: () => this.go('daybook') },
       { key: 'pnl',       label: 'P&L',        icon: '📈', go: () => this.go('pnl') },
       { key: 'accounts',  label: 'Accounts',   icon: '💰', go: () => this.go('accounts') },
       { key: 'udharbook', label: 'Udhar Book', icon: '🤝', go: () => this.go('udharbook') },
-      { key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
+      { group: 'Shop', key: 'staff',     label: 'Staff',       icon: '👷', go: () => this.go('staff') },
       { key: 'devices',   label: 'Device Lock', icon: '🔒', go: () => this.go('devices') },
       ...(this._isSalesman() ? [] : [{ key: 'audit', label: 'Staff & Audit', icon: '🛡️', go: () => this.go('audit') }, { key: 'recovery', label: 'Recovery', icon: '🛵', go: () => this.go('recovery') }]),
       { key: 'automation', label: 'WA Automation', icon: '🤖', go: () => this.go('automation') },
-      { key: 'stock', label: 'IMEI Stock', icon: '📦', go: () => this.go('stock') },
+      { key: 'stock', label: 'IMEI Stock', icon: '📲', go: () => this.go('stock') },
       { key: 'settings',  label: 'Settings',   icon: '⚙️', go: () => this.go('settings') },
     ].map(x => ({ ...x, active: route === x.key || (x.key === 'customers' && isOnCustomer) }));
 
     const mobileNavBase = { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '8px 4px', borderRadius: 10, color: '#7a7663' };
     const mobileNavActive = { ...mobileNavBase, color: '#0f6b4b', background: '#eaf5ee' };
     const mobileNav = [
-      { key: 'dashboard', label: 'Home',      icon: '◆', go: () => this.go('dashboard') },
+      { key: 'dashboard', label: 'Home',      icon: '🏠', go: () => this.go('dashboard') },
       { key: 'customers', label: 'Customers', icon: '👥', go: () => this.go('customers') },
       { key: 'newplan',   label: 'New',       icon: '＋', go: () => this.go('newplan') },
       { key: 'plans',     label: 'Plans',     icon: '📋', go: () => this.go('plans') },
@@ -7913,7 +8067,7 @@ export default class App extends React.Component {
             <meta name="theme-color" content="#0f6b4f" />
           </Head>
 
-          {this._isDemo && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: 'linear-gradient(90deg, #0f6b4f, #14a374)', color: '#fff', textAlign: 'center', padding: '6px 12px', fontSize: 12, fontWeight: 700, letterSpacing: '.5px' }}>
+          {this._isDemo && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: '#0f6b4f', color: '#fff', textAlign: 'center', padding: '6px 12px', fontSize: 12, fontWeight: 700, letterSpacing: '.5px' }}>
             DEMO MODE — Sample data · <a href="https://wa.me/923001234567?text=I%20want%20Udhar%20Book" style={{ color: '#fef3c7', textDecoration: 'underline' }}>Get Started →</a>
           </div>}
 
@@ -7974,8 +8128,8 @@ export default class App extends React.Component {
           {/* Floating Action Buttons */}
           <div style={{ position: 'fixed', bottom: 52, left: 0, right: 0, zIndex: 25, background: 'linear-gradient(180deg, rgba(255,255,255,0), #fff 40%)' }}>
             <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', gap: 8, padding: '8px 14px' }}>
-              <button onClick={() => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }} style={{ flex: 1, height: 40, borderRadius: 11, background: '#c0392b', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(192,57,43,.28)' }}>＋ Udhaar</button>
-              <button onClick={() => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }} style={{ flex: 1, height: 40, borderRadius: 11, background: '#0f6b4f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(15,107,79,.28)' }}>＋ Payment</button>
+              <button onClick={() => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'lent' } }), 50); }} style={{ flex: 1, height: 40, borderRadius: 11, background: '#c0392b', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer' }}>＋ Udhaar</button>
+              <button onClick={() => { this.openUdpiModal(); setTimeout(() => this.setState({ udpiModal: { ...this.state.udpiModal, direction: 'borrowed' } }), 50); }} style={{ flex: 1, height: 40, borderRadius: 11, background: '#0f6b4f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer' }}>＋ Payment</button>
             </div>
           </div>
 
@@ -8042,31 +8196,34 @@ export default class App extends React.Component {
     }
 
     return (
-      <div className={this.state.darkMode ? 'app dark' : 'app'} style={{ minHeight: '100vh', display: 'flex', background: '#f7f5ef' }}>
+      <div className={this.state.darkMode ? 'app dark' : 'app'} style={{ minHeight: '100vh', display: 'flex', background: '#f7f5ef', paddingTop: this._isDemo ? 28 : 0 }}>
         <Head>
           <title>Aqsat — Installment Manager</title>
           <meta name="description" content="Installment management for electronics & appliance shops" />
         </Head>
 
-        {this._isDemo && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: 'linear-gradient(90deg, #0f6b4f, #14a374)', color: '#fff', textAlign: 'center', padding: '6px 12px', fontSize: 12, fontWeight: 700, letterSpacing: '.5px' }}>
+        {this._isDemo && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: '#0f6b4f', color: '#fff', textAlign: 'center', padding: '6px 12px', fontSize: 12, fontWeight: 700, letterSpacing: '.5px' }}>
           DEMO MODE — Sample data shown · <a href="https://wa.me/923001234567?text=I%20want%20Aqsat%20Manager" style={{ color: '#fef3c7', textDecoration: 'underline' }}>Get Started →</a>
         </div>}
 
         {/* Sidebar desktop */}
-        <aside className="desktop-only" style={{ width: 244, flexShrink: 0, background: '#ffffff', borderRight: '1px solid #ece8dc', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 4, position: 'sticky', top: 0, height: '100vh', overflowY: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px 24px' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 18 }}>A</div>
+        <aside className="desktop-only" style={{ width: 232, flexShrink: 0, background: '#ffffff', borderRight: '1px solid #ece8dc', padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 1, position: 'sticky', top: this._isDemo ? 28 : 0, height: this._isDemo ? 'calc(100vh - 28px)' : '100vh', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px 18px' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 18 }}>A</div>
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.01em' }}>Aqsat</div>
               <div style={{ fontSize: 11, color: '#7a7663', marginTop: -2 }}>Installment Manager</div>
             </div>
           </div>
           {navItems.map(item => (
-            <button key={item.key} onClick={item.go} style={item.active ? navActive : navBase}>
-              <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center' }}>{item.icon}</span>
-              <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>
-              {item.badge && <span style={{ background: '#fce8b7', color: '#7a5100', fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 10 }}>{item.badge}</span>}
-            </button>
+            <React.Fragment key={item.key}>
+              {item.group && <div style={{ fontSize: 10.5, fontWeight: 700, color: '#a09a86', textTransform: 'uppercase', letterSpacing: '0.08em', padding: item.group === 'Installments' ? '0 13px 6px' : '16px 13px 6px' }}>{item.group}</div>}
+              <button className="nav-item" onClick={item.go} style={item.active ? navActive : navBase}>
+                <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center', fontSize: 14 }}>{item.icon}</span>
+                <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>
+                {item.badge && <span style={{ background: '#fce8b7', color: '#7a5100', fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 10 }}>{item.badge}</span>}
+              </button>
+            </React.Fragment>
           ))}
           <div style={{ marginTop: 'auto', padding: '12px 10px', borderTop: '1px solid #ece8dc', display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e7dcc4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#6b4a1a', flexShrink: 0 }}>{(this.state.settings.ownerName || 'O').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()}</div>
@@ -8078,8 +8235,8 @@ export default class App extends React.Component {
         </aside>
 
         {/* Mobile topbar */}
-        <div className="mobile-only" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 30, background: '#ffffff', borderBottom: '1px solid #ece8dc', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg,#0f6b4b,#14a374)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, flexShrink: 0 }}>A</div>
+        <div className="mobile-only" style={{ position: 'fixed', top: this._isDemo ? 28 : 0, left: 0, right: 0, zIndex: 30, background: '#ffffff', borderBottom: '1px solid #ece8dc', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: '#0f6b4b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, flexShrink: 0 }}>A</div>
           <div style={{ flex: 1, background: '#f4f1e6', borderRadius: 10, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 13 }}>🔍</span>
             <input placeholder="Search…" value={this.state.searchQuery} onChange={e => {
@@ -8097,9 +8254,9 @@ export default class App extends React.Component {
         {/* Main */}
         <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', paddingBottom: 80 }}>
           {/* Desktop topbar */}
-          <div className="desktop-only" style={{ padding: '12px 22px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid #ece8dc', background: '#fdfcf8', position: 'sticky', top: 0, zIndex: 20 }}>
+          <div className="desktop-only" style={{ padding: '12px 28px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid #ece8dc', background: '#fdfcf8', position: 'sticky', top: this._isDemo ? 28 : 0, zIndex: 20 }}>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-0.01em' }}>
+              <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'baseline', gap: 8 }}>
                 {t[0]} <span className="ur" style={{ fontSize: 13, color: '#7a7663', fontWeight: 400 }}>{t[1]}</span>
               </div>
               <div style={{ fontSize: 11, color: '#7a7663', marginTop: 1 }}>{t[2]}</div>
@@ -8118,15 +8275,15 @@ export default class App extends React.Component {
                 <span style={{ fontSize: 11, color: '#a09a86', background: '#f4f1e6', padding: '2px 6px', borderRadius: 5 }}>⌘K</span>
               </div>
             </div>
-            <button onClick={() => this.go('newplan')} style={{ background: '#0f6b4b', color: 'white', padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>＋ New Plan</button>
-            <button style={{ width: 40, height: 40, borderRadius: 10, background: '#f4f1e6', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+            <button className="btn" onClick={() => this.go('newplan')} style={{ background: '#0f6b4b', color: 'white', padding: '10px 16px', borderRadius: 10, fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>＋ New Plan</button>
+            <button className="btn" title="Reminders" onClick={() => this.go('reminders')} style={{ width: 40, height: 40, borderRadius: 10, background: '#f4f1e6', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               🔔
               {overdueCount > 0 && <span style={{ position: 'absolute', top: 6, right: 8, width: 8, height: 8, background: '#d93b3b', borderRadius: '50%' }} />}
             </button>
           </div>
 
           {/* Screen area — extra top padding on mobile for fixed header */}
-          <div style={{ padding: '18px 22px', flex: 1 }} className="screen-container">
+          <div style={{ padding: '22px 28px', flex: 1, width: '100%', maxWidth: 1320 }} className="screen-container">
             <div className="mobile-only" style={{ height: 56 }} />
             {route === 'dashboard'  && this.renderDashboard()}
             {route === 'customers'  && this.renderCustomers()}
@@ -8136,6 +8293,7 @@ export default class App extends React.Component {
             {route === 'newplan'    && this.renderNewPlan()}
             {route === 'record'     && this.renderRecordPayment()}
             {route === 'reports'    && this.renderReports()}
+            {route === 'insights'   && this.renderInsights()}
             {route === 'reminders'  && this.renderReminders()}
             {route === 'ledger'     && this.renderLedger()}
             {route === 'daybook'    && this.renderDayBook()}
@@ -8179,8 +8337,9 @@ export default class App extends React.Component {
           <div onClick={() => this.setState({ menuOpen: false })} className="mobile-only" style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,31,0.5)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
             <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', borderRadius: '20px 20px 0 0', padding: '20px 16px 36px', width: '100%', animation: 'slideIn .2s ease' }}>
               <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d9d5c7', margin: '0 auto 20px' }} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16, maxHeight: '62vh', overflowY: 'auto' }}>
                 {[
+                  { icon: '🎯', label: 'Insights',  go: 'insights' },
                   { icon: '📊', label: 'Reports',   go: 'reports' },
                   { icon: '🔔', label: 'Reminders', go: 'reminders', badge: overdueCount > 0 ? overdueCount : null },
                   { icon: '📦', label: 'Products',  go: 'products' },
@@ -8193,11 +8352,11 @@ export default class App extends React.Component {
                   { icon: '🔒', label: 'Device Lock', go: 'devices' },
                   ...(this._isSalesman() ? [] : [{ icon: '🛡️', label: 'Staff & Audit', go: 'audit' }, { icon: '🛵', label: 'Recovery', go: 'recovery' }]),
                   { icon: '🤖', label: 'WA Automation', go: 'automation' },
-                  { icon: '📦', label: 'IMEI Stock', go: 'stock' },
+                  { icon: '📲', label: 'IMEI Stock', go: 'stock' },
                   { icon: '⚙️', label: 'Settings',  go: 'settings' },
                 ].map(item => (
-                  <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderRadius: 14, background: '#f7f5ef', border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative' }}>
-                    <span style={{ fontSize: 20 }}>{item.icon}</span>
+                  <button key={item.go} onClick={() => { if (item.ext) { window.location.href = item.ext; return; } this.go(item.go); this.setState({ menuOpen: false }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 12, background: this.state.route === item.go ? '#eaf5ee' : '#f7f5ef', color: this.state.route === item.go ? '#0f6b4b' : undefined, border: '1px solid #ece8dc', fontWeight: 600, fontSize: 14, position: 'relative', textAlign: 'left' }}>
+                    <span style={{ fontSize: 18 }}>{item.icon}</span>
                     {item.label}
                     {item.badge && <span style={{ position: 'absolute', top: 8, right: 8, background: '#fce8b7', color: '#7a5100', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 10 }}>{item.badge}</span>}
                   </button>
