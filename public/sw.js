@@ -8,8 +8,8 @@
 //   2. Next.js build assets under /_next/static/ are content-hashed, so their
 //      URL changes whenever the file changes. They are safe to serve cache-first,
 //      which is what makes the app open instantly with no connection.
-const CACHE = 'aqsat-v7';
-const PRECACHE = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'];
+const CACHE = 'aqsat-v8';
+const PRECACHE = ['/', '/manifest.json', '/icon-w-192.png', '/icon-w-512.png', '/apple-touch-icon-w.png'];
 
 // Let a freshly-installed worker take over immediately when the page asks.
 self.addEventListener('message', e => {

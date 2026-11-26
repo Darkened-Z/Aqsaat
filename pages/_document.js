@@ -16,11 +16,11 @@ export default function Document() {
         <meta name="apple-mobile-web-app-title" content="Aqsat" />
 
         {/* iOS home screen icon */}
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon-w.png" />
 
         {/* Favicon */}
-        <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
-        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+        <link rel="icon" type="image/png" sizes="64x64" href="/favicon-w.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-w-192.png" />
 
         {/* Self-heal, all without touching saved data or login:
             - every new deploy wipes the phone's cached copy of the app (server-driven)
