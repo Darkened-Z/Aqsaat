@@ -37,32 +37,71 @@ input:focus, select:focus, textarea:focus { border-color: #0f6b4b !important; ou
 }
 @media (min-width: 861px) {
   .mobile-only { display: none !important; }
+  .udhar-body { zoom: .82; }
 }
 
-/* ── Dark mode ── */
+/* ── Dark mode ──
+   React writes inline colours as rgb(), so these match that form. */
 .app.dark { background: #0f1a13 !important; color: #e8ede9; }
 .app.dark aside { background: #141f17 !important; border-color: #243028 !important; }
 .app.dark main > div:first-child { background: #141f17 !important; border-color: #243028 !important; }
-.app.dark div[style*="background: #ffffff"],
-.app.dark div[style*='background: #ffffff'],
-.app.dark div[style*="background:#ffffff"],
-.app.dark div[style*='background:#ffffff'] { background: #1a2b1f !important; border-color: #243028 !important; }
-.app.dark div[style*="background: #fdfcf8"],
-.app.dark div[style*='background: #fdfcf8'] { background: #172118 !important; }
-.app.dark div[style*="background: #f7f5ef"],
-.app.dark div[style*='background: #f7f5ef'] { background: #0f1a13 !important; }
-.app.dark div[style*="background: #f4f1e6"],
-.app.dark div[style*='background: #f4f1e6'],
-.app.dark button[style*="background: #f4f1e6"],
-.app.dark button[style*='background: #f4f1e6'] { background: #243028 !important; color: #c8d4cc !important; }
-.app.dark .tap:hover { background: #172118 !important; }
-.app.dark .nav-item:hover { background: #1a2b1f; }
+.app.dark [style*="background: rgb(255, 255, 255)"] { background: #18241b !important; }
+.app.dark [style*="background: rgb(253, 252, 248)"] { background: #1b281e !important; }
+.app.dark [style*="background: rgb(250, 249, 245)"] { background: #1b281e !important; }
+.app.dark [style*="background: rgb(255, 253, 245)"] { background: #1b281e !important; }
+.app.dark [style*="background: rgb(255, 253, 240)"] { background: #1b281e !important; }
+.app.dark [style*="background: rgb(249, 246, 238)"] { background: #1b281e !important; }
+.app.dark [style*="background: rgb(248, 250, 247)"] { background: #1b281e !important; }
+.app.dark [style*="background: rgb(248, 250, 252)"] { background: #1b281e !important; }
+.app.dark [style*="background: rgb(247, 245, 239)"] { background: #0f1a13 !important; }
+.app.dark [style*="background: rgb(244, 246, 243)"] { background: #0f1a13 !important; }
+.app.dark [style*="background: rgb(244, 241, 230)"] { background: #243028 !important; }
+.app.dark [style*="background: rgb(242, 238, 226)"] { background: #243028 !important; }
+.app.dark [style*="background: rgb(236, 232, 220)"] { background: #2a382e !important; }
+.app.dark [style*="background: rgb(230, 234, 229)"] { background: #2a382e !important; }
+.app.dark [style*="background: rgb(216, 222, 217)"] { background: #33443a !important; }
+.app.dark [style*="background: rgb(234, 245, 238)"] { background: #173826 !important; }
+.app.dark [style*="background: rgb(240, 253, 244)"] { background: #173826 !important; }
+.app.dark [style*="background: rgb(220, 252, 231)"] { background: #173826 !important; }
+.app.dark [style*="background: rgb(232, 245, 233)"] { background: #173826 !important; }
+.app.dark [style*="background: rgb(253, 236, 234)"] { background: #3a1f1c !important; }
+.app.dark [style*="background: rgb(254, 242, 242)"] { background: #3a1f1c !important; }
+.app.dark [style*="background: rgb(254, 226, 226)"] { background: #3a1f1c !important; }
+.app.dark [style*="background: rgb(251, 229, 226)"] { background: #3a1f1c !important; }
+.app.dark [style*="background: rgb(253, 242, 217)"] { background: #3a2f17 !important; }
+.app.dark [style*="background: rgb(254, 243, 199)"] { background: #3a2f17 !important; }
+.app.dark [style*="background: rgb(252, 232, 183)"] { background: #3a2f17 !important; }
+.app.dark [style*="background: rgb(255, 247, 237)"] { background: #3a2a17 !important; }
+.app.dark [style*="background: rgb(254, 249, 195)"] { background: #3a3417 !important; }
+.app.dark [style*="background: rgb(253, 248, 236)"] { background: #3a2f17 !important; }
+.app.dark [style*="background: rgb(219, 234, 254)"] { background: #1c2a40 !important; }
+.app.dark [style*="background: rgb(240, 244, 255)"] { background: #1c2a40 !important; }
+.app.dark [style*="background: rgb(243, 232, 255)"] { background: #2d1f40 !important; }
+.app.dark [style*="; color: rgb(26, 43, 31)"], .app.dark [style^="color: rgb(26, 43, 31)"] { color: #e8ede9 !important; }
+.app.dark [style*="; color: rgb(22, 33, 28)"], .app.dark [style^="color: rgb(22, 33, 28)"] { color: #e8ede9 !important; }
+.app.dark [style*="; color: rgb(17, 17, 17)"], .app.dark [style^="color: rgb(17, 17, 17)"] { color: #e8ede9 !important; }
+.app.dark [style*="; color: rgb(58, 74, 63)"], .app.dark [style^="color: rgb(58, 74, 63)"] { color: #c8d4cc !important; }
+.app.dark [style*="; color: rgb(61, 74, 68)"], .app.dark [style^="color: rgb(61, 74, 68)"] { color: #c8d4cc !important; }
+.app.dark [style*="; color: rgb(90, 106, 95)"], .app.dark [style^="color: rgb(90, 106, 95)"] { color: #9fb0a4 !important; }
+.app.dark [style*="; color: rgb(122, 118, 99)"], .app.dark [style^="color: rgb(122, 118, 99)"] { color: #8fa293 !important; }
+.app.dark [style*="; color: rgb(139, 151, 143)"], .app.dark [style^="color: rgb(139, 151, 143)"] { color: #8fa293 !important; }
+.app.dark [style*="; color: rgb(160, 154, 134)"], .app.dark [style^="color: rgb(160, 154, 134)"] { color: #7d8f81 !important; }
+.app.dark [style*="; color: rgb(107, 107, 107)"], .app.dark [style^="color: rgb(107, 107, 107)"] { color: #8fa293 !important; }
+.app.dark [style*="; color: rgb(15, 107, 75)"], .app.dark [style^="color: rgb(15, 107, 75)"] { color: #4cc38a !important; }
+.app.dark [style*="; color: rgb(15, 107, 79)"], .app.dark [style^="color: rgb(15, 107, 79)"] { color: #4cc38a !important; }
+.app.dark [style*="; color: rgb(164, 54, 43)"], .app.dark [style^="color: rgb(164, 54, 43)"] { color: #f08a7e !important; }
+.app.dark [style*="; color: rgb(185, 28, 28)"], .app.dark [style^="color: rgb(185, 28, 28)"] { color: #f08a7e !important; }
+.app.dark [style*="; color: rgb(162, 106, 16)"], .app.dark [style^="color: rgb(162, 106, 16)"] { color: #e0b25a !important; }
+.app.dark [style*="; color: rgb(122, 81, 0)"], .app.dark [style^="color: rgb(122, 81, 0)"] { color: #e0b25a !important; }
+.app.dark [style*="; color: rgb(21, 128, 61)"], .app.dark [style^="color: rgb(21, 128, 61)"] { color: #6fdc9a !important; }
+.app.dark [style*="; color: rgb(146, 64, 14)"], .app.dark [style^="color: rgb(146, 64, 14)"] { color: #e0b25a !important; }
+.app.dark [style*="; color: rgb(122, 90, 16)"], .app.dark [style^="color: rgb(122, 90, 16)"] { color: #e0b25a !important; }
+.app.dark [style*="rgb(236, 232, 220)"], .app.dark [style*="rgb(242, 238, 226)"], .app.dark [style*="rgb(230, 234, 229)"], .app.dark [style*="rgb(230, 244, 237)"], .app.dark [style*="rgb(216, 222, 217)"], .app.dark [style*="rgb(229, 229, 229)"], .app.dark [style*="rgb(217, 213, 199)"], .app.dark [style*="rgb(240, 230, 200)"], .app.dark [style*="rgb(245, 202, 194)"], .app.dark [style*="rgb(187, 247, 208)"], .app.dark [style*="rgb(240, 224, 176)"], .app.dark [style*="rgb(211, 233, 221)"] { border-color: #2a382e !important; }
 .app.dark input, .app.dark select, .app.dark textarea { background: #172118 !important; color: #e8ede9 !important; border-color: #2e3d32 !important; }
-.app.dark div[style*="color: #7a7663"],
-.app.dark div[style*='color: #7a7663'],
-.app.dark span[style*="color: #7a7663"] { color: #8a9e8d !important; }
-.app.dark div[style*="border: 1px solid #ece8dc"],
-.app.dark div[style*='border: 1px solid #ece8dc'] { border-color: #243028 !important; }
+.app.dark .tap:hover { background: #1f2e23 !important; }
+.app.dark .nav-item:hover { background: #1a2b1f; }
+.app.dark .row-link:hover td { background: #1f2e23; }
+.app.dark ::-webkit-scrollbar-thumb { background: #2e3d32; }
 
 /* ── Print ── */
 @media print {

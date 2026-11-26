@@ -1708,6 +1708,19 @@ export default class App extends React.Component {
   };
 
   activeStaff() { return (this.state.staff || []).filter(s => !s._deleted); }
+  sellerNames() {
+    const me = this.state.me && this.state.me.name;
+    const names = [this.state.settings.ownerName || 'Owner', me, ...this.activeStaff().map(s => s.name), ...this.activePlans().map(p => p.soldBy)];
+    return [...new Set(names.filter(Boolean).map(n => String(n).trim()).filter(Boolean))];
+  }
+  defaultSeller() {
+    const me = this.state.me;
+    return me && me.role === 'salesman' && me.name ? me.name : '';
+  }
+  sellerSelect(value, onChange, style) {
+    const h = this.h;
+    return h('select', { value: value || '', onChange: e => onChange(e.target.value), style }, h('option', { value: '' }, '— Not set —'), this.sellerNames().map(n => h('option', { key: n, value: n }, n)));
+  }
 
   openStaffModal = (editId) => {
     if (editId) {
@@ -1972,7 +1985,7 @@ export default class App extends React.Component {
     const monthly = installAmt > 0 ? installAmt : (months > 0 ? Math.round(total2Pay / months) : 0);
     const voucherSeq = (this.state.plans.length + 1).toString().padStart(3, '0');
     const voucherNo = 'VCH-' + new Date().getFullYear() + '-' + voucherSeq;
-    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: this._localDateStr(start), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, engineNo: np.engineNo, serialNo: np.serialNo, frequency: np.frequency, frequencyDays: freqDays, accountId: np.accountId, lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
+    const plan = { id: 'pl_' + Date.now().toString(36), voucherNo, customerId: np.customerId, productId: np.productId, total, down, months, interest: profitPct, monthly, installmentAmount: installAmt, startDate: this._localDateStr(start), status: 'active', schedule, imei: np.imei, chassisNo: np.chassisNo, engineNo: np.engineNo, serialNo: np.serialNo, frequency: np.frequency, frequencyDays: freqDays, accountId: np.accountId, soldBy: (np.soldBy !== undefined ? np.soldBy : this.defaultSeller()) || '', lateFee: { graceDays: parseInt(np.graceDays) || 0, lateFeeFlat: parseFloat(np.lateFeeFlat) || 0, lateFeePerDay: parseFloat(np.lateFeePerDay) || 0, maxLateFee: this.state.settings.maxLateFee } };
     const customer = this.state.customers.find(c => c.id === np.customerId);
     const custName = customer ? customer.name : '';
     const prodName = product ? product.name : '';
@@ -2399,7 +2412,7 @@ export default class App extends React.Component {
     const initAmt = String(Math.round(financed0 * (pl.interest || 0) / 100));
     const firstUnpaid = pl.schedule.find(s => !s.paid);
     const initInst = String(firstUnpaid ? firstUnpaid.amount : (pl.installmentAmount || pl.monthly || 0));
-    const doOpen = () => this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftInterestAmount: initAmt, draftInstallmentAmount: initInst, draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftEngineNo: pl.engineNo || '', draftSerialNo: pl.serialNo || '', draftNotes: pl.notes || '' } });
+    const doOpen = () => this.setState({ editPlanModal: { open: true, planId, pinInput: '', pinConfirmed: true, draftCustomerId: pl.customerId, draftProductId: pl.productId, draftTotal: String(pl.total), draftDown: String(pl.down), draftInterest: String(pl.interest || 0), draftInterestAmount: initAmt, draftInstallmentAmount: initInst, draftStartDate: pl.startDate || '', draftSchedule: pl.schedule.map(s => ({ ...s })), draftImei: pl.imei || '', draftChassisNo: pl.chassisNo || '', draftEngineNo: pl.engineNo || '', draftSerialNo: pl.serialNo || '', draftNotes: pl.notes || '', draftSoldBy: pl.soldBy || '' } });
     this.requirePin(doOpen);
   };
   closeEditPlan = () => this.setState({ editPlanModal: { open: false, planId: null, pinInput: '', pinConfirmed: true, draftCustomerId: '', draftProductId: '', draftTotal: '', draftDown: '', draftInterest: '', draftInterestAmount: '', draftInstallmentAmount: '', draftStartDate: '', draftSchedule: [], draftImei: '', draftChassisNo: '', draftEngineNo: '', draftSerialNo: '', draftNotes: '' } });
@@ -2535,7 +2548,7 @@ export default class App extends React.Component {
       const months = schedule.length;
       const firstUnpaid = schedule.find(s => !s.paid);
       const monthly = installAmt > 0 ? installAmt : (firstUnpaid ? firstUnpaid.amount : (months > 0 ? Math.round(total2Pay / months) : 0));
-      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, installmentAmount: installAmt, startDate: em.draftStartDate || pl.startDate, months, schedule, frequencyDays: freqDays, imei: em.draftImei, chassisNo: em.draftChassisNo, engineNo: em.draftEngineNo, serialNo: em.draftSerialNo, notes: em.draftNotes, status: allPaid ? 'completed' : 'active' };
+      return { ...pl, customerId: em.draftCustomerId || pl.customerId, productId: em.draftProductId || pl.productId, total, down, interest, monthly, installmentAmount: installAmt, startDate: em.draftStartDate || pl.startDate, months, schedule, frequencyDays: freqDays, imei: em.draftImei, chassisNo: em.draftChassisNo, engineNo: em.draftEngineNo, serialNo: em.draftSerialNo, notes: em.draftNotes, soldBy: em.draftSoldBy !== undefined ? em.draftSoldBy : (pl.soldBy || ''), status: allPaid ? 'completed' : 'active' };
     });
     const edited = plans.find(pl => pl.id === em.planId);
     const ledger = edited ? this._syncPlanLedger(this.state.ledger || [], edited) : this.state.ledger;
@@ -3261,7 +3274,13 @@ export default class App extends React.Component {
     const c = this.state.customers.find(x => x.id === id);
     if (!c) return h('div', {}, 'Customer not found.');
     const st = this.customerStats(id);
-    const nextInst = st.plans.flatMap(pl => pl.schedule.filter(s => !s.paid)).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))[0];
+    const nextPair = st.plans.flatMap(pl => pl.schedule.filter(s => !s.paid).map(s => ({ pl, s }))).sort((a, b) => new Date(a.s.dueDate) - new Date(b.s.dueDate))[0];
+    const nextInst = nextPair && nextPair.s;
+    const moreOpen = this.state.custMoreOpen === c.id;
+    const closeMore = () => this.setState({ custMoreOpen: null });
+    const btn = { padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', whiteSpace: 'nowrap' };
+    const ghost = { ...btn, background: '#ffffff', border: '1px solid #ece8dc', color: '#3a4a3f' };
+    const menuItem = (label, onClick, danger) => h('button', { onClick: () => { closeMore(); onClick(); }, className: 'nav-item', style: { display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, color: danger ? '#a4362b' : '#3a4a3f' } }, label);
     return h('div', { className: 'screen' },
       h('button', { onClick: () => this.go('customers'), style: { fontSize: 13, color: '#7a7663', marginBottom: 16, fontWeight: 500 } }, '← Back to customers'),
       this.card([
@@ -3277,18 +3296,26 @@ export default class App extends React.Component {
               h('span', {}, '📅 Joined ' + this.fmtDate(c.joined)),
             ),
           ),
-          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-            h('button', { onClick: () => this.openEditCustomer(c.id), style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '✎ Edit'),
-            h('button', { onClick: () => this.deleteCustomer(c.id), style: { background: '#fdecea', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#a4362b' } }, '🗑 Delete'),
-            nextInst ? h('a', { href: this.waLink(c.phone, c.name, nextInst.amount, nextInst.dueDate), target: '_blank', rel: 'noopener', style: { background: '#f4f1e6', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' } }, '💬 Manual') : null,
-            nextInst && c.phone ? h('button', { onClick: () => { const pl = st.plans[0]; const pr = this.state.products.find(x => x.id === pl.productId); this.sendInstallmentReminder(c, pl, pr, nextInst); }, style: { background: '#0f6b4b', color: 'white', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '🤖 Auto Send') : null,
-            h('button', { onClick: () => this.go('newplan'), style: { background: '#0f6b4b', color: 'white', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 } }, '＋ New Plan'),
+          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+            nextPair ? h('button', { className: 'btn', onClick: () => this.openPayment(nextPair.pl.id, nextPair.s.n), style: { ...btn, background: '#0f6b4b', color: '#ffffff' } }, '💵 Collect ' + this.fmtPKR(nextInst.amount)) : null,
+            nextInst && c.phone ? h('button', { className: 'btn', onClick: () => { const pr = this.state.products.find(x => x.id === nextPair.pl.productId); this.sendInstallmentReminder(c, nextPair.pl, pr, nextInst); }, style: ghost }, '🤖 Send reminder') : null,
+            h('button', { className: 'btn', onClick: () => this.setState({ newPlan: { ...this.state.newPlan, customerId: c.id } }, () => this.go('newplan')), style: nextPair ? ghost : { ...btn, background: '#0f6b4b', color: '#ffffff' } }, '＋ New plan'),
+            h('div', { style: { position: 'relative' } },
+              h('button', { className: 'btn', onClick: () => this.setState({ custMoreOpen: moreOpen ? null : c.id }), style: ghost }, '⋯ More'),
+              moreOpen ? h('div', { onClick: closeMore, style: { position: 'fixed', inset: 0, zIndex: 40 } }) : null,
+              moreOpen ? h('div', { style: { position: 'absolute', right: 0, top: '100%', marginTop: 6, zIndex: 41, background: '#ffffff', border: '1px solid #ece8dc', borderRadius: 12, padding: 6, minWidth: 210, boxShadow: '0 8px 24px rgba(26,43,31,.12)' } },
+                menuItem('✎ Edit customer', () => this.openEditCustomer(c.id)),
+                nextInst && c.phone ? menuItem('💬 WhatsApp (type it myself)', () => window.open(this.waLink(c.phone, c.name, nextInst.amount, nextInst.dueDate), '_blank', 'noopener')) : null,
+                c.phone ? menuItem('📞 Call', () => { window.location.href = 'tel:' + c.phone; }) : null,
+                c.phone ? h('div', { style: { height: 1, background: '#f2eee2', margin: '4px 6px' } }) : null,
+                c.phone ? menuItem('🔗 Send portal link', () => this.sharePortalLink(c)) : null,
+                c.phone ? menuItem('📋 Copy portal link', () => this.copyPortalLink(c.phone)) : null,
+                c.phone ? menuItem('👁 Preview portal', () => window.open(this.getPortalLink(c.phone), '_blank', 'noopener')) : null,
+                h('div', { style: { height: 1, background: '#f2eee2', margin: '4px 6px' } }),
+                menuItem('🗑 Delete customer', () => this.deleteCustomer(c.id), true),
+              ) : null,
+            ),
           ),
-          c.phone ? h('div', { style: { display: 'flex', gap: 8, marginTop: 8 } },
-            h('button', { onClick: () => this.sharePortalLink(c), style: { background: '#25D366', color: 'white', padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, border: 'none' } }, '🔗 Send Portal Link'),
-            h('button', { onClick: () => this.copyPortalLink(c.phone), style: { background: '#f4f1e6', padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, border: 'none' } }, '📋 Copy Portal Link'),
-            h('a', { href: this.getPortalLink(c.phone), target: '_blank', style: { background: '#f4f1e6', padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, textDecoration: 'none', color: '#3a4a3f', display: 'inline-flex', alignItems: 'center' } }, '👁 Preview Portal'),
-          ) : null,
         ),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginTop: 24 } },
           [['Total sold', this.fmtPKR(st.total), '#1a2b1f'], ['Received', this.fmtPKR(st.paid), '#0f6b4b'], ['Outstanding', this.fmtPKR(st.remaining), st.overdue > 0 ? '#a4362b' : '#1a2b1f'], ['Overdue', this.fmtPKR(st.overdue), '#a4362b']].map(([lbl, val, col], i) =>
@@ -3325,7 +3352,7 @@ export default class App extends React.Component {
                 ? h('span', { style: { fontSize: 10, fontWeight: 700, color: '#a4362b', background: '#fdecea', padding: '3px 8px', borderRadius: 20 } }, 'OVERDUE')
                 : h('span', { style: { fontSize: 10, fontWeight: 700, color: '#a26a10', background: '#fdf2d9', padding: '3px 8px', borderRadius: 20 } }, 'ACTIVE'),
           ),
-          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, [c ? c.name : '', 'Started ' + this.fmtDate(pl.startDate), pl.months + ' months' + (pl.interest != null && pl.interest !== '' ? ' @ ' + pl.interest + '% markup' : '')].filter(Boolean).join(' · ')),
+          h('div', { style: { fontSize: 12, color: '#7a7663', marginTop: 2 } }, [c ? c.name : '', pl.soldBy ? 'Sold by ' + pl.soldBy : '', 'Started ' + this.fmtDate(pl.startDate), pl.months + ' months' + (pl.interest != null && pl.interest !== '' ? ' @ ' + pl.interest + '% markup' : '')].filter(Boolean).join(' · ')),
           pl.voucherNo ? h('div', { className: 'mono', style: { fontSize: 11, color: '#7a7663', marginTop: 3, fontWeight: 600 } }, pl.voucherNo) : null,
         ),
         h('div', { style: { textAlign: 'right' } },
@@ -3646,6 +3673,7 @@ export default class App extends React.Component {
               : h('div', { style: { fontSize: 13, color: '#7a7663' } }, 'No accounts configured. Add in Settings.');
             })(),
           ),
+          field('Sold by', 'فروخت کنندہ', this.sellerSelect(np.soldBy !== undefined ? np.soldBy : this.defaultSeller(), v => set('soldBy', v), inpStyle)),
           isMobile ? field('IMEI Number', 'آئی ایم ای آئی', h('div', {}, h('input', { value: np.imei, list: 'stock-imeis', onChange: e => set('imei', e.target.value), placeholder: '15-digit IMEI — pick from stock', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } }), h('datalist', { id: 'stock-imeis' }, ((this.state.products.find(p => p.id === np.productId) || {}).units || []).filter(u => !u._deleted && u.status === 'in_stock' && u.imei).map(u => h('option', { key: u.id, value: u.imei }, u.imei2 ? 'IMEI2 ' + u.imei2 : ''))))) : null,
           isVehicle ? field('Chassis Number', 'چیسس نمبر', h('input', { value: np.chassisNo, onChange: e => set('chassisNo', e.target.value), placeholder: 'e.g. ABC1234567890', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
           isVehicle ? field('Engine Number', 'انجن نمبر', h('input', { value: np.engineNo, onChange: e => set('engineNo', e.target.value), placeholder: 'e.g. G15A1234567', style: { ...inpStyle, fontFamily: 'JetBrains Mono, monospace' } })) : null,
@@ -4043,6 +4071,7 @@ export default class App extends React.Component {
     let next30 = 0, overdueAmt = 0, paidCount = 0, paidOnTime = 0;
     const perCustomer = {};
     const perProduct = {};
+    const perSeller = {};
 
     plans.forEach(pl => {
       const st = this.planStats(pl);
@@ -4065,6 +4094,14 @@ export default class App extends React.Component {
         }
       });
       const p = products.find(x => x.id === pl.productId);
+      const sk = pl.soldBy || '';
+      const se = perSeller[sk] || (perSeller[sk] = { name: sk || 'Not set', plans: 0, sales: 0, cost: 0, collected: 0, overdue: 0, atRisk: 0 });
+      se.plans++;
+      se.sales += st.total;
+      se.cost += p && p.costPrice ? Number(p.costPrice) : 0;
+      se.collected += st.paidAmount;
+      se.overdue += st.overdue.reduce((a, s) => a + s.amount, 0);
+      if (pl.status === 'active' && pl.schedule.some(s => !s.paid && this.dayDiff(s.dueDate) < -30)) se.atRisk++;
       const key = pl.productId || 'none';
       const pp = perProduct[key] || (perProduct[key] = { name: p ? p.name : 'Deleted product', emoji: p ? p.emoji : '📦', units: 0, sales: 0, cost: 0, collected: 0 });
       pp.units++;
@@ -4087,6 +4124,7 @@ export default class App extends React.Component {
 
     const prodRows = Object.values(perProduct).map(r => ({ ...r, profit: r.sales - r.cost })).sort((a, b) => b.profit - a.profit);
     const totProfit = prodRows.reduce((a, r) => a + r.profit, 0);
+    const sellerRows = Object.values(perSeller).map(r => ({ ...r, profit: r.sales - r.cost })).sort((a, b) => (a.name === 'Not set') - (b.name === 'Not set') || b.profit - a.profit);
     const maxWeek = Math.max(1, ...weeks.map(w => w.amount));
     const maxProfit = Math.max(1, ...prodRows.map(r => Math.abs(r.profit)));
 
@@ -4165,6 +4203,26 @@ export default class App extends React.Component {
             ))),
           )),
         h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 10 } }, 'Profit = total payable on the plan − product cost price. Set cost prices in Products for accurate numbers.'),
+      ]),
+      h('div', { style: { height: 12 } }),
+      this.card([
+        this.sectionHeader('By salesman', 'فروخت کنندہ کے حساب سے', null),
+        sellerRows.length === 0 ? empty('No plans yet.') :
+        h('div', { style: { overflowX: 'auto' } },
+          h('table', { style: { width: '100%', borderCollapse: 'collapse', minWidth: 560 } },
+            h('thead', null, h('tr', null,
+              h('th', { style: th }, 'Sold by'), h('th', { style: { ...th, textAlign: 'right' } }, 'Plans'), h('th', { style: { ...th, textAlign: 'right' } }, 'Sold for'), h('th', { style: { ...th, textAlign: 'right' } }, 'Profit'), h('th', { style: { ...th, textAlign: 'right' } }, 'Collected'), h('th', { style: { ...th, textAlign: 'right' } }, 'Overdue'), h('th', { style: { ...th, textAlign: 'right' } }, '30+ days late'))),
+            h('tbody', null, ...sellerRows.map(r => h('tr', { key: r.name },
+              h('td', { style: { ...td, fontWeight: 600, color: r.name === 'Not set' ? '#7a7663' : undefined } }, r.name === 'Not set' ? 'Not set' : '👤 ' + r.name),
+              h('td', { style: num }, r.plans),
+              h('td', { style: num }, fmt(r.sales)),
+              h('td', { style: { ...num, color: r.profit >= 0 ? '#0f6b4b' : '#a4362b', fontWeight: 700 } }, fmt(r.profit)),
+              h('td', { style: num }, pct(r.collected, r.sales) + '%'),
+              h('td', { style: { ...num, color: r.overdue ? '#a4362b' : '#7a7663' } }, r.overdue ? fmt(r.overdue) : '—'),
+              h('td', { style: { ...num, color: r.atRisk ? '#a4362b' : '#7a7663' } }, r.atRisk || '—'),
+            ))),
+          )),
+        sellerRows.some(r => r.name === 'Not set') ? h('div', { style: { fontSize: 11, color: '#7a7663', marginTop: 10 } }, 'Older plans have no salesman. Set it from the plan’s Edit button; new plans ask for it.') : null,
       ]),
     );
   }
@@ -7839,6 +7897,10 @@ export default class App extends React.Component {
             ) : null,
           ),
           h('div', {},
+            h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Sold by ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'فروخت کنندہ')),
+            this.sellerSelect(em.draftSoldBy, v => setDraft('draftSoldBy', v), { ...inpStyle, width: '100%' }),
+          ),
+          h('div', {},
             h('div', { style: { fontSize: 11, fontWeight: 700, color: '#3a4a3f', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Notes ', h('span', { className: 'ur', style: { fontWeight: 400, color: '#7a7663', textTransform: 'none', letterSpacing: 0 } }, 'نوٹس')),
             h('textarea', { value: em.draftNotes, onChange: e => setDraft('draftNotes', e.target.value), placeholder: 'Any notes about this plan…', rows: 2, style: { ...inpStyle, width: '100%', resize: 'vertical' } }),
           ),
@@ -8060,7 +8122,7 @@ export default class App extends React.Component {
       const ubPayable = ubParties.reduce((s, p) => s + Math.max(0, -p.balance), 0);
       const ubNet = ubReceivable - ubPayable;
       return (
-        <div style={{ minHeight: '100vh', background: '#f4f6f3', fontFamily: 'system-ui, -apple-system, sans-serif', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ minHeight: '100vh', background: '#f4f6f3', display: 'flex', flexDirection: 'column', paddingTop: this._isDemo ? 28 : 0 }}>
           <Head>
             <title>Udhar Book — Hisaab Kitaab</title>
             <meta name="description" content="Digital udhar tracking — lent & borrowed" />
@@ -8072,7 +8134,7 @@ export default class App extends React.Component {
           </div>}
 
           {/* Green Header */}
-          <div style={{ background: '#0f6b4f', color: '#fff', position: 'sticky', top: 0, zIndex: 40 }}>
+          <div style={{ background: '#0f6b4f', color: '#fff', position: 'sticky', top: this._isDemo ? 28 : 0, zIndex: 40 }}>
             <div style={{ maxWidth: 900, margin: '0 auto', padding: '10px 14px 12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.16)', flexShrink: 0 }}>
@@ -8121,7 +8183,7 @@ export default class App extends React.Component {
           </div>
 
           {/* Main Content */}
-          <div style={{ flex: 1, maxWidth: 900, margin: '0 auto', width: '100%', background: '#fff', zoom: 0.82 }}>
+          <div className="udhar-body" style={{ flex: 1, maxWidth: 900, margin: '0 auto', width: '100%', background: '#fff', paddingBottom: 110 }}>
             {this.renderUdharBook()}
           </div>
 
