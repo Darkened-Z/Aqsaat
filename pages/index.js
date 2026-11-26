@@ -4286,6 +4286,7 @@ export default class App extends React.Component {
         row('Business name', 'کاروبار کا نام', h('input', { value: st.businessName || '', onChange: e => setS('businessName', e.target.value), placeholder: 'e.g. Sadar Electronics', style: inpText })),
         row('Owner name', 'مالک', h('input', { value: st.ownerName || '', onChange: e => setS('ownerName', e.target.value), placeholder: 'e.g. Rehan Malik', style: inpText })),
         row('City', 'شہر', h('input', { value: st.city || '', onChange: e => setS('city', e.target.value), placeholder: 'e.g. Lahore', style: inpText })),
+        row('Shop phone', 'دکان کا فون', h('input', { value: st.shopPhone || '', onChange: e => setS('shopPhone', e.target.value.replace(/[^0-9+ -]/g, '')), placeholder: 'Customers call this from their app', inputMode: 'tel', style: inpText })),
         row('Currency', 'کرنسی', 'Pakistani Rupee (Rs)'),
       ]),
       h('div', { style: { height: 16 } }),
