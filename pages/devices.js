@@ -2,7 +2,7 @@ import React from 'react';
 import Head from 'next/head';
 import { supabase, getSessionSafe, SHOP_ID } from '../lib/supabase';
 
-const C = { green: '#0f6b4b', red: '#b91c1c', amber: '#b45309', ink: '#1a2b1f', mut: '#7a7663', line: '#ece8dc', bg: '#f7f5ef' };
+const C = { green: '#0f6b4b', red: '#b91c1c', amber: '#b45309', ink: '#1a2b1f', mut: '#7a7663', line: '#ece8dc' };
 
 // Self-hosted APK (direct, no redirect) + its signing-cert checksum. Must stay in
 // sync with the published app-release.apk.
@@ -164,7 +164,7 @@ export default class Devices extends React.Component {
 
     const row = (s) => {
       const isOverdue = !s.paid && s.dueDate && s.dueDate < today;
-      const st = s.paid ? ['#eafaf0', C.green, 'Paid'] : isOverdue ? ['#fdecea', C.red, 'Overdue'] : ['#fffbeb', C.amber, 'Due'];
+      const st = s.paid ? [C.green, 'Paid'] : isOverdue ? [C.red, 'Overdue'] : [C.amber, 'Due'];
       return (
         <div key={s.n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid ' + C.line }}>
           <div style={{ width: 26, fontWeight: 700, color: C.mut, fontSize: 13 }}>#{s.n}</div>
@@ -172,9 +172,9 @@ export default class Devices extends React.Component {
             <div style={{ fontWeight: 600, fontSize: 13 }}>{money(s.amount)}</div>
             <div style={{ fontSize: 11.5, color: C.mut }}>Due {s.dueDate || '—'}{s.paid && s.paidDate ? ` · paid ${s.paidDate}` : ''}</div>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: st[1], background: st[0], borderRadius: 10, padding: '3px 9px' }}>{st[2]}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: st[0], border: '1px solid ' + st[0], borderRadius: 4, padding: '2px 7px' }}>{st[1]}</span>
           {!s.paid ? (
-            <button disabled={this.state.payBusy === d.planId + ':' + s.n} onClick={() => this.payInstallment(d.planId, s.n)} style={{ padding: '6px 11px', borderRadius: 8, background: C.green, color: '#fff', fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer' }}>{this.state.payBusy === d.planId + ':' + s.n ? '…' : '✓ Mark paid'}</button>
+            <button disabled={this.state.payBusy === d.planId + ':' + s.n} onClick={() => this.payInstallment(d.planId, s.n)} style={{ padding: '6px 11px', borderRadius: 8, background: C.ink, color: '#fff', fontWeight: 600, fontSize: 12, border: 'none', cursor: 'pointer' }}>{this.state.payBusy === d.planId + ':' + s.n ? '…' : 'Mark paid'}</button>
           ) : null}
         </div>
       );
@@ -182,18 +182,18 @@ export default class Devices extends React.Component {
 
     return (
       <div onClick={this.closeDetail} style={{ position: 'fixed', inset: 0, background: 'rgba(20,25,20,.45)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 12px', overflowY: 'auto' }}>
-        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: 8, overflow: 'hidden', border: '1px solid ' + C.line }}>
           <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + C.line, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 800, fontSize: 16 }}>{d.label || 'Unnamed phone'}</div>
               <div style={{ fontSize: 12, color: C.mut }}>{cust ? cust.name : d.customer || '—'}{prod ? ' · ' + prod.name : ''}</div>
             </div>
-            <button onClick={this.closeDetail} style={{ border: 'none', background: '#f4f1e6', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', fontSize: 15 }}>✕</button>
+            <button onClick={this.closeDetail} style={{ border: '1px solid ' + C.line, background: '#fff', borderRadius: 6, width: 30, height: 30, cursor: 'pointer', fontSize: 15 }}>✕</button>
           </div>
 
           <div style={{ padding: '14px 18px' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: cs.bg, color: cs.c, fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 20, marginBottom: 12 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 8, background: cs.c, display: 'inline-block' }} />{cs.t}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: cs.c, fontSize: 12, marginBottom: 12 }}>
+              <span style={{ width: 7, height: 7, borderRadius: 7, background: cs.c, display: 'inline-block' }} />{cs.t}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: C.mut, marginBottom: 6 }}>
               <span>Status: <b style={{ color: C.ink }}>{d.status}</b></span>
@@ -211,15 +211,15 @@ export default class Devices extends React.Component {
             ) : null}
 
             {!plan ? (
-              <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: 12, fontSize: 12.5, color: C.amber }}>No plan linked to this phone. Enroll it again with a plan, or it can only be locked manually.</div>
+              <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 6, padding: 12, fontSize: 12.5, color: C.amber }}>No plan linked to this phone. Enroll it again with a plan, or it can only be locked manually.</div>
             ) : (
               <div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                  <div style={{ flex: 1, background: overdue.length ? '#fdecea' : '#eafaf0', border: '1px solid ' + (overdue.length ? '#f6c9c4' : '#bbf7d0'), borderRadius: 12, padding: '10px 12px' }}>
+                  <div style={{ flex: 1, background: '#fff', border: '1px solid ' + C.line, borderRadius: 6, padding: '10px 12px' }}>
                     <div style={{ fontSize: 11, color: C.mut }}>Overdue</div>
                     <div style={{ fontSize: 20, fontWeight: 800, color: overdue.length ? C.red : C.green }}>{overdue.length}</div>
                   </div>
-                  <div style={{ flex: 1, background: '#f8fafc', border: '1px solid ' + C.line, borderRadius: 12, padding: '10px 12px' }}>
+                  <div style={{ flex: 1, background: '#fff', border: '1px solid ' + C.line, borderRadius: 6, padding: '10px 12px' }}>
                     <div style={{ fontSize: 11, color: C.mut }}>Remaining</div>
                     <div style={{ fontSize: 20, fontWeight: 800 }}>{money(remaining)}</div>
                   </div>
@@ -337,31 +337,31 @@ export default class Devices extends React.Component {
     const codeOk = c && (d.appVersion >= 13 || sel.code === '3 days');
     const pick = (mins) => this.setState(st => ({ tuMins: { ...st.tuMins, [d.id]: mins }, tuCode: { ...st.tuCode, [d.id]: null } }));
     const reveal = () => this.setState(st => ({ tuCode: { ...st.tuCode, [d.id]: shown ? null : sel.mins } }));
-    const opt = { flex: '1 1 200px', background: '#fff', border: '1px solid ' + C.line, borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 };
+    const opt = { flex: '1 1 200px', background: '#fff', border: '1px solid ' + C.line, borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 };
     return (
-      <div style={{ background: '#f3faf6', border: '1px solid #cfe9db', borderRadius: 14, padding: 14, marginBottom: 12 }}>
+      <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, flex: 1 }}>🔓 Temporary unlock</div>
+          <div style={{ fontSize: 11, fontWeight: 700, flex: 1 }}>Temporary unlock</div>
           {this.timedNote(d)}
         </div>
-        <div style={{ display: 'inline-flex', background: '#fff', border: '1px solid ' + C.line, borderRadius: 999, padding: 3, marginBottom: 12 }}>
-          {this.TU.map(t => (
-            <button key={t.mins} onClick={() => pick(t.mins)} style={{ padding: '6px 14px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: t.mins === sel.mins ? C.green : 'transparent', color: t.mins === sel.mins ? '#fff' : C.ink }}>{t.label}</button>
+        <div style={{ display: 'inline-flex', border: '1px solid ' + C.ink, borderRadius: 6, overflow: 'hidden', marginBottom: 12 }}>
+          {this.TU.map((t, i) => (
+            <button key={t.mins} onClick={() => pick(t.mins)} style={{ padding: '6px 14px', border: 'none', borderLeft: i ? '1px solid ' + C.ink : 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: t.mins === sel.mins ? C.ink : '#fff', color: t.mins === sel.mins ? '#fff' : C.ink }}>{t.label}</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={opt}>
             <div style={{ fontSize: 12, color: C.mut }}><b style={{ color: C.ink }}>Phone has internet</b> — opens in seconds, locks again by itself after {sel.label}.</div>
-            <button onClick={() => this.act(d.id, 'unlockfor', `Unlock this phone for ${sel.label}? It locks again by itself after that if the installment is still due.`, sel.mins)} style={{ padding: '10px 12px', borderRadius: 10, border: 'none', background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>⚡ Unlock for {sel.label}</button>
+            <button onClick={() => this.act(d.id, 'unlockfor', `Unlock this phone for ${sel.label}? It locks again by itself after that if the installment is still due.`, sel.mins)} style={{ padding: '9px 12px', borderRadius: 6, border: 'none', background: C.ink, color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>Unlock for {sel.label}</button>
           </div>
           <div style={opt}>
             <div style={{ fontSize: 12, color: C.mut }}><b style={{ color: C.ink }}>No internet</b> — customer types this code on the lock screen. Valid today only.</div>
             {shown ? (
               codeOk
-                ? <div onClick={reveal} style={{ fontFamily: 'monospace', fontSize: 26, fontWeight: 800, letterSpacing: 6, textAlign: 'center', color: C.ink, background: '#fdfcf8', border: '1px dashed #cfe9db', borderRadius: 10, padding: '6px 0', cursor: 'pointer', marginTop: 'auto' }}>{c.code.slice(0, 3)} {c.code.slice(3)}</div>
+                ? <div onClick={reveal} style={{ fontFamily: 'monospace', fontSize: 26, fontWeight: 800, letterSpacing: 6, textAlign: 'center', color: C.ink, background: '#fff', border: '1px solid ' + C.line, borderRadius: 6, padding: '6px 0', cursor: 'pointer', marginTop: 'auto' }}>{c.code.slice(0, 3)} {c.code.slice(3)}</div>
                 : <div style={{ fontSize: 12, color: C.amber, fontWeight: 600, marginTop: 'auto' }}>This phone's app is too old for a {sel.label} code — use 3 days, or wait for it to update.</div>
             ) : (
-              <button onClick={reveal} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid ' + C.green, background: '#fff', color: C.green, fontWeight: 700, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>🔑 Show {sel.label} code</button>
+              <button onClick={reveal} style={{ padding: '9px 12px', borderRadius: 6, border: '1px solid ' + C.ink, background: '#fff', color: C.ink, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>Show {sel.label} code</button>
             )}
           </div>
         </div>
@@ -370,7 +370,7 @@ export default class Devices extends React.Component {
   };
 
   timedNote = (d) => d.unlockUntil
-    ? <span style={{ color: C.green, fontWeight: 700 }}>⏱ Unlocked until {new Date(d.unlockUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{new Date(d.unlockUntil).toDateString() !== new Date().toDateString() ? ' ' + new Date(d.unlockUntil).toLocaleDateString() : ''}</span>
+    ? <span style={{ color: C.green, fontWeight: 600 }}>Unlocked until {new Date(d.unlockUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{new Date(d.unlockUntil).toDateString() !== new Date().toDateString() ? ' ' + new Date(d.unlockUntil).toLocaleDateString() : ''}</span>
     : null;
 
   rename = (d) => {
@@ -389,26 +389,26 @@ export default class Devices extends React.Component {
     this.act(d.id, 'simmode', msg, next);
   };
 
-  simRow = (d) => {
+  simFields = (d, field) => {
     const cur = d.simCurrent, base = d.simBaseline || [], info = d.info;
     const tail = s => '…' + String(s).slice(-6);
+    const mono = { fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 12.5 };
     let state;
-    if (!cur && !info) state = <b style={{ color: C.ink }}>waiting for app v1.9+</b>;
-    else if (d.simChangedAt) state = <b style={{ color: C.red }}>🔴 SIM changed{cur && cur.absent ? ' (no SIM in phone)' : ''} · since {new Date(d.simChangedAt).toLocaleString()}</b>;
-    else if (!base.length) state = <b style={{ color: C.amber }}>no readable SIM registered yet</b>;
-    else state = <b style={{ color: C.green }}>✓ original SIM</b>;
+    if (!cur && !info) state = <span style={{ color: C.mut }}>Waiting for app v1.9+</span>;
+    else if (d.simChangedAt) state = <span style={{ color: C.red, fontWeight: 600 }}>Changed{cur && cur.absent ? ' — no SIM in phone' : ''}<div style={{ fontSize: 11.5, fontWeight: 400, color: C.mut }}>since {new Date(d.simChangedAt).toLocaleString()}</div></span>;
+    else if (!base.length) state = <span style={{ color: C.amber }}>No SIM registered yet</span>;
+    else state = <span style={{ color: C.green }}>Original SIM</span>;
     const slots = (cur && cur.slots) || [];
-    return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
-        <span>📶 SIM: {state} · lock mode <b style={{ color: d.simMode === 'lock' ? C.green : d.simMode === 'alert' ? C.amber : C.ink }}>{d.simMode}</b>{d.simMode === 'lock' && d.lockMode === 'force_unlock' ? ' (alert only while force-unlocked)' : ''}</span>
-        {base.length ? <span>Registered: <b style={{ color: C.ink, fontFamily: 'monospace' }}>{base.map(tail).join(', ')}</b></span> : null}
-        {slots.length ? <span>In phone: <b style={{ color: C.ink }}>{slots.map(s => [s.carrier || 'SIM', s.number, s.iccid ? tail(s.iccid) : ''].filter(Boolean).join(' ')).join(' | ')}</b></span> : null}
-        {info ? <span>🛡 FRP: {!info.frpSupported ? <b style={{ color: C.amber }}>not supported (needs Android 11+)</b>
-          : info.frpIds ? <b style={{ color: C.green }}>✓ armed ({info.frpIds.split(',').length} account{info.frpIds.includes(',') ? 's' : ''})</b>
-          : <b style={{ color: C.red }}>not armed — set the shop account above</b>}</span> : null}
-        {info ? <span>📱 <b style={{ color: C.ink }}>{[info.brand, info.model].filter(Boolean).join(' ')}</b>{info.android ? ` · Android ${info.android}` : ''}{info.imei1 ? ` · IMEI ${info.imei1}` : ''}{info.imei2 ? ` / ${info.imei2}` : ''}{info.serial ? ` · S/N ${info.serial}` : ''}{info.battery != null ? ` · 🔋 ${info.battery}%${info.charging ? ' ⚡' : ''}` : ''}{info.network ? ` · ${info.network}` : ''}</span> : null}
-      </div>
-    );
+    const modeTxt = { lock: 'Locks phone', alert: 'Alert only', off: 'Off' }[d.simMode] || d.simMode;
+    return [
+      field('SIM', state),
+      field('SIM lock', d.simMode === 'lock' && d.lockMode === 'force_unlock' ? modeTxt + ' (alert only while unlocked)' : modeTxt),
+      base.length ? field('Registered', <span style={mono}>{base.map(tail).join(', ')}</span>) : null,
+      slots.length ? field('In phone', slots.map(s => [s.carrier || 'SIM', s.number, s.iccid ? tail(s.iccid) : ''].filter(Boolean).join(' ')).join(' | ')) : null,
+      info ? field('FRP', !info.frpSupported ? <span style={{ color: C.amber }}>Not supported (needs Android 11+)</span>
+        : info.frpIds ? <span style={{ color: C.green }}>Armed · {info.frpIds.split(',').length} account{info.frpIds.includes(',') ? 's' : ''}</span>
+        : <span style={{ color: C.red }}>Not armed — set the shop account above</span>) : null,
+    ];
   };
 
   setCallShop = (d) => {
@@ -474,18 +474,18 @@ export default class Devices extends React.Component {
   connStatus = (d) => {
     const rel = (min) => min < 60 ? `${Math.max(1, Math.round(min))} min` : min < 1440 ? `${Math.round(min / 60)} hr` : `${Math.round(min / 1440)} day(s)`;
     const ago = d.lastCheckin ? rel((Date.now() - new Date(d.lastCheckin).getTime()) / 60000) : '';
-    if (d.lastAction === 'release') return { c: '#4338ca', bg: '#eef2ff', t: `Released — app un-enrolled itself ${ago} ago, phone no longer managed` };
-    if (d.status === 'released') return { c: C.amber, bg: '#fffbeb', t: 'Release pending — the phone frees itself at its next check-in' };
-    if (d.status === 'deleted') return { c: C.mut, bg: '#f4f1e6', t: d.claimed ? 'Deleted while still enrolled — phone is stuck managed, restore it' : 'Deleted — never set up' };
+    if (d.lastAction === 'release') return { c: '#4338ca', t: `Released — app un-enrolled itself ${ago} ago, phone no longer managed` };
+    if (d.status === 'released') return { c: C.amber, t: 'Release pending — the phone frees itself at its next check-in' };
+    if (d.status === 'deleted') return { c: C.mut, t: d.claimed ? 'Deleted while still enrolled — phone is stuck managed, restore it' : 'Deleted — never set up' };
     if (!d.lastCheckin) {
       return d.claimed
-        ? { c: C.amber, bg: '#fffbeb', t: 'Set up, waiting for first check-in' }
-        : { c: C.mut, bg: '#f4f1e6', t: 'Not set up yet — code not entered on the phone' };
+        ? { c: C.amber, t: 'Set up, waiting for first check-in' }
+        : { c: C.mut, t: 'Not set up yet — code not entered on the phone' };
     }
     const min = (Date.now() - new Date(d.lastCheckin).getTime()) / 60000;
-    if (min < 60 * 13) return { c: C.green, bg: '#eafaf0', t: `App active — last seen ${rel(min)} ago` };
-    if (min < 60 * 24 * 7) return { c: C.amber, bg: '#fffbeb', t: `Quiet ${rel(min)} — phone off or no internet` };
-    return { c: C.red, bg: '#fdecea', t: `No check-in for ${rel(min)} — app may be removed` };
+    if (min < 60 * 13) return { c: C.green, t: `App active — last seen ${rel(min)} ago` };
+    if (min < 60 * 24 * 7) return { c: C.amber, t: `Quiet ${rel(min)} — phone off or no internet` };
+    return { c: C.red, t: `No check-in for ${rel(min)} — app may be removed` };
   };
 
   appVersionLabel = (d) => {
@@ -585,16 +585,34 @@ export default class Devices extends React.Component {
     const fi = { border: '1px solid ' + C.line, borderRadius: 8, padding: '8px 10px', fontSize: 13, background: '#fdfcf8', outline: 'none', width: '100%', boxSizing: 'border-box' };
     const ghost = { padding: '8px 12px', borderRadius: 10, background: '#fff', border: '1px solid ' + C.line, fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' };
     const badge = (cur) => {
-      const m = { ok: ['#eaf5ee', C.green, '● OK'], warn: ['#fef3c7', C.amber, '● Warning'], lock: ['#fdecea', C.red, '● Locked'], release: ['#eef2ff', '#4338ca', '● Released'] }[cur] || ['#f4f1e6', C.mut, cur];
-      return <span style={{ background: m[0], color: m[1], fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>{m[2]}</span>;
+      const m = { ok: [C.green, 'OK'], warn: [C.amber, 'Warning'], lock: [C.red, 'Locked'], release: [C.ink, 'Released'] }[cur] || [C.mut, cur];
+      return <span style={{ color: m[0], border: '1px solid ' + m[0], fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: 4, whiteSpace: 'nowrap' }}>{m[1]}</span>;
     };
-    const btn = (label, bg, col, onClick) => <button onClick={onClick} style={{ padding: '7px 11px', borderRadius: 8, background: bg, color: col, fontWeight: 600, fontSize: 12, border: '1px solid ' + C.line, cursor: 'pointer' }}>{label}</button>;
+    const btnS = { padding: '7px 12px', borderRadius: 6, background: '#fff', color: C.ink, fontWeight: 600, fontSize: 12.5, border: '1px solid ' + C.line, cursor: 'pointer' };
+    const btn = (label, tone, onClick) => <button onClick={onClick} style={{ ...btnS, ...(tone === 'danger' ? { color: C.red } : tone === 'off' ? { color: '#b5b5b5' } : tone === 'on' ? { borderColor: C.ink } : null) }}>{label}</button>;
+    const link = { border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: C.mut, textDecoration: 'underline' };
+    const mono = { fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 12.5 };
+    const field = (label, value) => value == null || value === '' ? null : (
+      <div key={label} style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mut, marginBottom: 3 }}>{label}</div>
+        <div style={{ fontSize: 13, color: C.ink, overflowWrap: 'anywhere' }}>{value}</div>
+      </div>
+    );
+    const section = (title, fields) => {
+      const f = fields.filter(Boolean);
+      return f.length ? (
+        <div style={{ borderTop: '1px solid ' + C.line, padding: '12px 0' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 10 }}>{title}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: '12px 20px' }}>{f}</div>
+        </div>
+      ) : null;
+    };
 
     const list = devices || [];
     const counts = { all: 0, active: 0, locked: 0, released: 0, lost: 0, deleted: 0 };
     list.forEach(d => { const c = this.catOf(d); counts[c]++; if (c !== 'deleted') counts.all++; });
     counts.billing = list.filter(d => this.catOf(d) !== 'deleted').length;
-    const tabs = [['all', 'All'], ['active', 'Active'], ['locked', 'Locked'], ['released', 'Released'], ['lost', 'Lost'], ['deleted', 'Deleted'], ['billing', '💰 Billing']];
+    const tabs = [['all', 'All'], ['active', 'Active'], ['locked', 'Locked'], ['released', 'Released'], ['lost', 'Lost'], ['deleted', 'Deleted'], ['billing', 'Billing']];
     const shown = tab === 'all' ? list.filter(d => this.catOf(d) !== 'deleted') : list.filter(d => this.catOf(d) === tab);
 
     return (
@@ -682,9 +700,9 @@ export default class Devices extends React.Component {
           {tabs.map(([k, lbl]) => {
             const on = tab === k;
             return (
-              <button key={k} onClick={() => this.setState({ tab: k })} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: on ? C.green : '#fff', color: on ? '#fff' : C.ink, border: '1px solid ' + (on ? C.green : C.line) }}>
+              <button key={k} onClick={() => this.setState({ tab: k })} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: on ? C.ink : '#fff', color: on ? '#fff' : C.ink, border: '1px solid ' + (on ? C.ink : C.line) }}>
                 {lbl}
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 10, background: on ? 'rgba(255,255,255,.22)' : '#f4f1e6', color: on ? '#fff' : C.mut }}>{counts[k]}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 10, background: 'transparent', color: on ? '#fff' : C.mut, padding: 0 }}>{counts[k]}</span>
               </button>
             );
           })}
@@ -697,73 +715,95 @@ export default class Devices extends React.Component {
           : shown.length === 0 ? <div style={{ color: C.mut, textAlign: 'center', padding: '28px 20px', background: '#fff', border: '1px dashed ' + C.line, borderRadius: 14 }}>No {tab} devices.</div>
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {shown.map(d => (
-                <div key={d.id} style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 14, padding: 15 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              {shown.map(d => {
+                const cs = this.connStatus(d);
+                const live = d.claimed && d.status !== 'deleted';
+                const info = d.info;
+                const mode = d.lockMode || 'auto';
+                return (
+                <div key={d.id} style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, padding: '14px 16px 4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: 12 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: d.label ? C.ink : C.mut }}>
-                        <span onClick={() => this.openDetail(d)} style={{ cursor: 'pointer' }} title="Open details & history">{d.label || 'Unnamed phone'}</span>
-                        <button onClick={() => this.rename(d)} title="Rename" style={{ marginLeft: 8, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: C.green }}>✏️</button>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+                        <span onClick={() => this.openDetail(d)} title="Open details & history" style={{ fontWeight: 700, fontSize: 15, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: d.label ? C.ink : C.mut }}>{d.label || 'Unnamed phone'}</span>
+                        <button onClick={() => this.rename(d)} style={link}>Rename</button>
                       </div>
-                      <div style={{ fontSize: 12, color: C.mut }}>{[d.customer, d.plan].filter(Boolean).join(' · ') || d.id}</div>
+                      <div style={{ fontSize: 12, color: C.mut, marginTop: 2 }}>{[d.customer, d.plan].filter(Boolean).join(' · ') || d.id}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: cs.c, marginTop: 6 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 7, background: cs.c }} />{cs.t}
+                      </div>
                     </div>
                     {badge(d.current)}
                   </div>
-                  {(() => { const cs = this.connStatus(d); return (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: cs.bg, color: cs.c, fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 20, marginBottom: 11 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 8, background: cs.c, display: 'inline-block' }} />{cs.t}
-                    </div>
-                  ); })()}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
-                    <span>Mode: <b style={{ color: C.ink }}>{d.lockMode}</b></span>
-                    <span>Status: <b style={{ color: C.ink }}>{d.status}</b></span>
-                    <span>Last check-in: <b style={{ color: C.ink }}>{d.lastCheckin ? new Date(d.lastCheckin).toLocaleString() : 'never'}</b></span>
-                    {this.timedNote(d)}
-                    <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? `only ${d.allowNumber || '—'}` : 'all allowed'}</b></span>
-                    {d.claimed && d.status !== 'deleted' ? <span>App: {this.appVersionLabel(d)}</span> : null}
-                    {d.claimed && d.status !== 'deleted' ? <span>Control: {d.instant ? <b style={{ color: C.green }}>⚡ instant</b> : <b style={{ color: C.ink }}>at next check-in (~6h)</b>}</span> : null}
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
-                    <span>📍 Last location: {d.locAt
-                      ? <><a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>{Number(d.lat).toFixed(5)}, {Number(d.lng).toFixed(5)}</a> <span style={{ color: C.mut }}>· {new Date(d.locAt).toLocaleString()}{d.locAcc ? ` · ±${Math.round(d.locAcc)}m` : ''}</span></>
-                      : <b style={{ color: C.ink }}>not reported yet</b>}
-                      {d.locPerm && d.locPerm !== 'fg+bg' ? <b style={{ color: C.amber }}> · {d.locPerm === 'none' ? 'location permission OFF on phone' : 'background location not allowed — only updates when the app is opened'}</b> : null}</span>
-                  </div>
-                  {d.status !== 'deleted' && this.state.tuOpen === d.id ? this.renderTempUnlock(d) : null}
-                  {d.claimed && d.status !== 'deleted' ? this.simRow(d) : null}
+
+                  {section('Lock', [
+                    field('Mode', ({ auto: 'Auto — follows plan', force_lock: 'Locked by shop', force_unlock: 'Unlocked by shop' })[mode] || mode),
+                    field('Status', d.status),
+                    d.unlockUntil ? field('Temporary unlock', this.timedNote(d)) : null,
+                    field('Calls', d.callMode === 'shop_only' ? <span style={{ color: C.red }}>Only {d.allowNumber || '—'}</span> : 'All allowed'),
+                    live ? field('Control', d.instant ? 'Instant' : 'At next check-in (~6h)') : null,
+                  ])}
+
+                  {section('Phone', [
+                    live ? field('App', this.appVersionLabel(d)) : null,
+                    field('Last check-in', d.lastCheckin ? new Date(d.lastCheckin).toLocaleString() : 'Never'),
+                    field('Location', d.locAt
+                      ? <><a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.ink, textDecoration: 'underline' }}>{Number(d.lat).toFixed(5)}, {Number(d.lng).toFixed(5)}</a>
+                          <div style={{ fontSize: 11.5, color: C.mut }}>{new Date(d.locAt).toLocaleString()}{d.locAcc ? ` · ±${Math.round(d.locAcc)}m` : ''}</div>
+                          {d.locPerm && d.locPerm !== 'fg+bg' ? <div style={{ fontSize: 11.5, color: C.amber }}>{d.locPerm === 'none' ? 'Location permission off' : 'Background location off — updates only when the app is opened'}</div> : null}</>
+                      : 'Not reported yet'),
+                    info ? field('Model', [[info.brand, info.model].filter(Boolean).join(' '), info.android ? 'Android ' + info.android : ''].filter(Boolean).join(' · ')) : null,
+                    info && info.imei1 ? field('IMEI', <span style={mono}>{info.imei1}{info.imei2 ? <><br />{info.imei2}</> : null}</span>) : null,
+                    info && info.serial ? field('Serial', <span style={mono}>{info.serial}</span>) : null,
+                    info && info.battery != null ? field('Battery', `${info.battery}%${info.charging ? ' · charging' : ''}${info.network ? ' · ' + info.network : ''}`) : null,
+                  ])}
+
+                  {live ? section('SIM & protection', this.simFields(d, field)) : null}
+
+                  {d.status !== 'deleted' && this.state.tuOpen === d.id ? <div style={{ borderTop: '1px solid ' + C.line, padding: '12px 0' }}>{this.renderTempUnlock(d)}</div> : null}
+
+                  <div style={{ borderTop: '1px solid ' + C.line, padding: '12px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {d.status === 'deleted' ? (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {btn('↩ Restore', '#eaf5ee', C.green, () => this.act(d.id, 'active'))}
-                    {btn('🗑 Delete forever', '#fdecea', C.red, () => this.act(d.id, 'purge', 'Permanently delete this record? This CANNOT be undone.'))}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {btn('Restore', '', () => this.act(d.id, 'active'))}
+                      {btn('Delete forever', 'danger', () => this.act(d.id, 'purge', 'Permanently delete this record? This CANNOT be undone.'))}
+                    </div>
+                  ) : (<>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                      <div style={{ display: 'inline-flex', border: '1px solid ' + C.ink, borderRadius: 6, overflow: 'hidden' }}>
+                        {[['force_lock', 'lock', 'Lock', 'Force-lock this phone now?'], ['auto', 'auto', 'Auto', null], ['force_unlock', 'unlock', 'Unlock', 'Force-unlock (ignore overdue) this phone?']].map(([m, a, lbl, q], i) => (
+                          <button key={m} onClick={() => this.act(d.id, a, q)} style={{ padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', border: 'none', borderLeft: i ? '1px solid ' + C.ink : 'none', background: mode === m ? C.ink : '#fff', color: mode === m ? '#fff' : C.ink }}>{lbl}</button>
+                        ))}
+                      </div>
+                      {btn(this.state.tuOpen === d.id ? 'Close temporary unlock' : 'Temporary unlock', this.state.tuOpen === d.id ? 'on' : '', () => this.setState({ tuOpen: this.state.tuOpen === d.id ? null : d.id }))}
+                      <span style={{ flex: 1 }} />
+                      {btn('Details & history', '', () => this.openDetail(d))}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                      {d.callMode === 'shop_only'
+                        ? btn('Allow all calls', '', () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
+                        : btn('Shop-only calls', '', () => this.setCallShop(d))}
+                      <select value={d.simMode || 'lock'} onChange={e => this.setSimMode(d, e.target.value)} title="SIM lock for this phone" style={btnS}>
+                        <option value="lock">SIM: lock phone</option>
+                        <option value="alert">SIM: alert only</option>
+                        <option value="off">SIM: off</option>
+                      </select>
+                      {d.simChangedAt ? btn('Accept new SIM', '', () => this.act(d.id, 'simaccept', 'Register the SIM now in this phone as its own? The SIM lock will then protect the NEW SIM.')) : null}
+                      {(d.status === 'released' || d.status === 'lost') ? btn('Activate', '', () => this.act(d.id, 'active', 'Bring this phone back to Active (auto-lock on overdue)?')) : null}
+                      <span style={{ flex: 1 }} />
+                      {btn('Mark lost', 'danger', () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
+                      {btn('Release', 'danger', () => this.act(d.id, 'release', 'Release this phone? This UN-ENROLLS it and removes the lock permanently — only do this when the loan is fully paid.'))}
+                      {this.canDelete(d)
+                        ? btn('Delete', 'danger', () => this.act(d.id, 'delete', 'Move this device to Deleted?'))
+                        : btn('Delete', 'off', () => alert(d.status === 'released'
+                            ? 'Release is still pending — wait until the phone checks in and frees itself, then delete.'
+                            : 'Release this phone first. Deleting an enrolled phone leaves it stuck: it stays managed and locks itself when it can\'t reach the server.'))}
+                    </div>
+                  </>)}
                   </div>
-                  ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {btn('📋 Details & history', '#eef2ff', '#4338ca', () => this.openDetail(d))}
-                    {btn('🔒 Lock', '#fdecea', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
-                    {btn('🔓 Unlock', '#eaf5ee', C.green, () => this.act(d.id, 'unlock', 'Force-unlock (ignore overdue) this phone?'))}
-                    {btn('⚙ Auto', '#f4f1e6', C.ink, () => this.act(d.id, 'auto'))}
-                    {btn(this.state.tuOpen === d.id ? '✕ Close temporary unlock' : '⏱ Temporary unlock', this.state.tuOpen === d.id ? '#fff' : '#eaf5ee', C.green, () => this.setState({ tuOpen: this.state.tuOpen === d.id ? null : d.id }))}
-                    {(d.status === 'released' || d.status === 'lost') ? btn('● Activate', '#eafaf0', C.green, () => this.act(d.id, 'active', 'Bring this phone back to Active (auto-lock on overdue)?')) : null}
-                    {btn('⚠ Mark lost', '#fff7ed', C.amber, () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
-                    {btn('✓ Release', '#eef2ff', '#4338ca', () => this.act(d.id, 'release', 'Release this phone? This UN-ENROLLS it and removes the lock permanently — only do this when the loan is fully paid.'))}
-                    {this.canDelete(d)
-                      ? btn('🗑 Delete', '#fff', C.mut, () => this.act(d.id, 'delete', 'Move this device to Deleted?'))
-                      : btn('🗑 Delete', '#fff', '#c9c3b3', () => alert(d.status === 'released'
-                          ? 'Release is still pending — wait until the phone checks in and frees itself, then delete.'
-                          : 'Release this phone first. Deleting an enrolled phone leaves it stuck: it stays managed and locks itself when it can\'t reach the server.'))}
-                    {d.callMode === 'shop_only'
-                      ? btn('📞 Calls: all', '#eaf5ee', C.green, () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
-                      : btn('📞 Shop-only calls', '#fff7ed', C.amber, () => this.setCallShop(d))}
-                    <select value={d.simMode || 'lock'} onChange={e => this.setSimMode(d, e.target.value)} title="SIM lock for this phone" style={{ padding: '7px 10px', borderRadius: 9, border: '1px solid #ddd6fe', background: '#f5f0ff', color: '#6d28d9', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                      <option value="lock">📶 SIM: lock phone</option>
-                      <option value="alert">📶 SIM: alert only</option>
-                      <option value="off">📶 SIM: off</option>
-                    </select>
-                    {d.simChangedAt ? btn('✓ Accept new SIM', '#f5f0ff', '#6d28d9', () => this.act(d.id, 'simaccept', 'Register the SIM now in this phone as its own? The SIM lock will then protect the NEW SIM.')) : null}
-                  </div>
-                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
       </div>
