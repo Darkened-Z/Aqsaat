@@ -7,6 +7,14 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
 import android.util.Log
+import androidx.work.Constraints
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -32,13 +40,26 @@ object Updater {
         Log.i(TAG, msg)
     }
 
-    suspend fun installIfNewer(ctx: Context, latest: Int, apkUrl: String) {
+    /**
+     * Called after every check-in. The download runs as its own background job: inside the
+     * check-in job, a "check in now" push restarted the job and cut the download off.
+     */
+    fun installIfNewer(ctx: Context, latest: Int, apkUrl: String) {
         if (latest <= BuildConfig.VERSION_CODE || apkUrl.isBlank()) return
         val p = Prefs(ctx)
         if (!LockManager(ctx).isDeviceOwner()) { note(ctx, "v$latest: not device owner"); return }
         val now = System.currentTimeMillis()
         if (p.updTryVer == latest && now - p.updTryMs < RETRY_MS) return
         p.updTryVer = latest; p.updTryMs = now
+        val req = OneTimeWorkRequestBuilder<UpdateWorker>()
+            .setInputData(workDataOf("latest" to latest, "url" to apkUrl))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+        WorkManager.getInstance(ctx).enqueueUniqueWork("devicelock-update", ExistingWorkPolicy.KEEP, req)
+    }
+
+    suspend fun run(ctx: Context, latest: Int, apkUrl: String) {
+        if (latest <= BuildConfig.VERSION_CODE) return
         withContext(Dispatchers.IO) {
             runCatching {
                 val apk = download(ctx, latest, apkUrl) ?: return@runCatching
@@ -97,6 +118,13 @@ object Updater {
         }
         note(ctx, "v$ver: download ${part.length() / 1024}KB so far, ${last?.javaClass?.simpleName}: ${last?.message}")
         return null
+    }
+}
+
+class UpdateWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result {
+        Updater.run(applicationContext, inputData.getInt("latest", 0), inputData.getString("url").orEmpty())
+        return Result.success()
     }
 }
 
