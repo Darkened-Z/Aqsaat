@@ -12,11 +12,28 @@ a:hover { color: #0a5138; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #d9d5c7; border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
+::selection { background: #d3e9dd; color: #1a2b1f; }
+button, a, input, select, textarea { transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .1s ease, opacity .15s ease; }
+button:active:not(:disabled) { transform: scale(.98); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+:focus-visible { outline: 2px solid #0f6b4b; outline-offset: 2px; }
+input:focus, select:focus, textarea:focus { border-color: #0f6b4b !important; outline: none; }
+.btn:hover { filter: brightness(.96); }
+.tap { transition: border-color .15s ease, background-color .15s ease; }
+.tap:hover { border-color: #d9d5c7 !important; background: #fdfcf8 !important; }
+.nav-item:hover { background: #f7f5ef; }
+.row-link:hover td { background: #fdfcf8; }
+.mono, table { font-variant-numeric: tabular-nums; }
 @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
 .screen { animation: slideIn .25s ease; }
 @media (max-width: 860px) {
   .desktop-only { display: none !important; }
+  .screen-container { padding: 14px !important; }
+  .kpi-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+  .kpi-grid > div { padding: 12px !important; }
+  .kpi-val { font-size: 18px !important; }
+  .kpi-grid .ur { display: none; }
 }
 @media (min-width: 861px) {
   .mobile-only { display: none !important; }
@@ -38,6 +55,8 @@ a:hover { color: #0a5138; }
 .app.dark div[style*='background: #f4f1e6'],
 .app.dark button[style*="background: #f4f1e6"],
 .app.dark button[style*='background: #f4f1e6'] { background: #243028 !important; color: #c8d4cc !important; }
+.app.dark .tap:hover { background: #172118 !important; }
+.app.dark .nav-item:hover { background: #1a2b1f; }
 .app.dark input, .app.dark select, .app.dark textarea { background: #172118 !important; color: #e8ede9 !important; border-color: #2e3d32 !important; }
 .app.dark div[style*="color: #7a7663"],
 .app.dark div[style*='color: #7a7663'],
