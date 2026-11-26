@@ -54,6 +54,12 @@ export default async function handler(req, res) {
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true });
     }
+    if (action === 'checkin') {
+      const [r] = await pokeDevices({ deviceId });
+      const res2 = r ? r.res : 'no-token';
+      if (res2 !== 'sent') return res.status(409).json({ error: res2 === 'disabled' ? 'Instant push is not set up on the server.' : 'This phone has no instant-push link (old app or no Google services). It checks in on its own schedule; or open Device Lock on the phone and tap Check now.' });
+      return res.json({ ok: true });
+    }
     if (action === 'simmode') {
       if (!SIM_MODES.includes(value)) return res.status(400).json({ error: 'mode must be lock, alert or off' });
       const { error } = await supabaseAdmin.from('devices').update({ sim_mode: value }).eq('id', deviceId).eq('shop_id', SHOP_ID);
