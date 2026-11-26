@@ -5,6 +5,14 @@
         <item name="colorAccent">#14a374</item>
     </style>
 
+    <!-- Home screen: the customer's plan, with its own green header. -->
+    <style name="Theme.DeviceLock.Plan" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#0f6b4b</item>
+        <item name="colorPrimaryDark">#0b4f37</item>
+        <item name="colorAccent">#14a374</item>
+        <item name="android:statusBarColor">#0b4f37</item>
+    </style>
+
     <!-- Lock screen: no title bar, cannot be dismissed casually. -->
     <style name="Theme.DeviceLock.Lock" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowFullscreen">true</item>

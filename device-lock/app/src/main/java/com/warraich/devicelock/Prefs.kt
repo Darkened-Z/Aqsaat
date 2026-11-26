@@ -59,6 +59,10 @@ class Prefs(ctx: Context) {
     var simIccids: String   get() = sp.getString("simIccids", "") ?: "";        set(v) = sp.edit().putString("simIccids", v).apply()
     var simLocked: Boolean  get() = sp.getBoolean("simLocked", false);          set(v) = sp.edit().putBoolean("simLocked", v).apply()
 
+    // Last plan shown on the "My Plan" screen, so it still opens offline.
+    var planJson: String    get() = sp.getString("planJson", "") ?: "";        set(v) = sp.edit().putString("planJson", v).apply()
+    var planAtMs: Long      get() = sp.getLong("planAtMs", 0L);                 set(v) = sp.edit().putLong("planAtMs", v).apply()
+
     fun saveEnrollment(id: String, sec: String, url: String) {
         deviceId = id; secret = sec; baseUrl = url.trimEnd('/')
         lastOkMs = System.currentTimeMillis()
