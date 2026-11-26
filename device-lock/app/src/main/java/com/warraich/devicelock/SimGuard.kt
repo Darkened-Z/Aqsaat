@@ -12,12 +12,12 @@ import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class SimSlot(val slot: Int, val iccid: String, val carrier: String, val number: String)
+data class SimSlot(val slot: Int, val iccid: String, val carrier: String, val number: String, val reply: String = "")
 data class SimSnapshot(val readable: Boolean, val absent: Boolean, val iccids: List<String>, val slots: List<SimSlot>) {
     fun toJson(): JSONObject = JSONObject()
         .put("readable", readable).put("absent", absent)
         .put("iccids", JSONArray(iccids))
-        .put("slots", JSONArray(slots.map { JSONObject().put("slot", it.slot).put("iccid", it.iccid).put("carrier", it.carrier).put("number", it.number) }))
+        .put("slots", JSONArray(slots.map { JSONObject().put("slot", it.slot).put("iccid", it.iccid).put("carrier", it.carrier).put("number", it.number).put("reply", it.reply) }))
 }
 
 /**
@@ -52,7 +52,7 @@ object SimGuard {
             val number = runCatching {
                 if (Build.VERSION.SDK_INT >= 33) sm!!.getPhoneNumber(info.subscriptionId) else sub.line1Number
             }.getOrNull().orEmpty().ifBlank { SimNumber.cached(ctx, iccid) }
-            SimSlot(info.simSlotIndex, iccid, info.carrierName?.toString().orEmpty(), number)
+            SimSlot(info.simSlotIndex, iccid, info.carrierName?.toString().orEmpty(), number, Prefs(ctx).simReply(iccid))
         }
         val iccids = slots.map { it.iccid }.filter { Regex("^[0-9A-F]{10,22}$").matches(it) }.distinct()
         // A SIM is in but an ID couldn't be read (still starting up, ROM limits): don't judge.

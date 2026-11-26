@@ -46,7 +46,9 @@ class LockManager(private val ctx: Context) {
             // SIM serial / IMEI for SIM lock and the device info shown to the shop.
             android.Manifest.permission.READ_PHONE_STATE,
             // Silent USSD to learn each SIM's own number (Pakistani SIMs don't store it).
-            android.Manifest.permission.CALL_PHONE
+            android.Manifest.permission.CALL_PHONE,
+            // Telenor answers the "my number" code by SMS; only that reply is read (SimNumber).
+            android.Manifest.permission.RECEIVE_SMS
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) perms += android.Manifest.permission.READ_PHONE_NUMBERS
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) perms += android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
