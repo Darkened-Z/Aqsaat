@@ -63,7 +63,8 @@ export default async function handler(req, res) {
     payUrl: pay && pay.amount ? payUrl(req.headers.host, device) : '',
     dueAmount: pay ? pay.amount : 0,
     // A swapped SIM gets the same 15-min tracking as a lost phone.
-    checkinMinutes: simc.changed === true || timedOld ? 15 : checkinMinutes(device),
+    // Outdated apps that obey the interval (v1.8+) check in every 30 min, so a failed self-update retries soon.
+    checkinMinutes: simc.changed === true || timedOld ? 15 : version >= 9 && version < LATEST_APP_VERSION ? Math.min(30, checkinMinutes(device)) : checkinMinutes(device),
     override: !!result.override,      // manual lock: also ends an offline-code unlock
     graceUntil: result.graceUntil || 0,
     simMode: simc.mode,
