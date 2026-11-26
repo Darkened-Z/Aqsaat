@@ -373,6 +373,13 @@ export default class Devices extends React.Component {
     ? <span style={{ color: C.green, fontWeight: 600 }}>Unlocked until {new Date(d.unlockUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{new Date(d.unlockUntil).toDateString() !== new Date().toDateString() ? ' ' + new Date(d.unlockUntil).toLocaleDateString() : ''}</span>
     : null;
 
+  checkInNow = async (d) => {
+    const resp = await this.api('POST', { deviceId: d.id, action: 'checkin' });
+    if (!resp.ok) { alert((await resp.json()).error || 'failed'); return; }
+    alert('Sent. The phone checks in within a minute if it has internet — any pending app update starts then.');
+    setTimeout(this.load, 30000);
+  };
+
   rename = (d) => {
     const name = prompt('Name for this phone (to remember which is which):', d.label || '');
     if (name === null) return;
@@ -790,6 +797,7 @@ export default class Devices extends React.Component {
                       </div>
                       {btn(this.state.tuOpen === d.id ? '✕ Close temporary unlock' : '⏱️ Temporary unlock', this.state.tuOpen === d.id ? 'on' : '', () => this.setState({ tuOpen: this.state.tuOpen === d.id ? null : d.id }))}
                       <span style={{ flex: 1 }} />
+                      {d.claimed ? btn('🔄 Check in now', '', () => this.checkInNow(d)) : null}
                       {btn('📋 Details & history', '', () => this.openDetail(d))}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
