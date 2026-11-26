@@ -399,12 +399,24 @@ export default class Devices extends React.Component {
     else if (!base.length) state = <span style={{ color: C.amber }}>No SIM registered yet</span>;
     else state = <span style={{ color: C.green }}>Original SIM</span>;
     const slots = (cur && cur.slots) || [];
+    const labels = d.simLabels || {};
+    const simList = (ids) => ids.map(id => {
+      const sl = slots.find(x => x.iccid === id) || {};
+      const l = labels[id] || {};
+      const num = sl.number || l.number;
+      return (
+        <div key={id} style={{ marginBottom: 6 }}>
+          <div style={{ fontWeight: 600 }}>{sl.carrier || l.carrier || 'SIM'}:</div>
+          <div style={num ? mono : { color: C.mut, fontSize: 12 }}>{num || 'number not read yet'}</div>
+        </div>
+      );
+    });
     const modeTxt = { lock: 'Locks phone', alert: 'Alert only', off: 'Off' }[d.simMode] || d.simMode;
     return [
       field('SIM', state),
       field('SIM lock', d.simMode === 'lock' && d.lockMode === 'force_unlock' ? modeTxt + ' (alert only while unlocked)' : modeTxt),
-      base.length ? field('Registered', <span style={mono}>{base.map(tail).join(', ')}</span>) : null,
-      slots.length ? field('In phone', slots.map(s => [s.carrier || 'SIM', s.number, s.iccid ? tail(s.iccid) : ''].filter(Boolean).join(' ')).join(' | ')) : null,
+      base.length ? field('Registered', simList(base)) : null,
+      d.simChangedAt && slots.length ? field('In phone now', simList(slots.map(x => x.iccid).filter(Boolean))) : null,
       info ? field('FRP', !info.frpSupported ? <span style={{ color: C.amber }}>Not supported (needs Android 11+)</span>
         : info.frpIds ? <span style={{ color: C.green }}>Armed · {info.frpIds.split(',').length} account{info.frpIds.includes(',') ? 's' : ''}</span>
         : <span style={{ color: C.red }}>Not armed — set the shop account above</span>) : null,
