@@ -45,6 +45,23 @@ object Api {
         }
     }
 
+    /** The customer's plan as JSON text: "" = no plan linked, null = server not reached. */
+    fun plan(baseUrl: String, deviceId: String, secret: String): String? {
+        return try {
+            val conn = (URL("$baseUrl/api/device/plan").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"; connectTimeout = 15000; readTimeout = 15000; doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+            }
+            conn.outputStream.use { it.write(JSONObject().put("deviceId", deviceId).put("secret", secret).toString().toByteArray()) }
+            if (conn.responseCode !in 200..299) { conn.disconnect(); return null }
+            val text = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            JSONObject(text).optJSONObject("plan")?.toString() ?: ""
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** POST deviceId+secret (+ last-known location). Network/5xx errors return reachable=false (never a wrong lock). */
     fun checkin(baseUrl: String, deviceId: String, secret: String,
                 lat: Double? = null, lng: Double? = null, acc: Float? = null, locPerm: String = "", pushToken: String = "",

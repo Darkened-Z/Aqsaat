@@ -1,7 +1,7 @@
 package com.warraich.devicelock
 
 import android.os.Bundle
-import android.text.format.DateUtils
+import org.json.JSONObject
 import android.view.Gravity
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -16,7 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Status + enrollment screen. Not the lock — this is the owner/setup view. */
+/** Before enrollment: the shop's setup screen. After: the customer's "My Plan" screen. */
 class MainActivity : AppCompatActivity() {
     private lateinit var p: Prefs
 
@@ -26,9 +26,15 @@ class MainActivity : AppCompatActivity() {
         render()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (p.enrolled) loadPlan()
+    }
+
     private fun pad(dp: Int) = (dp * resources.displayMetrics.density).toInt()
 
     private fun render() {
+        if (p.enrolled) { showPlan(false); return }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad(24), pad(32), pad(24), pad(24))
@@ -40,7 +46,7 @@ class MainActivity : AppCompatActivity() {
             textSize = 14f; setPadding(0, pad(6), 0, pad(16))
         })
 
-        if (!p.enrolled) root.addView(enrollBlock()) else root.addView(statusBlock())
+        root.addView(enrollBlock())
         setContentView(root)
     }
 
@@ -74,6 +80,7 @@ class MainActivity : AppCompatActivity() {
                         requestCallScreeningRole()
                         checkNow()
                         render()
+                        loadPlan()
                     } else {
                         isEnabled = true
                         Toast.makeText(this@MainActivity, "Enroll failed: ${r.error}", Toast.LENGTH_LONG).show()
@@ -88,19 +95,32 @@ class MainActivity : AppCompatActivity() {
         return box
     }
 
-    private fun statusBlock(): LinearLayout {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val last = if (p.lastOkMs > 0)
-            DateUtils.getRelativeTimeSpanString(p.lastOkMs).toString() else "never"
-        box.addView(TextView(this).apply {
-            text = "Device: ${p.deviceId}\nState: ${p.lockState}\nLast server contact: $last"
-            textSize = 14f; setPadding(0, 0, 0, pad(16))
-        })
-        box.addView(Button(this).apply {
-            text = "Check now"
-            setOnClickListener { checkNow() }
-        })
-        return box
+    private fun showPlan(failed: Boolean) {
+        val plan = p.planJson.takeIf { it.isNotBlank() }?.let { runCatching { JSONObject(it) }.getOrNull() }
+        setContentView(PlanView(this, onRefresh = { refresh() }, onCall = { call(it.ifBlank { getString(R.string.shop_phone) }) })
+            .build(plan, failed && plan == null, p.planAtMs))
+    }
+
+    private fun loadPlan(done: ((Boolean) -> Unit)? = null) {
+        val base = p.baseUrl ?: return
+        val id = p.deviceId ?: return
+        val sec = p.secret ?: return
+        CoroutineScope(Dispatchers.Main).launch {
+            val json = withContext(Dispatchers.IO) { Api.plan(base, id, sec) }
+            if (json != null) { p.planJson = json; p.planAtMs = System.currentTimeMillis() }
+            if (!isFinishing) showPlan(json == null)
+            done?.invoke(json != null)
+        }
+    }
+
+    private fun refresh() {
+        Toast.makeText(this, "Updating…", Toast.LENGTH_SHORT).show()
+        loadPlan { ok -> if (!ok) Toast.makeText(this, "No internet — showing last saved", Toast.LENGTH_SHORT).show() }
+        checkNow(quiet = true)
+    }
+
+    private fun call(number: String) {
+        runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:$number"))) }
     }
 
     /**
@@ -119,12 +139,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkNow() {
+    private fun checkNow(quiet: Boolean = false) {
         if (!p.enrolled) return
-        Toast.makeText(this, "Checking…", Toast.LENGTH_SHORT).show()
+        if (!quiet) Toast.makeText(this, "Checking…", Toast.LENGTH_SHORT).show()
         CoroutineScope(Dispatchers.Main).launch {
             val r = withContext(Dispatchers.IO) { Checkin.run(this@MainActivity) } ?: return@launch
-            if (r.reachable) {
+            if (quiet) {
+                if (r.reachable && r.latestVersion > BuildConfig.VERSION_CODE) Toast.makeText(this@MainActivity, "Updating app…", Toast.LENGTH_SHORT).show()
+            } else if (r.reachable) {
                 val msg = if (r.latestVersion > BuildConfig.VERSION_CODE) "Server: ${r.action} — updating app…" else "Server: ${r.action}"
                 Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
             } else {
