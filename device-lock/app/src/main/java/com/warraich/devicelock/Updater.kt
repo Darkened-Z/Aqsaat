@@ -24,7 +24,7 @@ import java.util.Locale
  */
 object Updater {
     private const val TAG = "DeviceLockUpdate"
-    private const val RETRY_MS = 60 * 60_000L
+    private const val RETRY_MS = 20 * 60_000L
 
     fun note(ctx: Context, msg: String) {
         val t = SimpleDateFormat("dd MMM HH:mm", Locale.US).format(Date())
@@ -41,6 +41,7 @@ object Updater {
         p.updTryVer = latest; p.updTryMs = now
         withContext(Dispatchers.IO) {
             runCatching {
+                val apk = download(ctx, latest, apkUrl) ?: return@runCatching
                 val pi = ctx.packageManager.packageInstaller
                 val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
                     setAppPackageName(ctx.packageName)
@@ -48,14 +49,12 @@ object Updater {
                 }
                 val id = pi.createSession(params)
                 pi.openSession(id).use { s ->
-                    val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply { connectTimeout = 20000; readTimeout = 60000 }
                     try {
-                        if (conn.responseCode !in 200..299) { s.abandon(); note(ctx, "v$latest: download HTTP ${conn.responseCode}"); return@runCatching }
-                        s.openWrite("update.apk", 0, -1).use { out ->
-                            conn.inputStream.use { it.copyTo(out) }
+                        s.openWrite("update.apk", 0, apk.length()).use { out ->
+                            apk.inputStream().use { it.copyTo(out) }
                             s.fsync(out)
                         }
-                    } finally { conn.disconnect() }
+                    } catch (e: Exception) { s.abandon(); throw e }
                     val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
                     val pending = PendingIntent.getBroadcast(ctx, id, Intent(ctx, UpdateStatusReceiver::class.java).putExtra("ver", latest), flags)
                     note(ctx, "v$latest: installing")
@@ -63,6 +62,41 @@ object Updater {
                 }
             }.onFailure { note(ctx, "v$latest: ${it.javaClass.simpleName}: ${it.message}") }
         }
+    }
+
+    /**
+     * Downloads into cacheDir, resuming a partial file (HTTP Range), so a slow or
+     * dropping connection still finishes over a few tries instead of starting over.
+     */
+    private fun download(ctx: Context, ver: Int, url: String): java.io.File? {
+        val done = java.io.File(ctx.cacheDir, "update-$ver.apk")
+        if (done.exists()) return done
+        ctx.cacheDir.listFiles()?.filter { it.name.startsWith("update-") && !it.name.startsWith("update-$ver.") }?.forEach { it.delete() }
+        val part = java.io.File(ctx.cacheDir, "update-$ver.part")
+        var last: Exception? = null
+        repeat(4) {
+            try {
+                val have = part.length()
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 30_000; readTimeout = 120_000
+                    if (have > 0) setRequestProperty("Range", "bytes=$have-")
+                }
+                try {
+                    val code = conn.responseCode
+                    if (code == 416) { part.delete(); return@repeat }
+                    if (code !in 200..299) { note(ctx, "v$ver: download HTTP $code"); return null }
+                    val append = code == 206
+                    val total = if (append) conn.getHeaderField("Content-Range")?.substringAfter('/')?.toLongOrNull() ?: -1L
+                                else conn.contentLengthLong
+                    java.io.FileOutputStream(part, append).use { out -> conn.inputStream.use { it.copyTo(out, 64 * 1024) } }
+                    if (total > 0 && part.length() != total) throw java.io.IOException("short download ${part.length()}/$total")
+                } finally { conn.disconnect() }
+                part.renameTo(done)
+                return done
+            } catch (e: Exception) { last = e }
+        }
+        note(ctx, "v$ver: download ${part.length() / 1024}KB so far, ${last?.javaClass?.simpleName}: ${last?.message}")
+        return null
     }
 }
 
