@@ -408,6 +408,7 @@ export default class Devices extends React.Component {
         <div key={id} style={{ marginBottom: 6 }}>
           <div style={{ fontWeight: 600 }}>{sl.carrier || l.carrier || 'SIM'}:</div>
           <div style={num ? mono : { color: C.mut, fontSize: 12 }}>{num || 'number not read yet'}</div>
+          {!num && sl.reply ? <div style={{ color: C.mut, fontSize: 11 }}>network said: {sl.reply}</div> : null}
         </div>
       );
     });

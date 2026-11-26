@@ -48,6 +48,8 @@ class Prefs(ctx: Context) {
     var updTryMs: Long      get() = sp.getLong("updTryMs", 0L);                 set(v) = sp.edit().putLong("updTryMs", v).apply()
     fun simNumber(iccid: String): String = sp.getString("simNum_$iccid", "") ?: ""
     fun setSimNumber(iccid: String, v: String) = sp.edit().putString("simNum_$iccid", v).apply()
+    fun simReply(iccid: String): String = sp.getString("simReply_$iccid", "") ?: ""
+    fun setSimReply(iccid: String, v: String) = sp.edit().putString("simReply_$iccid", v).apply()
     fun simNumberTry(iccid: String): Long = sp.getLong("simNumTry_$iccid", 0L)
     fun setSimNumberTry(iccid: String, v: Long) = sp.edit().putLong("simNumTry_$iccid", v).apply()
     var updTryVer: Int      get() = sp.getInt("updTryVer", 0);                  set(v) = sp.edit().putInt("updTryVer", v).apply()
