@@ -202,7 +202,7 @@ export default class Devices extends React.Component {
               <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? 'only ' + (d.allowNumber || '—') : 'all'}</b></span>
             </div>
             <div style={{ marginTop: 10 }}>{this.renderTempUnlock(d)}</div>
-            <div style={{ fontSize: 12, color: C.mut, marginBottom: 14 }}>{d.locAt ? <a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>View last location</a> : 'Location not reported yet'}</div>
+            <div style={{ fontSize: 12, color: C.mut, marginBottom: 14 }}>📍 {d.locAt ? <a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>View last location</a> : 'Location not reported yet'}</div>
             {this.state.history && this.state.history.length ? (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>Location trail — {this.state.history.length} points{d.status === 'lost' ? ' · lost mode: every 15 min' : ''}</div>
@@ -341,7 +341,7 @@ export default class Devices extends React.Component {
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, flex: 1 }}>Temporary unlock</div>
+          <div style={{ fontSize: 11, fontWeight: 700, flex: 1 }}>⏱️ Temporary unlock</div>
           {this.timedNote(d)}
         </div>
         <div style={{ display: 'inline-flex', border: '1px solid ' + C.ink, borderRadius: 6, overflow: 'hidden', marginBottom: 12 }}>
@@ -352,7 +352,7 @@ export default class Devices extends React.Component {
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={opt}>
             <div style={{ fontSize: 12, color: C.mut }}><b style={{ color: C.ink }}>Phone has internet</b> — opens in seconds, locks again by itself after {sel.label}.</div>
-            <button onClick={() => this.act(d.id, 'unlockfor', `Unlock this phone for ${sel.label}? It locks again by itself after that if the installment is still due.`, sel.mins)} style={{ padding: '9px 12px', borderRadius: 6, border: 'none', background: C.ink, color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>Unlock for {sel.label}</button>
+            <button onClick={() => this.act(d.id, 'unlockfor', `Unlock this phone for ${sel.label}? It locks again by itself after that if the installment is still due.`, sel.mins)} style={{ padding: '9px 12px', borderRadius: 6, border: 'none', background: C.ink, color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>⚡ Unlock for {sel.label}</button>
           </div>
           <div style={opt}>
             <div style={{ fontSize: 12, color: C.mut }}><b style={{ color: C.ink }}>No internet</b> — customer types this code on the lock screen. Valid today only.</div>
@@ -361,7 +361,7 @@ export default class Devices extends React.Component {
                 ? <div onClick={reveal} style={{ fontFamily: 'monospace', fontSize: 26, fontWeight: 800, letterSpacing: 6, textAlign: 'center', color: C.ink, background: '#fff', border: '1px solid ' + C.line, borderRadius: 6, padding: '6px 0', cursor: 'pointer', marginTop: 'auto' }}>{c.code.slice(0, 3)} {c.code.slice(3)}</div>
                 : <div style={{ fontSize: 12, color: C.amber, fontWeight: 600, marginTop: 'auto' }}>This phone's app is too old for a {sel.label} code — use 3 days, or wait for it to update.</div>
             ) : (
-              <button onClick={reveal} style={{ padding: '9px 12px', borderRadius: 6, border: '1px solid ' + C.ink, background: '#fff', color: C.ink, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>Show {sel.label} code</button>
+              <button onClick={reveal} style={{ padding: '9px 12px', borderRadius: 6, border: '1px solid ' + C.ink, background: '#fff', color: C.ink, fontWeight: 600, fontSize: 13, cursor: 'pointer', marginTop: 'auto' }}>🔑 Show {sel.label} code</button>
             )}
           </div>
         </div>
@@ -389,26 +389,26 @@ export default class Devices extends React.Component {
     this.act(d.id, 'simmode', msg, next);
   };
 
-  simRow = (d) => {
+  simFields = (d, field) => {
     const cur = d.simCurrent, base = d.simBaseline || [], info = d.info;
     const tail = s => '…' + String(s).slice(-6);
+    const mono = { fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 12.5 };
     let state;
-    if (!cur && !info) state = <b style={{ color: C.ink }}>waiting for app v1.9+</b>;
-    else if (d.simChangedAt) state = <b style={{ color: C.red }}>SIM changed{cur && cur.absent ? ' (no SIM in phone)' : ''} · since {new Date(d.simChangedAt).toLocaleString()}</b>;
-    else if (!base.length) state = <b style={{ color: C.amber }}>no readable SIM registered yet</b>;
-    else state = <b style={{ color: C.green }}>✓ original SIM</b>;
+    if (!cur && !info) state = <span style={{ color: C.mut }}>Waiting for app v1.9+</span>;
+    else if (d.simChangedAt) state = <span style={{ color: C.red, fontWeight: 600 }}>Changed{cur && cur.absent ? ' — no SIM in phone' : ''}<div style={{ fontSize: 11.5, fontWeight: 400, color: C.mut }}>since {new Date(d.simChangedAt).toLocaleString()}</div></span>;
+    else if (!base.length) state = <span style={{ color: C.amber }}>No SIM registered yet</span>;
+    else state = <span style={{ color: C.green }}>Original SIM</span>;
     const slots = (cur && cur.slots) || [];
-    return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
-        <span>SIM: {state} · lock mode <b style={{ color: d.simMode === 'lock' ? C.green : d.simMode === 'alert' ? C.amber : C.ink }}>{d.simMode}</b>{d.simMode === 'lock' && d.lockMode === 'force_unlock' ? ' (alert only while force-unlocked)' : ''}</span>
-        {base.length ? <span>Registered: <b style={{ color: C.ink, fontFamily: 'monospace' }}>{base.map(tail).join(', ')}</b></span> : null}
-        {slots.length ? <span>In phone: <b style={{ color: C.ink }}>{slots.map(s => [s.carrier || 'SIM', s.number, s.iccid ? tail(s.iccid) : ''].filter(Boolean).join(' ')).join(' | ')}</b></span> : null}
-        {info ? <span>FRP: {!info.frpSupported ? <b style={{ color: C.amber }}>not supported (needs Android 11+)</b>
-          : info.frpIds ? <b style={{ color: C.green }}>✓ armed ({info.frpIds.split(',').length} account{info.frpIds.includes(',') ? 's' : ''})</b>
-          : <b style={{ color: C.red }}>not armed — set the shop account above</b>}</span> : null}
-        {info ? <span><b style={{ color: C.ink }}>{[info.brand, info.model].filter(Boolean).join(' ')}</b>{info.android ? ` · Android ${info.android}` : ''}{info.imei1 ? ` · IMEI ${info.imei1}` : ''}{info.imei2 ? ` / ${info.imei2}` : ''}{info.serial ? ` · S/N ${info.serial}` : ''}{info.battery != null ? ` · battery ${info.battery}%${info.charging ? ' (charging)' : ''}` : ''}{info.network ? ` · ${info.network}` : ''}</span> : null}
-      </div>
-    );
+    const modeTxt = { lock: 'Locks phone', alert: 'Alert only', off: 'Off' }[d.simMode] || d.simMode;
+    return [
+      field('SIM', state),
+      field('SIM lock', d.simMode === 'lock' && d.lockMode === 'force_unlock' ? modeTxt + ' (alert only while unlocked)' : modeTxt),
+      base.length ? field('Registered', <span style={mono}>{base.map(tail).join(', ')}</span>) : null,
+      slots.length ? field('In phone', slots.map(s => [s.carrier || 'SIM', s.number, s.iccid ? tail(s.iccid) : ''].filter(Boolean).join(' ')).join(' | ')) : null,
+      info ? field('FRP', !info.frpSupported ? <span style={{ color: C.amber }}>Not supported (needs Android 11+)</span>
+        : info.frpIds ? <span style={{ color: C.green }}>Armed · {info.frpIds.split(',').length} account{info.frpIds.includes(',') ? 's' : ''}</span>
+        : <span style={{ color: C.red }}>Not armed — set the shop account above</span>) : null,
+    ];
   };
 
   setCallShop = (d) => {
@@ -586,9 +586,27 @@ export default class Devices extends React.Component {
     const ghost = { padding: '8px 12px', borderRadius: 10, background: '#fff', border: '1px solid ' + C.line, fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' };
     const badge = (cur) => {
       const m = { ok: [C.green, 'OK'], warn: [C.amber, 'Warning'], lock: [C.red, 'Locked'], release: [C.ink, 'Released'] }[cur] || [C.mut, cur];
-      return <span style={{ color: m[0], border: '1px solid ' + m[0], fontSize: 11.5, fontWeight: 700, padding: '3px 9px', borderRadius: 4, whiteSpace: 'nowrap' }}>{m[1]}</span>;
+      return <span style={{ color: m[0], border: '1px solid ' + m[0], fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: 4, whiteSpace: 'nowrap' }}>{m[1]}</span>;
     };
-    const btn = (label, col, onClick) => <button onClick={onClick} style={{ padding: '7px 11px', borderRadius: 6, background: '#fff', color: col, fontWeight: 600, fontSize: 12, border: '1px solid ' + C.line, cursor: 'pointer' }}>{label}</button>;
+    const btnS = { padding: '7px 12px', borderRadius: 6, background: '#fff', color: C.ink, fontWeight: 600, fontSize: 12.5, border: '1px solid ' + C.line, cursor: 'pointer' };
+    const btn = (label, tone, onClick) => <button onClick={onClick} style={{ ...btnS, ...(tone === 'danger' ? { color: C.red } : tone === 'off' ? { color: '#b5b5b5' } : tone === 'on' ? { borderColor: C.ink } : null) }}>{label}</button>;
+    const link = { border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: C.mut, textDecoration: 'underline' };
+    const mono = { fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 12.5 };
+    const field = (label, value) => value == null || value === '' ? null : (
+      <div key={label} style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mut, marginBottom: 3 }}>{label}</div>
+        <div style={{ fontSize: 13, color: C.ink, overflowWrap: 'anywhere' }}>{value}</div>
+      </div>
+    );
+    const section = (title, fields) => {
+      const f = fields.filter(Boolean);
+      return f.length ? (
+        <div style={{ borderTop: '1px solid ' + C.line, padding: '12px 0' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 10 }}>{title}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: '12px 20px' }}>{f}</div>
+        </div>
+      ) : null;
+    };
 
     const list = devices || [];
     const counts = { all: 0, active: 0, locked: 0, released: 0, lost: 0, deleted: 0 };
@@ -624,7 +642,7 @@ export default class Devices extends React.Component {
           <button onClick={this.enroll} disabled={this.state.enrollBusy || !form.planId} style={{ padding: '10px 16px', borderRadius: 10, background: (this.state.enrollBusy || !form.planId) ? C.mut : C.green, color: '#fff', fontWeight: 700, fontSize: 13, border: 'none', cursor: (this.state.enrollBusy || !form.planId) ? 'not-allowed' : 'pointer' }}>{this.state.enrollBusy ? 'Creating…' : form.planId ? '+ Create enrollment' : 'Link a plan first'}</button>
           {enroll ? (
             <div style={{ marginTop: 12, background: '#fff', border: '1px solid ' + C.line, borderRadius: 6, padding: 12 }}>
-              <div style={{ fontSize: 13, color: C.ink, marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid ' + C.line }}>Code for: <b>{enroll.label || 'this phone'}</b>{enroll.customer ? <span style={{ color: C.mut }}> · linked to {enroll.customer}'s plan ✓</span> : null}</div>
+              <div style={{ fontSize: 13, color: C.ink, marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid ' + C.line }}>📱 Code for: <b>{enroll.label || 'this phone'}</b>{enroll.customer ? <span style={{ color: C.mut }}> · linked to {enroll.customer}'s plan ✓</span> : null}</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.green, marginBottom: 4 }}>On the phone (after scanning the provisioning QR), open Device Lock and type this code:</div>
               <div style={{ fontFamily: 'monospace', fontSize: 30, fontWeight: 800, letterSpacing: 4, color: C.ink, textAlign: 'center', padding: '6px 0' }}>{enroll.claimCode}</div>
               <div style={{ fontSize: 11, color: C.mut }}>One-time, expires in 24h. PC fallback string: <span style={{ fontFamily: 'monospace', wordBreak: 'break-all', userSelect: 'all' }}>{enroll.enrollString}</span></div>
@@ -633,7 +651,7 @@ export default class Devices extends React.Component {
         </div>
 
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, marginBottom: 12, padding: '12px 16px' }}>
-          <div style={{ fontWeight: 700, fontSize: 14 }}>Factory-reset protection (shop Google account)</div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>🛡 Factory-reset protection (shop Google account)</div>
           <div style={{ fontSize: 12, color: C.mut, margin: '4px 0 8px' }}>If someone wipes a phone from recovery mode, it will ask for this Google account before it can be used. Enter the account's numeric ID: open Google Maps signed in to the shop account → profile → <b>Your contributions</b>, and copy the long number after <b>/contrib/</b> in the link. Use an account the shop will keep forever — losing its password bricks wiped phones. Each phone shows "FRP ✓ armed" below once it has applied it (Android 11+).</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input value={this.state.frpIds || ''} onChange={e => this.setState({ frpIds: e.target.value })} placeholder="e.g. 112233445566778899001" style={{ flex: 1, padding: 10, borderRadius: 10, border: '1px solid ' + C.line, fontFamily: 'monospace' }} />
@@ -644,7 +662,8 @@ export default class Devices extends React.Component {
         {/* Provisioning QR — collapsible */}
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, marginBottom: 20, overflow: 'hidden' }}>
           <button onClick={() => this.setState({ qrOpen: !qrOpen })} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
-                        <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 18 }}>⚙️</span>
+            <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>Provisioning QR &amp; setup</div>
               <div style={{ fontSize: 12, color: C.mut }}>The scan code — set up once, same for every phone</div>
             </div>
@@ -667,7 +686,7 @@ export default class Devices extends React.Component {
               {this.state.qrImg ? <div style={{ textAlign: 'center', marginTop: 12 }}><img src={this.state.qrImg} alt="Provisioning QR" style={{ width: 280, maxWidth: '100%', borderRadius: 8, border: '1px solid ' + C.line, background: '#fff' }} /></div> : null}
 
               <div style={{ marginTop: 16, padding: 12, background: '#fff', border: '1px solid ' + C.line, borderRadius: 6 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Phone won't scan / "Something went wrong"?</div>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>📵 Phone won't scan / "Something went wrong"?</div>
                 <div style={{ fontSize: 12, color: C.mut, marginBottom: 8 }}>Some cheap phones (Dcode, Unisoc etc.) block QR setup. Lock them from a Windows PC instead: factory-reset the phone (no Google account), turn on USB debugging, connect the cable, then run this tool and double-click <b>LockPhone.bat</b>. The Urdu steps are inside.</div>
                 <a href="/LockPhone.zip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: C.amber, color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>⬇ Download USB lock tool (PC)</a>
               </div>
@@ -696,73 +715,95 @@ export default class Devices extends React.Component {
           : shown.length === 0 ? <div style={{ color: C.mut, textAlign: 'center', padding: '28px 20px', background: '#fff', border: '1px dashed ' + C.line, borderRadius: 14 }}>No {tab} devices.</div>
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {shown.map(d => (
-                <div key={d.id} style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, padding: 15 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              {shown.map(d => {
+                const cs = this.connStatus(d);
+                const live = d.claimed && d.status !== 'deleted';
+                const info = d.info;
+                const mode = d.lockMode || 'auto';
+                return (
+                <div key={d.id} style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, padding: '14px 16px 4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: 12 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: d.label ? C.ink : C.mut }}>
-                        <span onClick={() => this.openDetail(d)} style={{ cursor: 'pointer' }} title="Open details & history">{d.label || 'Unnamed phone'}</span>
-                        <button onClick={() => this.rename(d)} style={{ marginLeft: 8, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 12, fontWeight: 400, color: C.mut, textDecoration: 'underline' }}>Rename</button>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+                        <span onClick={() => this.openDetail(d)} title="Open details & history" style={{ fontWeight: 700, fontSize: 15, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: d.label ? C.ink : C.mut }}>{d.label || 'Unnamed phone'}</span>
+                        <button onClick={() => this.rename(d)} style={link}>✏️ Rename</button>
                       </div>
-                      <div style={{ fontSize: 12, color: C.mut }}>{[d.customer, d.plan].filter(Boolean).join(' · ') || d.id}</div>
+                      <div style={{ fontSize: 12, color: C.mut, marginTop: 2 }}>{[d.customer, d.plan].filter(Boolean).join(' · ') || d.id}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: cs.c, marginTop: 6 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 7, background: cs.c }} />{cs.t}
+                      </div>
                     </div>
                     {badge(d.current)}
                   </div>
-                  {(() => { const cs = this.connStatus(d); return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: cs.c, fontSize: 12, fontWeight: 600, marginBottom: 11 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: 7, background: cs.c, display: 'inline-block' }} />{cs.t}
-                    </div>
-                  ); })()}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
-                    <span>Mode: <b style={{ color: C.ink }}>{d.lockMode}</b></span>
-                    <span>Status: <b style={{ color: C.ink }}>{d.status}</b></span>
-                    <span>Last check-in: <b style={{ color: C.ink }}>{d.lastCheckin ? new Date(d.lastCheckin).toLocaleString() : 'never'}</b></span>
-                    {this.timedNote(d)}
-                    <span>Calls: <b style={{ color: d.callMode === 'shop_only' ? C.red : C.ink }}>{d.callMode === 'shop_only' ? `only ${d.allowNumber || '—'}` : 'all allowed'}</b></span>
-                    {d.claimed && d.status !== 'deleted' ? <span>App: {this.appVersionLabel(d)}</span> : null}
-                    {d.claimed && d.status !== 'deleted' ? <span>Control: {d.instant ? <b style={{ color: C.green }}>instant</b> : <b style={{ color: C.ink }}>at next check-in (~6h)</b>}</span> : null}
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: C.mut, marginBottom: 11 }}>
-                    <span>Last location: {d.locAt
-                      ? <><a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.green, fontWeight: 700 }}>{Number(d.lat).toFixed(5)}, {Number(d.lng).toFixed(5)}</a> <span style={{ color: C.mut }}>· {new Date(d.locAt).toLocaleString()}{d.locAcc ? ` · ±${Math.round(d.locAcc)}m` : ''}</span></>
-                      : <b style={{ color: C.ink }}>not reported yet</b>}
-                      {d.locPerm && d.locPerm !== 'fg+bg' ? <b style={{ color: C.amber }}> · {d.locPerm === 'none' ? 'location permission OFF on phone' : 'background location not allowed — only updates when the app is opened'}</b> : null}</span>
-                  </div>
-                  {d.status !== 'deleted' && this.state.tuOpen === d.id ? this.renderTempUnlock(d) : null}
-                  {d.claimed && d.status !== 'deleted' ? this.simRow(d) : null}
+
+                  {section('🔒 Lock', [
+                    field('Mode', ({ auto: 'Auto — follows plan', force_lock: 'Locked by shop', force_unlock: 'Unlocked by shop' })[mode] || mode),
+                    field('Status', d.status),
+                    d.unlockUntil ? field('Temporary unlock', this.timedNote(d)) : null,
+                    field('Calls', d.callMode === 'shop_only' ? <span style={{ color: C.red }}>Only {d.allowNumber || '—'}</span> : 'All allowed'),
+                    live ? field('Control', d.instant ? 'Instant' : 'At next check-in (~6h)') : null,
+                  ])}
+
+                  {section('📱 Phone', [
+                    live ? field('App', this.appVersionLabel(d)) : null,
+                    field('Last check-in', d.lastCheckin ? new Date(d.lastCheckin).toLocaleString() : 'Never'),
+                    field('📍 Location', d.locAt
+                      ? <><a href={`https://maps.google.com/?q=${d.lat},${d.lng}`} target="_blank" rel="noopener" style={{ color: C.ink, textDecoration: 'underline' }}>{Number(d.lat).toFixed(5)}, {Number(d.lng).toFixed(5)}</a>
+                          <div style={{ fontSize: 11.5, color: C.mut }}>{new Date(d.locAt).toLocaleString()}{d.locAcc ? ` · ±${Math.round(d.locAcc)}m` : ''}</div>
+                          {d.locPerm && d.locPerm !== 'fg+bg' ? <div style={{ fontSize: 11.5, color: C.amber }}>{d.locPerm === 'none' ? 'Location permission off' : 'Background location off — updates only when the app is opened'}</div> : null}</>
+                      : 'Not reported yet'),
+                    info ? field('Model', [[info.brand, info.model].filter(Boolean).join(' '), info.android ? 'Android ' + info.android : ''].filter(Boolean).join(' · ')) : null,
+                    info && info.imei1 ? field('IMEI', <span style={mono}>{info.imei1}{info.imei2 ? <><br />{info.imei2}</> : null}</span>) : null,
+                    info && info.serial ? field('Serial', <span style={mono}>{info.serial}</span>) : null,
+                    info && info.battery != null ? field('Battery', `${info.battery}%${info.charging ? ' · charging' : ''}${info.network ? ' · ' + info.network : ''}`) : null,
+                  ])}
+
+                  {live ? section('📶 SIM & protection', this.simFields(d, field)) : null}
+
+                  {d.status !== 'deleted' && this.state.tuOpen === d.id ? <div style={{ borderTop: '1px solid ' + C.line, padding: '12px 0' }}>{this.renderTempUnlock(d)}</div> : null}
+
+                  <div style={{ borderTop: '1px solid ' + C.line, padding: '12px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {d.status === 'deleted' ? (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {btn('Restore', C.green, () => this.act(d.id, 'active'))}
-                    {btn('Delete forever', C.red, () => this.act(d.id, 'purge', 'Permanently delete this record? This CANNOT be undone.'))}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {btn('↩️ Restore', '', () => this.act(d.id, 'active'))}
+                      {btn('🗑️ Delete forever', 'danger', () => this.act(d.id, 'purge', 'Permanently delete this record? This CANNOT be undone.'))}
+                    </div>
+                  ) : (<>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                      <div style={{ display: 'inline-flex', border: '1px solid ' + C.ink, borderRadius: 6, overflow: 'hidden' }}>
+                        {[['force_lock', 'lock', '🔒 Lock', 'Force-lock this phone now?'], ['auto', 'auto', '⚙️ Auto', null], ['force_unlock', 'unlock', '🔓 Unlock', 'Force-unlock (ignore overdue) this phone?']].map(([m, a, lbl, q], i) => (
+                          <button key={m} onClick={() => this.act(d.id, a, q)} style={{ padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', border: 'none', borderLeft: i ? '1px solid ' + C.ink : 'none', background: mode === m ? C.ink : '#fff', color: mode === m ? '#fff' : C.ink }}>{lbl}</button>
+                        ))}
+                      </div>
+                      {btn(this.state.tuOpen === d.id ? '✕ Close temporary unlock' : '⏱️ Temporary unlock', this.state.tuOpen === d.id ? 'on' : '', () => this.setState({ tuOpen: this.state.tuOpen === d.id ? null : d.id }))}
+                      <span style={{ flex: 1 }} />
+                      {btn('📋 Details & history', '', () => this.openDetail(d))}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                      {d.callMode === 'shop_only'
+                        ? btn('📞 Allow all calls', '', () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
+                        : btn('📞 Shop-only calls', '', () => this.setCallShop(d))}
+                      <select value={d.simMode || 'lock'} onChange={e => this.setSimMode(d, e.target.value)} title="SIM lock for this phone" style={btnS}>
+                        <option value="lock">📶 SIM: lock phone</option>
+                        <option value="alert">📶 SIM: alert only</option>
+                        <option value="off">📶 SIM: off</option>
+                      </select>
+                      {d.simChangedAt ? btn('✅ Accept new SIM', '', () => this.act(d.id, 'simaccept', 'Register the SIM now in this phone as its own? The SIM lock will then protect the NEW SIM.')) : null}
+                      {(d.status === 'released' || d.status === 'lost') ? btn('▶️ Activate', '', () => this.act(d.id, 'active', 'Bring this phone back to Active (auto-lock on overdue)?')) : null}
+                      <span style={{ flex: 1 }} />
+                      {btn('⚠️ Mark lost', 'danger', () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
+                      {btn('🏁 Release', 'danger', () => this.act(d.id, 'release', 'Release this phone? This UN-ENROLLS it and removes the lock permanently — only do this when the loan is fully paid.'))}
+                      {this.canDelete(d)
+                        ? btn('🗑️ Delete', 'danger', () => this.act(d.id, 'delete', 'Move this device to Deleted?'))
+                        : btn('🗑️ Delete', 'off', () => alert(d.status === 'released'
+                            ? 'Release is still pending — wait until the phone checks in and frees itself, then delete.'
+                            : 'Release this phone first. Deleting an enrolled phone leaves it stuck: it stays managed and locks itself when it can\'t reach the server.'))}
+                    </div>
+                  </>)}
                   </div>
-                  ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {btn('Details & history', C.ink, () => this.openDetail(d))}
-                    {btn('Lock', C.red, () => this.act(d.id, 'lock', 'Force-lock this phone now?'))}
-                    {btn('Unlock', C.green, () => this.act(d.id, 'unlock', 'Force-unlock (ignore overdue) this phone?'))}
-                    {btn('Auto', C.ink, () => this.act(d.id, 'auto'))}
-                    {btn(this.state.tuOpen === d.id ? 'Close temporary unlock' : 'Temporary unlock', C.green, () => this.setState({ tuOpen: this.state.tuOpen === d.id ? null : d.id }))}
-                    {(d.status === 'released' || d.status === 'lost') ? btn('Activate', C.green, () => this.act(d.id, 'active', 'Bring this phone back to Active (auto-lock on overdue)?')) : null}
-                    {btn('Mark lost', C.amber, () => this.act(d.id, 'lost', 'Mark this phone as LOST/STOLEN? It will lock on next check-in.'))}
-                    {btn('Release', C.ink, () => this.act(d.id, 'release', 'Release this phone? This UN-ENROLLS it and removes the lock permanently — only do this when the loan is fully paid.'))}
-                    {this.canDelete(d)
-                      ? btn('Delete', C.mut, () => this.act(d.id, 'delete', 'Move this device to Deleted?'))
-                      : btn('Delete', '#c9c3b3', () => alert(d.status === 'released'
-                          ? 'Release is still pending — wait until the phone checks in and frees itself, then delete.'
-                          : 'Release this phone first. Deleting an enrolled phone leaves it stuck: it stays managed and locks itself when it can\'t reach the server.'))}
-                    {d.callMode === 'shop_only'
-                      ? btn('Calls: all', C.green, () => this.act(d.id, 'callopen', 'Lift the call block — let this phone call any number?'))
-                      : btn('Shop-only calls', C.amber, () => this.setCallShop(d))}
-                    <select value={d.simMode || 'lock'} onChange={e => this.setSimMode(d, e.target.value)} title="SIM lock for this phone" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid ' + C.line, background: '#fff', color: C.ink, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
-                      <option value="lock">SIM: lock phone</option>
-                      <option value="alert">SIM: alert only</option>
-                      <option value="off">SIM: off</option>
-                    </select>
-                    {d.simChangedAt ? btn('Accept new SIM', C.ink, () => this.act(d.id, 'simaccept', 'Register the SIM now in this phone as its own? The SIM lock will then protect the NEW SIM.')) : null}
-                  </div>
-                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
       </div>
