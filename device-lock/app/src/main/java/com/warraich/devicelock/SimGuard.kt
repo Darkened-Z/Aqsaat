@@ -51,7 +51,7 @@ object SimGuard {
                 ?: runCatching { info.iccId }.getOrNull()).orEmpty().trim().uppercase()
             val number = runCatching {
                 if (Build.VERSION.SDK_INT >= 33) sm!!.getPhoneNumber(info.subscriptionId) else sub.line1Number
-            }.getOrNull().orEmpty()
+            }.getOrNull().orEmpty().ifBlank { SimNumber.cached(ctx, iccid) }
             SimSlot(info.simSlotIndex, iccid, info.carrierName?.toString().orEmpty(), number)
         }
         val iccids = slots.map { it.iccid }.filter { Regex("^[0-9A-F]{10,22}$").matches(it) }.distinct()
