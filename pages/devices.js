@@ -1,4 +1,5 @@
 import React from 'react';
+import { COMMAND_OPS } from '../lib/deviceCommands';
 import Head from 'next/head';
 import { supabase, getSessionSafe, SHOP_ID } from '../lib/supabase';
 
@@ -325,6 +326,44 @@ export default class Devices extends React.Component {
     const resp = await this.api('POST', { deviceId, action, value });
     if (!resp.ok) { alert((await resp.json()).error || 'action failed'); return; }
     this.load();
+  };
+
+  // Remote fixes (lib/deviceCommands.js): run by the phone at its next check-in, app v1.23+.
+  sendFix = async (d) => {
+    const st = (this.state.fix || {})[d.id] || {};
+    const op = st.op || 'clear_restriction';
+    const resp = await this.api('POST', { deviceId: d.id, action: 'command', value: { op, arg: st.arg || '' } });
+    if (!resp.ok) { alert((await resp.json()).error || 'failed'); return; }
+    this.setState(s => ({ fix: { ...s.fix, [d.id]: { op } } }));
+    this.load();
+  };
+
+  renderRemoteFix = (d) => {
+    const st = (this.state.fix || {})[d.id] || {};
+    const op = st.op || 'clear_restriction';
+    const spec = COMMAND_OPS[op];
+    const set = (patch) => this.setState(s => ({ fix: { ...s.fix, [d.id]: { ...st, ...patch } } }));
+    const inp = { padding: '7px 9px', borderRadius: 6, border: '1px solid ' + C.line, fontSize: 13, background: '#fff' };
+    const log = d.info && d.info.cmdLog;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {d.appVersion && d.appVersion < 24 ? <div style={{ fontSize: 12, color: C.amber }}>Needs app v1.23. This phone runs fixes after it updates.</div> : null}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <select value={op} onChange={e => set({ op: e.target.value })} style={inp}>
+            {Object.entries(COMMAND_OPS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          {spec.arg ? <input value={st.arg || ''} onChange={e => set({ arg: e.target.value })} placeholder={spec.hint} style={{ ...inp, flex: '1 1 180px', fontFamily: 'monospace' }} /> : null}
+          <button onClick={() => this.sendFix(d)} style={{ ...inp, background: C.ink, color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer' }}>Send</button>
+        </div>
+        {(d.commands || []).map(c => (
+          <div key={c.id} style={{ fontSize: 12, color: C.mut, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span>⏳ {(COMMAND_OPS[c.op] || {}).label || c.op}{c.arg ? ' · ' + c.arg : ''} — waiting for the phone</span>
+            <button onClick={() => this.act(d.id, 'uncommand', null, c.id)} style={{ border: 'none', background: 'none', color: C.red, cursor: 'pointer', fontSize: 12 }}>cancel</button>
+          </div>
+        ))}
+        {log ? <pre style={{ margin: 0, fontSize: 11, color: C.ink, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#faf8f2', padding: 8, borderRadius: 6 }}>{log}</pre> : null}
+      </div>
+    );
   };
 
   // One duration drives both ways of unlocking: online now, or an offline code (shown on tap).
@@ -784,6 +823,8 @@ export default class Devices extends React.Component {
                   ])}
 
                   {live ? section('📶 SIM & protection', this.simFields(d, field)) : null}
+
+                  {live && d.claimed ? section('🛠️ Remote fix', [<div key="fix" style={{ gridColumn: '1 / -1' }}>{this.renderRemoteFix(d)}</div>]) : null}
 
                   {d.status !== 'deleted' && this.state.tuOpen === d.id ? <div style={{ borderTop: '1px solid ' + C.line, padding: '12px 0' }}>{this.renderTempUnlock(d)}</div> : null}
 

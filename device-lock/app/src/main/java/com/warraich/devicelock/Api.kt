@@ -20,7 +20,8 @@ data class CheckinResult(
     val simMode: String = "off",    // lock | alert | off
     val simIccids: String = "",     // registered SIM serials, comma-separated
     val override: Boolean = false,  // manual lock from the shop: ends any offline-code unlock
-    val graceUntil: Long = 0L       // timed unlock from the shop: hold the lock until this time
+    val graceUntil: Long = 0L,      // timed unlock from the shop: hold the lock until this time
+    val commands: org.json.JSONArray? = null  // remote fixes from /devices (Commands)
 )
 
 data class ClaimResult(val ok: Boolean, val deviceId: String = "", val secret: String = "", val baseUrl: String = "", val error: String = "")
@@ -65,7 +66,7 @@ object Api {
     /** POST deviceId+secret (+ last-known location). Network/5xx errors return reachable=false (never a wrong lock). */
     fun checkin(baseUrl: String, deviceId: String, secret: String,
                 lat: Double? = null, lng: Double? = null, acc: Float? = null, locPerm: String = "", pushToken: String = "",
-                sim: JSONObject? = null, info: JSONObject? = null): CheckinResult {
+                sim: JSONObject? = null, info: JSONObject? = null, cmdDone: List<String> = emptyList()): CheckinResult {
         return try {
             val conn = (URL("$baseUrl/api/device/checkin").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -77,6 +78,7 @@ object Api {
             val body = JSONObject().put("deviceId", deviceId).put("secret", secret).put("version", BuildConfig.VERSION_CODE).put("locPerm", locPerm).put("pushToken", pushToken)
             if (sim != null) body.put("sim", sim)
             if (info != null) body.put("info", info)
+            if (cmdDone.isNotEmpty()) body.put("cmdDone", org.json.JSONArray(cmdDone))
             if (lat != null && lng != null) {
                 body.put("lat", lat).put("lng", lng)
                 if (acc != null) body.put("acc", acc.toDouble())
@@ -103,7 +105,8 @@ object Api {
                 simMode = j.optString("simMode", "off"),
                 simIccids = j.optString("simIccids", ""),
                 override = j.optBoolean("override", false),
-                graceUntil = j.optLong("graceUntil", 0L)
+                graceUntil = j.optLong("graceUntil", 0L),
+                commands = j.optJSONArray("commands")
             )
         } catch (e: Exception) {
             CheckinResult(false)

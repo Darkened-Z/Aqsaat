@@ -44,6 +44,9 @@ class Prefs(ctx: Context) {
     var frpIds: String      get() = sp.getString("frpIds", "") ?: "";           set(v) = sp.edit().putString("frpIds", v).apply()
 
     // Last self-update attempt, reported to the shop so a stuck update shows why.
+    var cmdSeen: String     get() = sp.getString("cmdSeen", "") ?: "";          set(v) = sp.edit().putString("cmdSeen", v).apply()
+    var cmdAcks: String     get() = sp.getString("cmdAcks", "") ?: "";          set(v) = sp.edit().putString("cmdAcks", v).apply()
+    var cmdLog: String      get() = sp.getString("cmdLog", "") ?: "";           set(v) = sp.edit().putString("cmdLog", v).apply()
     var appsFix: String     get() = sp.getString("appsFix", "") ?: "";          set(v) = sp.edit().putString("appsFix", v).apply()
     var pinFix: String      get() = sp.getString("pinFix", "") ?: "";           set(v) = sp.edit().putString("pinFix", v).apply()
     var updStatus: String   get() = sp.getString("updStatus", "") ?: "";        set(v) = sp.edit().putString("updStatus", v).apply()
