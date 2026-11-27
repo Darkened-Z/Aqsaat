@@ -30,6 +30,8 @@ class LockManager(private val ctx: Context) {
         )) runCatching { dpm.addUserRestriction(admin, r) }
         // Customers must be able to add their own Google account; lift it on phones set up by v1.2 or older.
         runCatching { dpm.clearUserRestriction(admin, UserManager.DISALLOW_MODIFY_ACCOUNTS) }
+        // Blocked the mobile-data switch (see SimGuard.applyPolicy); set by v1.21 and older.
+        runCatching { dpm.clearUserRestriction(admin, UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS) }
         grantRuntimePerms()
         // Force location services on so a fresh fix is available for recovery.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) runCatching { dpm.setLocationEnabled(admin, true) }
@@ -113,6 +115,32 @@ class LockManager(private val ctx: Context) {
     fun clearFrpPolicy() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || !isDeviceOwner()) return
         runCatching { dpm.setFactoryResetProtectionPolicy(admin, null) }
+    }
+
+    /**
+     * What the phone actually blocks, for the shop's /devices page: user restrictions in
+     * force, and the state of the apps customers ask about (i=installed, e=enabled,
+     * h=hidden, s=suspended, u=uninstall-blocked; "-" = not on the phone).
+     */
+    fun diag(): String {
+        val um = ctx.getSystemService(android.os.UserManager::class.java)
+        val r = runCatching { um.userRestrictions }.getOrNull()
+        val on = r?.keySet()?.filter { r.getBoolean(it) }?.map { it.removePrefix("no_") }?.sorted().orEmpty()
+        val pm = ctx.packageManager
+        val owner = isDeviceOwner()
+        val apps = listOf("com.whatsapp" to "WA", "com.whatsapp.w4b" to "WAB", "com.android.vending" to "Play").joinToString(" ") { (pkg, n) ->
+            val ai = runCatching { pm.getApplicationInfo(pkg, PackageManager.MATCH_UNINSTALLED_PACKAGES or PackageManager.MATCH_DISABLED_COMPONENTS) }.getOrNull()
+                ?: return@joinToString "$n:-"
+            val f = StringBuilder()
+            if (ai.flags and ApplicationInfo.FLAG_INSTALLED != 0) f.append('i')
+            if (ai.enabled) f.append('e')
+            if (owner && runCatching { dpm.isApplicationHidden(admin, pkg) }.getOrDefault(false)) f.append('h')
+            if (ai.flags and ApplicationInfo.FLAG_SUSPENDED != 0) f.append('s')
+            if (owner && runCatching { dpm.isUninstallBlocked(admin, pkg) }.getOrDefault(false)) f.append('u')
+            if (ai.flags and ApplicationInfo.FLAG_SYSTEM != 0) f.append("·sys")
+            "$n:$f"
+        }
+        return "$apps | ${on.joinToString(",")}"
     }
 
     fun pinned(): Boolean = runCatching {
