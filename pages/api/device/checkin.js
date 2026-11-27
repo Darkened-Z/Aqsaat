@@ -4,12 +4,13 @@ import { config as payConfig } from '../../../lib/payments/jazzcash';
 import { payUrl, dueNow, planOf, confirmPendingFor } from '../../../lib/payments/online';
 import { checkinMinutes, keepPoint, cleanFrpIds } from '../../../lib/lockPro';
 import { simCheck, cleanSim, cleanInfo, SIM_MESSAGE } from '../../../lib/simLock';
+import { pending } from '../../../lib/deviceCommands';
 
 // Called by the phone app on a timer. Authenticated by the per-device secret, not
 // a user login. No member check — the device is not a signed-in person.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { deviceId, secret, lat, lng, acc, version, locPerm, pushToken, sim, info } = req.body || {};
+  const { deviceId, secret, lat, lng, acc, version, locPerm, pushToken, sim, info, cmdDone } = req.body || {};
   if (!deviceId || !secret) return res.status(400).json({ error: 'deviceId and secret required' });
 
   const { data: device } = await supabaseAdmin
@@ -32,6 +33,8 @@ export default async function handler(req, res) {
   const pay = payConfig() && result.action !== 'release' && result.reason !== 'manual' ? dueNow(planOf(shopData, device.plan_id)) : null;
 
   const patch = { last_checkin: new Date().toISOString(), last_action: result.action, ...simc.patch };
+  const commands = pending(device.commands, cmdDone);
+  if (commands.length !== (device.commands || []).length) patch.commands = commands;
   const inf = cleanInfo(info);
   if (inf) { patch.device_info = inf; patch.info_at = patch.last_checkin; }
   if (Number.isInteger(version)) patch.app_version = version;
@@ -69,6 +72,7 @@ export default async function handler(req, res) {
     graceUntil: result.graceUntil || 0,
     simMode: simc.mode,
     simIccids: simc.baseline.join(','),
+    commands: commands.map(({ id, op, arg }) => ({ id, op, arg })),
     frpAccountIds: cleanFrpIds(shopData.settings && shopData.settings.frp && shopData.settings.frp.accountIds).join(','),
   });
 }

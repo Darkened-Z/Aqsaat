@@ -52,10 +52,19 @@ object Checkin {
         val sim = SimGuard.snapshot(ctx)
         LockManager(ctx).exitStaleLockTask()
         val info = runCatching { DeviceInfo.collect(ctx) }.getOrNull()
-        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx), p.pushToken, sim.toJson(), info)
+        val acks = p.cmdAcks.split(",").filter { it.isNotBlank() }
+        val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx), p.pushToken, sim.toJson(), info, acks)
         val now = System.currentTimeMillis()
 
         if (r.reachable) {
+            if (acks.isNotEmpty()) p.cmdAcks = p.cmdAcks.split(",").filter { it.isNotBlank() && it !in acks }.joinToString(",")
+            // Remote fixes: run, then report straight away so the shop sees the result now.
+            if (Commands.run(ctx, r.commands)) {
+                val done = p.cmdAcks.split(",").filter { it.isNotBlank() }
+                val again = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx), p.pushToken,
+                    SimGuard.snapshot(ctx).toJson(), runCatching { DeviceInfo.collect(ctx) }.getOrNull(), done)
+                if (again.reachable) p.cmdAcks = p.cmdAcks.split(",").filter { it.isNotBlank() && it !in done }.joinToString(",")
+            }
             p.lastOkMs = now
             p.offlineLockDays = r.offlineLockDays
             p.callMode = r.callMode

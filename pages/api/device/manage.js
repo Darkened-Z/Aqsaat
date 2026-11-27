@@ -3,6 +3,7 @@ import { whoAmI } from '../../../lib/staff';
 import { evaluate, unlockCode, UNLOCK_CODE_KINDS, LATEST_APP_VERSION } from '../../../lib/deviceLock';
 import { pokeDevices } from '../../../lib/fcm';
 import { SIM_MODES, simLabels } from '../../../lib/simLock';
+import { newCommand, pending } from '../../../lib/deviceCommands';
 
 // Owner-only. GET lists devices with live status + today's unlock code.
 // POST applies an action to one device.
@@ -36,7 +37,7 @@ export default async function handler(req, res) {
       planId: dev.plan_id, customerId: dev.customer_id,
       appVersion: dev.app_version, locPerm: dev.loc_perm, instant: !!dev.push_token,
       simMode: dev.sim_mode || 'lock', simBaseline: dev.sim_baseline || [], simCurrent: dev.sim_current || null,
-      simChangedAt: dev.sim_changed_at, simLabels: dev.sim_labels || {}, info: dev.device_info || null, infoAt: dev.info_at,
+      simChangedAt: dev.sim_changed_at, simLabels: dev.sim_labels || {}, info: dev.device_info || null, infoAt: dev.info_at, commands: dev.commands || [],
     }));
     return res.json({ devices: list, latestVersion: LATEST_APP_VERSION });
   }
@@ -65,6 +66,20 @@ export default async function handler(req, res) {
       const { error } = await supabaseAdmin.from('devices').update({ sim_mode: value }).eq('id', deviceId).eq('shop_id', SHOP_ID);
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true, push: await pokeDevices({ deviceId }) });
+    }
+    if (action === 'command' || action === 'uncommand') {
+      const { data: dev } = await supabaseAdmin.from('devices').select('commands').eq('id', deviceId).eq('shop_id', SHOP_ID).single();
+      if (!dev) return res.status(404).json({ error: 'unknown device' });
+      let commands;
+      if (action === 'uncommand') commands = pending(dev.commands, [value]);
+      else {
+        const { cmd, error } = newCommand(value && value.op, value && value.arg);
+        if (error) return res.status(400).json({ error });
+        commands = [...pending(dev.commands, []), cmd].slice(-10);
+      }
+      const { error } = await supabaseAdmin.from('devices').update({ commands }).eq('id', deviceId).eq('shop_id', SHOP_ID);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ ok: true, push: action === 'command' ? await pokeDevices({ deviceId }) : [] });
     }
     if (action === 'simaccept') {
       // Register the SIM(s) in the phone now as its own (customer changed number with the shop's OK).

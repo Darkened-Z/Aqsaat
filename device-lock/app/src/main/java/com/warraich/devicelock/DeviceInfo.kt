@@ -41,6 +41,7 @@ object DeviceInfo {
             .put("lock", Prefs(ctx).lockState)
             .put("pinFix", Prefs(ctx).pinFix)
             .put("appsFix", Prefs(ctx).appsFix)
+            .put("cmdLog", Prefs(ctx).cmdLog)
             .put("diag", runCatching { LockManager(ctx).diag() }.getOrDefault("err"))
     }
 }
