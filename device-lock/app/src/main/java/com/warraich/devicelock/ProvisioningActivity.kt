@@ -19,7 +19,7 @@ class ProvisioningActivity : Activity() {
                 val result = Intent().putExtra(
                     DevicePolicyManager.EXTRA_PROVISIONING_MODE,
                     DevicePolicyManager.PROVISIONING_MODE_FULLY_MANAGED_DEVICE
-                )
+                ).putExtra(DevicePolicyManager.EXTRA_PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED, true)
                 setResult(RESULT_OK, result)
                 finish()
             }

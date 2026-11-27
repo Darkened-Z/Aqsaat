@@ -5,6 +5,8 @@ import android.app.admin.DevicePolicyManager
 import android.app.admin.FactoryResetProtectionPolicy
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.UserManager
 
@@ -32,6 +34,36 @@ class LockManager(private val ctx: Context) {
         // Force location services on so a fresh fix is available for recovery.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) runCatching { dpm.setLocationEnabled(admin, true) }
         applyFrpPolicy(Prefs(ctx).frpIds)
+        restoreSystemApps()
+    }
+
+    /**
+     * Fully-managed setup removes the phone maker's preloaded apps (WhatsApp, Facebook…
+     * on DCODE) for the user unless the DPC itself asks to keep them; their icons and the
+     * Play Store then say "Blocked by work policy". Put back every preloaded app that has
+     * a launcher icon but isn't installed, or is hidden, for this user.
+     */
+    fun restoreSystemApps() {
+        if (!isDeviceOwner()) return
+        val pm = ctx.packageManager
+        val fixed = mutableListOf<String>()
+        val apps = runCatching { pm.getInstalledApplications(PackageManager.MATCH_UNINSTALLED_PACKAGES) }.getOrDefault(emptyList())
+        for (ai in apps) {
+            if (ai.flags and ApplicationInfo.FLAG_SYSTEM == 0) continue
+            val pkg = ai.packageName
+            val missing = ai.flags and ApplicationInfo.FLAG_INSTALLED == 0
+            val hidden = runCatching { dpm.isApplicationHidden(admin, pkg) }.getOrDefault(false)
+            if (!missing && !hidden) continue
+            val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(pkg)
+            if (runCatching { pm.queryIntentActivities(launcher, PackageManager.MATCH_UNINSTALLED_PACKAGES or PackageManager.MATCH_DISABLED_COMPONENTS) }.getOrDefault(emptyList()).isEmpty()) continue
+            if (missing) runCatching { dpm.enableSystemApp(admin, pkg) }
+            if (hidden) runCatching { dpm.setApplicationHidden(admin, pkg, false) }
+            fixed += pkg
+        }
+        if (fixed.isNotEmpty()) {
+            Prefs(ctx).appsFix = (java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.US).format(java.util.Date()) +
+                " restored ${fixed.size}: " + fixed.joinToString(", ") { it.removePrefix("com.") }).take(160)
+        }
     }
 
     /**
