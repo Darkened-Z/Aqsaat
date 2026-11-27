@@ -53,6 +53,23 @@ export default function Document() {
 })();` }} />
       </Head>
       <body>
+        {/* Phones: lay the app out wider and scale it to fit, so screens show more rows.
+            Set before the first paint: iOS ignores a later change of initial-scale.
+            maximum-scale stops iOS zooming in on focused inputs. */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){
+  var S=0.86;
+  window.__aqsatVp=function(){
+    var s=window.screen,a=Math.min(s.width,s.height),b=Math.max(s.width,s.height);
+    if(a>=600)return null;
+    var w=window.matchMedia('(orientation: landscape)').matches?b:a;
+    return 'width='+Math.round(w/S)+', initial-scale='+S+', maximum-scale='+S;
+  };
+  var v=window.__aqsatVp();
+  if(!v||location.pathname.indexOf('/portal')===0)return;
+  var m=document.querySelector('meta[name=viewport]');
+  if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}
+  m.content=v;
+})();` }} />
         <Main />
         <NextScript />
       </body>
