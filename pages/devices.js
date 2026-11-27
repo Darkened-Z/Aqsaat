@@ -431,6 +431,7 @@ export default class Devices extends React.Component {
       info && (info.pinned || info.pinFix) ? field('Screen pinning', info.pinned
         ? <span style={{ color: info.lock === 'hard' ? C.mut : C.red }}>{info.lock === 'hard' ? 'On (lock screen showing)' : 'Stuck on — other apps blocked'}</span>
         : <span style={{ color: C.green }}>Off · stuck pin {info.pinFix}</span>) : null,
+      info && info.appsFix ? field('Preloaded apps', <span style={{ color: C.green }}>{info.appsFix}</span>) : null,
     ];
   };
 

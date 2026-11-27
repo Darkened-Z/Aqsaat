@@ -40,5 +40,6 @@ object DeviceInfo {
             .put("pinned", LockManager(ctx).pinned())
             .put("lock", Prefs(ctx).lockState)
             .put("pinFix", Prefs(ctx).pinFix)
+            .put("appsFix", Prefs(ctx).appsFix)
     }
 }
