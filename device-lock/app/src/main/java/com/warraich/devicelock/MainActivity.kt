@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (p.enrolled) loadPlan()
+        if (p.enrolled) { LockManager(this).exitStaleLockTask(); loadPlan() }
     }
 
     private fun pad(dp: Int) = (dp * resources.displayMetrics.density).toInt()

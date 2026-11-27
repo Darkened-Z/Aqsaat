@@ -37,5 +37,8 @@ object DeviceInfo {
             .put("frpSupported", Build.VERSION.SDK_INT >= 30 && LockManager(ctx).isDeviceOwner())
             .put("frpIds", Prefs(ctx).frpIds)
             .put("upd", Prefs(ctx).updStatus)
+            .put("pinned", LockManager(ctx).pinned())
+            .put("lock", Prefs(ctx).lockState)
+            .put("pinFix", Prefs(ctx).pinFix)
     }
 }
