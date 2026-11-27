@@ -465,7 +465,7 @@ export default class Devices extends React.Component {
     if (this.props.embedded) return authUser ? this.renderApp() : <div style={{ padding: 30, color: C.mut }}>Loading…</div>;
     return (
       <div style={{ minHeight: '100vh', background: C.bg, fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", color: C.ink }}>
-        <Head><title>Devices — Aqsat</title><meta name="viewport" content="width=device-width,initial-scale=1" /></Head>
+        <Head><title>Devices — Aqsat</title></Head>
         {authUser === undefined ? <div style={{ padding: 40, color: C.mut }}>Loading…</div>
           : authUser === null ? this.renderLogin() : this.renderApp()}
       </div>
