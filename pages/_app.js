@@ -3,21 +3,13 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 
-// Phones: lay the app out wider and scale it to fit, so every screen shows more
-// rows. Scaling the viewport (not CSS zoom) keeps fixed bars and 100vh correct.
-// maximum-scale stops iOS zooming in on focused inputs.
-const PHONE_SCALE = 0.86;
-function phoneViewport() {
-  const s = window.screen;
-  if (Math.min(s.width, s.height) >= 600) return null;
-  const landscape = window.matchMedia('(orientation: landscape)').matches;
-  const w = landscape ? Math.max(s.width, s.height) : Math.min(s.width, s.height);
-  return `width=${Math.round(w / PHONE_SCALE)}, initial-scale=${PHONE_SCALE}, maximum-scale=${PHONE_SCALE}`;
-}
+// Phone scaling is computed by the inline script in _document (before first paint);
+// this keeps next/head from putting the default viewport back.
+const phoneViewport = () => (window.__aqsatVp ? window.__aqsatVp() : null);
 
 export default function App({ Component, pageProps }) {
   const router = useRouter();
-  const [viewport, setViewport] = useState(null);
+  const [viewport, setViewport] = useState(() => (typeof window === 'undefined' ? null : phoneViewport()));
   useEffect(() => {
     const set = () => setViewport(phoneViewport());
     set();
