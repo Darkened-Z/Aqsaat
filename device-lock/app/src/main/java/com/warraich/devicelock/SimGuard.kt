@@ -97,14 +97,21 @@ object SimGuard {
         androidx.work.WorkManager.getInstance(ctx).enqueueUniqueWork("devicelock-simcheck", androidx.work.ExistingWorkPolicy.REPLACE, req)
     }
 
-    /** No airplane mode / mobile-network fiddling while SIM lock is on (Android 9+). */
+    /**
+     * No airplane mode while SIM lock is on (Android 9+). Mobile-network settings stay
+     * open: that restriction also greys out the mobile-data switch, so a customer whose
+     * data went off could never turn it back on ("Blocked by work policy"). v1.21 and
+     * older set it; it's cleared here and on every app start.
+     */
     fun applyPolicy(ctx: Context, mode: String) {
         val lm = LockManager(ctx)
         if (Build.VERSION.SDK_INT < 28 || !lm.isDeviceOwner()) return
         val dpm = ctx.getSystemService(android.app.admin.DevicePolicyManager::class.java)
         val admin = AdminReceiver.component(ctx)
-        for (r in listOf(UserManager.DISALLOW_AIRPLANE_MODE, UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) runCatching {
-            if (mode == "off") dpm.clearUserRestriction(admin, r) else dpm.addUserRestriction(admin, r)
+        runCatching { dpm.clearUserRestriction(admin, UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS) }
+        runCatching {
+            if (mode == "off") dpm.clearUserRestriction(admin, UserManager.DISALLOW_AIRPLANE_MODE)
+            else dpm.addUserRestriction(admin, UserManager.DISALLOW_AIRPLANE_MODE)
         }
     }
 }
