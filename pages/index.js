@@ -6342,8 +6342,8 @@ export default class App extends React.Component {
             const hasOverdue = p.overdueCount > 0;
             const isPinned = this.isUdharPinned(p.name);
             const meta = this.getUdharMeta(p.name);
-            return h('div', { key: p.name, onClick: () => this.setState({ udharPerson: p.name }), style: { display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid #f0f2ee', cursor: 'pointer', background: '#fff' } },
-              h('div', { style: { width: 42, height: 42, borderRadius: 13, background: ac + '18', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 } }, initials(p.name)),
+            return h('div', { key: p.name, onClick: () => this.setState({ udharPerson: p.name }), style: { display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: '1px solid #f0f2ee', cursor: 'pointer', background: '#fff' } },
+              h('div', { style: { width: 36, height: 36, borderRadius: 11, background: ac + '18', color: ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 } }, initials(p.name)),
               h('div', { style: { flex: 1, minWidth: 0 } },
                 h('div', { style: { fontSize: 15, fontWeight: 600, color: '#16211c' } },
                   isPinned ? '📌 ' : '',
