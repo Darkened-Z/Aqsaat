@@ -11,6 +11,7 @@ class BootReceiver : BroadcastReceiver() {
         if (!p.enrolled) return
         CheckinWorker.schedule(context)
         LockManager(context).applyOwnerPolicies()
+        LockManager(context).exitStaleLockTask()
         val now = System.currentTimeMillis()
         if (p.lockState == "hard" && now >= p.unlockUntilMs) {
             LockManager(context).showLock(p.message)

@@ -44,6 +44,7 @@ class Prefs(ctx: Context) {
     var frpIds: String      get() = sp.getString("frpIds", "") ?: "";           set(v) = sp.edit().putString("frpIds", v).apply()
 
     // Last self-update attempt, reported to the shop so a stuck update shows why.
+    var pinFix: String      get() = sp.getString("pinFix", "") ?: "";           set(v) = sp.edit().putString("pinFix", v).apply()
     var updStatus: String   get() = sp.getString("updStatus", "") ?: "";        set(v) = sp.edit().putString("updStatus", v).apply()
     var updTryMs: Long      get() = sp.getLong("updTryMs", 0L);                 set(v) = sp.edit().putLong("updTryMs", v).apply()
     fun simNumber(iccid: String): String = sp.getString("simNum_$iccid", "") ?: ""

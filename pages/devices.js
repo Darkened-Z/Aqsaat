@@ -428,6 +428,9 @@ export default class Devices extends React.Component {
       info ? field('FRP', !info.frpSupported ? <span style={{ color: C.amber }}>Not supported (needs Android 11+)</span>
         : info.frpIds ? <span style={{ color: C.green }}>Armed · {info.frpIds.split(',').length} account{info.frpIds.includes(',') ? 's' : ''}</span>
         : <span style={{ color: C.red }}>Not armed — set the shop account above</span>) : null,
+      info && (info.pinned || info.pinFix) ? field('Screen pinning', info.pinned
+        ? <span style={{ color: info.lock === 'hard' ? C.mut : C.red }}>{info.lock === 'hard' ? 'On (lock screen showing)' : 'Stuck on — other apps blocked'}</span>
+        : <span style={{ color: C.green }}>Off · stuck pin {info.pinFix}</span>) : null,
     ];
   };
 

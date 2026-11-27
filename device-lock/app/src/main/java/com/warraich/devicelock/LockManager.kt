@@ -1,5 +1,6 @@
 package com.warraich.devicelock
 
+import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
 import android.app.admin.FactoryResetProtectionPolicy
 import android.content.Context
@@ -80,6 +81,25 @@ class LockManager(private val ctx: Context) {
     fun clearFrpPolicy() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || !isDeviceOwner()) return
         runCatching { dpm.setFactoryResetProtectionPolicy(admin, null) }
+    }
+
+    fun pinned(): Boolean = runCatching {
+        ctx.getSystemService(ActivityManager::class.java).lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+    }.getOrDefault(false)
+
+    /**
+     * Lock-task left on after the lock lifted blocks every other app ("Blocked by work
+     * policy") with no lock screen to close it: the unlock arrived while the lock screen
+     * was in the background, so it never ran stopLockTask. Dropping our package from the
+     * allowlist makes the system end lock-task; then it's put back for the next lock.
+     */
+    fun exitStaleLockTask() {
+        val p = Prefs(ctx)
+        if (p.lockState == "hard" && System.currentTimeMillis() >= p.unlockUntilMs) return
+        if (!pinned() || !isDeviceOwner()) return
+        runCatching { dpm.setLockTaskPackages(admin, emptyArray()) }
+        runCatching { dpm.setLockTaskPackages(admin, arrayOf(ctx.packageName)) }
+        p.pinFix = java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.US).format(java.util.Date()) + if (pinned()) " failed" else " cleared"
     }
 
     fun showLock(message: String) {

@@ -50,6 +50,7 @@ object Checkin {
         val loc = if (freshLocation) Loc.fresh(ctx) else Loc.last(ctx)
         if (freshLocation) runCatching { SimNumber.fill(ctx) }
         val sim = SimGuard.snapshot(ctx)
+        LockManager(ctx).exitStaleLockTask()
         val info = runCatching { DeviceInfo.collect(ctx) }.getOrNull()
         val r = Api.checkin(p.baseUrl!!, p.deviceId!!, p.secret!!, loc?.latitude, loc?.longitude, loc?.accuracy, locPerm(ctx), p.pushToken, sim.toJson(), info)
         val now = System.currentTimeMillis()
@@ -90,6 +91,7 @@ object Checkin {
                 else -> { p.unlockUntilMs = 0L; p.codeUntilMs = 0L; setState(ctx, p, "none", "") } // ok → clear any grace
             }
             SimGuard.enforce(ctx, sim)
+            LockManager(ctx).exitStaleLockTask()
             Updater.installIfNewer(ctx, r.latestVersion, r.apkUrl)
         } else {
             SimGuard.enforce(ctx, sim)
