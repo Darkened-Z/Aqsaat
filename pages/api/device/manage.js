@@ -2,7 +2,7 @@ import { supabaseAdmin, SHOP_ID, requireMember } from '../../../lib/serverAuth';
 import { whoAmI } from '../../../lib/staff';
 import { evaluate, unlockCode, UNLOCK_CODE_KINDS, LATEST_APP_VERSION } from '../../../lib/deviceLock';
 import { pokeDevices } from '../../../lib/fcm';
-import { SIM_MODES, simLabels } from '../../../lib/simLock';
+import { SIM_MODES, simLabels, cleanSimNumber } from '../../../lib/simLock';
 import { newCommand, pending } from '../../../lib/deviceCommands';
 
 // Owner-only. GET lists devices with live status + today's unlock code.
@@ -80,6 +80,19 @@ export default async function handler(req, res) {
       const { error } = await supabaseAdmin.from('devices').update({ commands }).eq('id', deviceId).eq('shop_id', SHOP_ID);
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true, push: action === 'command' ? await pokeDevices({ deviceId }) : [] });
+    }
+    if (action === 'simnumber') {
+      const iccid = String((value && value.iccid) || '');
+      const number = cleanSimNumber(value && value.number);
+      if (number === null) return res.status(400).json({ error: 'Enter a Pakistani mobile number like 03XXXXXXXXX' });
+      const { data: dev } = await supabaseAdmin.from('devices').select('sim_labels').eq('id', deviceId).eq('shop_id', SHOP_ID).single();
+      if (!dev) return res.status(404).json({ error: 'unknown device' });
+      const labels = { ...(dev.sim_labels || {}) };
+      if (!labels[iccid]) return res.status(404).json({ error: 'unknown SIM' });
+      labels[iccid] = { ...labels[iccid], number };
+      const { error } = await supabaseAdmin.from('devices').update({ sim_labels: labels }).eq('id', deviceId).eq('shop_id', SHOP_ID);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ ok: true });
     }
     if (action === 'simaccept') {
       // Register the SIM(s) in the phone now as its own (customer changed number with the shop's OK).
