@@ -450,10 +450,18 @@ export default class Devices extends React.Component {
       const sl = slots.find(x => x.iccid === id) || {};
       const l = labels[id] || {};
       const num = sl.number || l.number;
+      // Only a number the phone didn't read itself can be typed in.
+      const edit = !sl.number && labels[id] ? () => {
+        const v = prompt(`${sl.carrier || l.carrier || 'SIM'} number for this phone (03XXXXXXXXX). Leave empty to clear.`, l.number || '');
+        if (v !== null) this.act(d.id, 'simnumber', null, { iccid: id, number: v });
+      } : null;
       return (
         <div key={id} style={{ marginBottom: 6 }}>
           <div style={{ fontWeight: 600 }}>{sl.carrier || l.carrier || 'SIM'}:</div>
-          <div style={num ? mono : { color: C.mut, fontSize: 12 }}>{num || 'number not read yet'}</div>
+          <div style={num ? mono : { color: C.mut, fontSize: 12 }}>
+            {num || 'number not read yet'}
+            {edit ? <button onClick={edit} style={{ marginLeft: 6, border: 'none', background: 'none', color: C.green, cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}>{num ? '✎ edit' : '✎ add number'}</button> : null}
+          </div>
           {!num && sl.reply ? <div style={{ color: C.mut, fontSize: 11 }}>network said: {sl.reply}</div> : null}
         </div>
       );
