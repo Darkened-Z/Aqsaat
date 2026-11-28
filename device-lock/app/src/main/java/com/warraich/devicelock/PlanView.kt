@@ -175,7 +175,9 @@ class PlanView(private val ctx: Context, private val onRefresh: () -> Unit, priv
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             addView(LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.END
-                addView(text(amount, 14f, ink, true).apply { gravity = Gravity.END })
+                // Explicit WRAP_CONTENT: the vertical default (MATCH_PARENT) squeezed the amount to
+                // the chip's width when the chip is the narrower one ("Paid"), clipping "5,000".
+                addView(text(amount, 14f, ink, true).apply { gravity = Gravity.END }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
                 addView(chip.apply { layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = dp(4) } })
             })
         })
